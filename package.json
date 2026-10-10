@@ -7,7 +7,7 @@
   },
   "scripts": {
     "prepare": "effect-tsgo patch --oxlint --no-typescript --skip-missing",
-    "bootstrap": "sandbox -- pnpm install --frozen-lockfile",
+    "bootstrap": "sandbox -- pnpm install --frozen-lockfile && sandbox -- pnpm run prepare",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
