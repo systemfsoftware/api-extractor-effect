@@ -4,3 +4,6 @@ coverage/
 *.tsbuildinfo
 # systemfsoftware tarballs the lockfile installs from: `nix build .#sfs-deps`, copied here
 .sfs-deps/
+.cache/
+.turbo/
+.release/

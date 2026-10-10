@@ -1,0 +1,12 @@
+{
+  // Read by systemfsoftware/pnpm-release-management's release tools, which the
+  // reusable workflows in .github/workflows/ run. Each package is versioned
+  // through its change intents, tagged <pkg>@vX.Y.Z and released on GitHub;
+  // nothing is published to an npm registry.
+  "base": "main",
+  "branch": "changeset-release/main",
+  "versioning": {
+    "strategy": "changesets",
+  },
+  "gate": { "strategy": "turbo", "task": "build" },
+}

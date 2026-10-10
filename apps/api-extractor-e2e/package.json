@@ -6,16 +6,22 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@systemfsoftware/api-extractor": "workspace:*",
+    "@systemfsoftware/oxlint-config-recommended": "^4.0.0",
     "@systemfsoftware/tsconfig": "^2.0.1",
     "@systemfsoftware/vitest": "^2.0.0",
+    "@systemfsoftware/vitest-config": "^0.1.0",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }

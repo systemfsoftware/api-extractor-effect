@@ -1,0 +1,20 @@
+# The release flow is pnpm-release-management's reusable workflow. This caller
+# supplies the trigger, the permissions its jobs ask for, and the CI workflow it
+# dispatches on the release PR branch. Distribution is a git tag, a GitHub
+# Release and this repository's flake outputs; there is no npm publish.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@b9b4a1d48cc16241b33f9afd8ab99b82b05ce04f
+    with:
+      ci-workflow: ci.yml

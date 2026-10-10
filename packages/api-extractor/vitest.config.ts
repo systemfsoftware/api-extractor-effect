@@ -1,11 +1,13 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
+  ...sharedConfig,
   // Writes codec and recursion laws for every exported schema into src/schema-laws.test.ts,
   // and materializes each declared recursionBudget.
   plugins: [inlineSchemaTests()],
   test: {
+    ...sharedConfig.test,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
   },
 })

@@ -13,24 +13,58 @@
     "node": ">=24"
   },
   "exports": {
-    ".": "./src/mod.ts",
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
+    },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -l warn",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "attw": "attw --pack .",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "^12.0.0",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/effect-schema-law": "^5.0.1",
     "@systemfsoftware/effect-schema-vite": "^3.0.1",
+    "@systemfsoftware/oxlint-config-recommended": "^4.0.0",
+    "@systemfsoftware/stryker-config": "^0.1.0",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "^0.2.1",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "^0.1.2",
+    "@systemfsoftware/stryker-js": "^18.1.0",
+    "@systemfsoftware/stryker-js-typescript-checker": "^8.3.1",
+    "@systemfsoftware/stryker-js-vitest-runner": "^9.0.1",
     "@systemfsoftware/tsconfig": "^2.0.1",
+    "@systemfsoftware/tsdown-config": "^0.1.0",
     "@systemfsoftware/vitest": "^2.0.0",
+    "@systemfsoftware/vitest-config": "^0.1.0",
     "@types/node": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

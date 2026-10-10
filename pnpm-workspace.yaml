@@ -2,20 +2,56 @@ packages:
   - apps/*
   - packages/*
 
+allowBuilds:
+  protobufjs: false
+
 catalog:
+  "@effect/tsgo": 0.50.0
+  "@microsoft/api-extractor": 7.59.1
   "@types/node": 24.19.1
   effect: 4.0.2
+  oxlint: 1.82.0
+  oxlint-tsgolint: 7.0.2001
+  tsdown: 0.23.0
+  turbo: 2.10.12
   typescript: 7.0.2
+  vite: 8.2.1
   vitest: 5.0.3
 
-# Every @systemfsoftware package installs from the tarball systemfsoftware's
-# flake builds (`nix build .#sfs-deps`), never from a registry. Manifests keep
-# semver ranges, so a packed manifest names versions a consumer can resolve.
 overrides:
   "@systemfsoftware/effect-cell-types": file:.sfs-deps/effect-cell-types-12.0.0.tgz
   "@systemfsoftware/effect-schema-discovery": file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
   "@systemfsoftware/effect-schema-law": file:.sfs-deps/effect-schema-law-5.0.1.tgz
   "@systemfsoftware/effect-schema-recursion-budget": file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz
   "@systemfsoftware/effect-schema-vite": file:.sfs-deps/effect-schema-vite-3.0.1.tgz
+  "@systemfsoftware/oxlint-config-cell-architecture": file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz
+  "@systemfsoftware/oxlint-config-dmmf": file:.sfs-deps/oxlint-config-dmmf-2.0.0.tgz
+  "@systemfsoftware/oxlint-config-recommended": file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz
+  "@systemfsoftware/oxlint-config-rule-authoring": file:.sfs-deps/oxlint-config-rule-authoring-1.1.0.tgz
+  "@systemfsoftware/oxlint-plugin-cell-architecture": file:.sfs-deps/oxlint-plugin-cell-architecture-5.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-dmmf-workflow": file:.sfs-deps/oxlint-plugin-dmmf-workflow-7.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-effect-platform": file:.sfs-deps/oxlint-plugin-effect-platform-2.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-effect-schema": file:.sfs-deps/oxlint-plugin-effect-schema-6.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-test-discipline": file:.sfs-deps/oxlint-plugin-test-discipline-5.0.0.tgz
+  "@systemfsoftware/stryker-config": file:.sfs-deps/stryker-config-0.1.0.tgz
   "@systemfsoftware/tsconfig": file:.sfs-deps/tsconfig-2.0.1.tgz
+  "@systemfsoftware/tsdown-config": file:.sfs-deps/tsdown-config-0.1.0.tgz
   "@systemfsoftware/vitest": file:.sfs-deps/vitest-2.0.0.tgz
+  "@systemfsoftware/vitest-config": file:.sfs-deps/vitest-config-0.1.0.tgz
+  "@systemfsoftware/stryker-framework-interface": file:.sfs-deps/stryker-framework-interface-0.0.1.tgz
+  "@systemfsoftware/stryker-ignorer-effect-schema-declarations": file:.sfs-deps/stryker-ignorer-effect-schema-declarations-0.2.1.tgz
+  "@systemfsoftware/stryker-ignorer-in-source-vitest-block": file:.sfs-deps/stryker-ignorer-in-source-vitest-block-0.1.2.tgz
+  "@systemfsoftware/stryker-ignorer-interface": file:.sfs-deps/stryker-ignorer-interface-0.1.2.tgz
+  "@systemfsoftware/stryker-ignorer-kit": file:.sfs-deps/stryker-ignorer-kit-0.1.2.tgz
+  "@systemfsoftware/stryker-js": file:.sfs-deps/stryker-js-18.1.0.tgz
+  "@systemfsoftware/stryker-js-cli-contract": file:.sfs-deps/stryker-js-cli-contract-0.4.0.tgz
+  "@systemfsoftware/stryker-js-instrumenter": file:.sfs-deps/stryker-js-instrumenter-12.1.2.tgz
+  "@systemfsoftware/stryker-js-plugin-interface": file:.sfs-deps/stryker-js-plugin-interface-15.0.0.tgz
+  "@systemfsoftware/stryker-js-plugin-runtime": file:.sfs-deps/stryker-js-plugin-runtime-7.0.3.tgz
+  "@systemfsoftware/stryker-js-typescript-checker": file:.sfs-deps/stryker-js-typescript-checker-8.3.1.tgz
+  "@systemfsoftware/stryker-js-vitest-runner": file:.sfs-deps/stryker-js-vitest-runner-9.0.1.tgz
+  "@systemfsoftware/stryker-js-vm-runner@npm:@systemfsoftware/stryker-js-vitest-runner@^9.0.1": file:.sfs-deps/stryker-js-vitest-runner-9.0.1.tgz
+
+versioning:
+  changelog:
+    storage: repository

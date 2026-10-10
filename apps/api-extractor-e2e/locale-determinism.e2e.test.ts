@@ -28,7 +28,7 @@ interface ProbeResult {
 }
 
 const run = (environment: Environment, input: string): ProbeResult => {
-  const child = spawnSync(process.execPath, [probe], {
+  const child = spawnSync(process.execPath, ['--conditions=@systemfsoftware/source', probe], {
     input,
     cwd: environment.cwd,
     env: { ...inherited, LC_ALL: environment.LC_ALL, TZ: environment.TZ },
