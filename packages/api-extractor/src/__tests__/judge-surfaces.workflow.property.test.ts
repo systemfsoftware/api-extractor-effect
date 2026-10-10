@@ -24,7 +24,7 @@ import {
   voidType,
   withExport,
 } from '../../tests/__fixtures__/surfaces.ts'
-import { tags } from '../../tests/__fixtures__/verdict-draws.schema.ts'
+import { tags } from '../../tests/__fixtures__/verdict-draws.fixture.ts'
 
 type Judged = Result.Result<Verdict, AmbiguousRuleCorpus>
 const judge = (before: ApiModel, after: ApiModel, corpus: RuleCorpus = defaultCorpus): Judged =>
