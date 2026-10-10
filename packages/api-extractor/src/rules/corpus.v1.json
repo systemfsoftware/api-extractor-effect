@@ -1,0 +1,694 @@
+{
+  "corpusVersion": "1.0.0",
+  "channelTypes": [
+    {
+      "names": [
+        "Effect",
+        "Effect.Effect"
+      ],
+      "modules": [
+        "effect",
+        "effect/Effect"
+      ],
+      "channels": [
+        {
+          "name": "A",
+          "variance": "out"
+        },
+        {
+          "name": "E",
+          "variance": "out"
+        },
+        {
+          "name": "R",
+          "variance": "out"
+        }
+      ]
+    },
+    {
+      "names": [
+        "Stream",
+        "Stream.Stream"
+      ],
+      "modules": [
+        "effect",
+        "effect/Stream"
+      ],
+      "channels": [
+        {
+          "name": "A",
+          "variance": "out"
+        },
+        {
+          "name": "E",
+          "variance": "out"
+        },
+        {
+          "name": "R",
+          "variance": "out"
+        }
+      ]
+    },
+    {
+      "names": [
+        "Layer",
+        "Layer.Layer"
+      ],
+      "modules": [
+        "effect",
+        "effect/Layer"
+      ],
+      "channels": [
+        {
+          "name": "ROut",
+          "variance": "in"
+        },
+        {
+          "name": "E",
+          "variance": "out"
+        },
+        {
+          "name": "RIn",
+          "variance": "out"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "entry-point-removed",
+      "match": {
+        "kind": "entry-point-removed"
+      },
+      "bump": "major",
+      "reason_code": "ENTRY_POINT_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "entry-point-added",
+      "match": {
+        "kind": "entry-point-added"
+      },
+      "bump": "minor",
+      "reason_code": "ENTRY_POINT_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "export-removed",
+      "match": {
+        "kind": "export-removed"
+      },
+      "bump": "major",
+      "reason_code": "EXPORT_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "export-added",
+      "match": {
+        "kind": "export-added"
+      },
+      "bump": "minor",
+      "reason_code": "EXPORT_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "export-kind-changed",
+      "match": {
+        "kind": "export-kind-changed"
+      },
+      "bump": "major",
+      "reason_code": "EXPORT_KIND_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "overload-removed",
+      "match": {
+        "kind": "overload-removed"
+      },
+      "bump": "major",
+      "reason_code": "OVERLOAD_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "overload-added",
+      "match": {
+        "kind": "overload-added"
+      },
+      "bump": "minor",
+      "reason_code": "OVERLOAD_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "dual-form-removed",
+      "match": {
+        "kind": "dual-form-removed"
+      },
+      "bump": "major",
+      "reason_code": "DUAL_FORM_REMOVED",
+      "next_action": "Declare a major bump, or restore the removed data-first or data-last call form."
+    },
+    {
+      "rule_id": "dual-form-added",
+      "match": {
+        "kind": "dual-form-added"
+      },
+      "bump": "minor",
+      "reason_code": "DUAL_FORM_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "required-parameter-added",
+      "match": {
+        "kind": "required-parameter-added"
+      },
+      "bump": "major",
+      "reason_code": "REQUIRED_PARAMETER_ADDED",
+      "next_action": "Declare a major bump, or make the new parameter optional."
+    },
+    {
+      "rule_id": "required-parameter-added-in-input",
+      "match": {
+        "kind": "required-parameter-added",
+        "position": "in"
+      },
+      "bump": "minor",
+      "reason_code": "CALLBACK_PARAMETER_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "optional-parameter-added",
+      "match": {
+        "kind": "optional-parameter-added"
+      },
+      "bump": "minor",
+      "reason_code": "OPTIONAL_PARAMETER_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "parameter-removed",
+      "match": {
+        "kind": "parameter-removed"
+      },
+      "bump": "major",
+      "reason_code": "PARAMETER_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "parameter-became-required",
+      "match": {
+        "kind": "parameter-became-required"
+      },
+      "bump": "major",
+      "reason_code": "PARAMETER_BECAME_REQUIRED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "parameter-became-required-in-input",
+      "match": {
+        "kind": "parameter-became-required",
+        "position": "in"
+      },
+      "bump": "minor",
+      "reason_code": "CALLBACK_PARAMETER_BECAME_REQUIRED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "parameter-became-optional",
+      "match": {
+        "kind": "parameter-became-optional"
+      },
+      "bump": "minor",
+      "reason_code": "PARAMETER_BECAME_OPTIONAL",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "parameter-became-optional-in-input",
+      "match": {
+        "kind": "parameter-became-optional",
+        "position": "in"
+      },
+      "bump": "major",
+      "reason_code": "CALLBACK_PARAMETER_BECAME_OPTIONAL",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "parameter-rest-changed",
+      "match": {
+        "kind": "parameter-rest-changed"
+      },
+      "bump": "major",
+      "reason_code": "PARAMETER_REST_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "required-member-added",
+      "match": {
+        "kind": "required-member-added"
+      },
+      "bump": "major",
+      "reason_code": "REQUIRED_MEMBER_ADDED",
+      "next_action": "Declare a major bump, or make the new member optional."
+    },
+    {
+      "rule_id": "required-member-added-in-output",
+      "match": {
+        "kind": "required-member-added",
+        "position": "out"
+      },
+      "bump": "minor",
+      "reason_code": "MEMBER_ADDED_TO_OUTPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "optional-member-added",
+      "match": {
+        "kind": "optional-member-added"
+      },
+      "bump": "minor",
+      "reason_code": "OPTIONAL_MEMBER_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "member-removed",
+      "match": {
+        "kind": "member-removed"
+      },
+      "bump": "major",
+      "reason_code": "MEMBER_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "member-kind-changed",
+      "match": {
+        "kind": "member-kind-changed"
+      },
+      "bump": "major",
+      "reason_code": "MEMBER_KIND_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "member-became-optional",
+      "match": {
+        "kind": "member-became-optional"
+      },
+      "bump": "major",
+      "reason_code": "MEMBER_BECAME_OPTIONAL",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "member-became-optional-in-input",
+      "match": {
+        "kind": "member-became-optional",
+        "position": "in"
+      },
+      "bump": "minor",
+      "reason_code": "INPUT_MEMBER_BECAME_OPTIONAL",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "member-became-required",
+      "match": {
+        "kind": "member-became-required"
+      },
+      "bump": "major",
+      "reason_code": "MEMBER_BECAME_REQUIRED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "member-became-required-in-output",
+      "match": {
+        "kind": "member-became-required",
+        "position": "out"
+      },
+      "bump": "minor",
+      "reason_code": "OUTPUT_MEMBER_BECAME_REQUIRED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "member-became-readonly",
+      "match": {
+        "kind": "member-became-readonly"
+      },
+      "bump": "major",
+      "reason_code": "MEMBER_BECAME_READONLY",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "member-became-mutable",
+      "match": {
+        "kind": "member-became-mutable"
+      },
+      "bump": "minor",
+      "reason_code": "MEMBER_BECAME_MUTABLE",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "type-parameters-changed",
+      "match": {
+        "kind": "type-parameters-changed"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_PARAMETERS_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "heritage-changed",
+      "match": {
+        "kind": "heritage-changed"
+      },
+      "bump": "major",
+      "reason_code": "HERITAGE_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "variable-mutability-changed",
+      "match": {
+        "kind": "variable-mutability-changed"
+      },
+      "bump": "major",
+      "reason_code": "VARIABLE_MUTABILITY_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "class-became-abstract",
+      "match": {
+        "kind": "class-became-abstract"
+      },
+      "bump": "major",
+      "reason_code": "CLASS_BECAME_ABSTRACT",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "class-became-concrete",
+      "match": {
+        "kind": "class-became-concrete"
+      },
+      "bump": "minor",
+      "reason_code": "CLASS_BECAME_CONCRETE",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "enum-member-added",
+      "match": {
+        "kind": "enum-member-added"
+      },
+      "bump": "minor",
+      "reason_code": "ENUM_MEMBER_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "enum-member-removed",
+      "match": {
+        "kind": "enum-member-removed"
+      },
+      "bump": "major",
+      "reason_code": "ENUM_MEMBER_REMOVED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "enum-member-value-changed",
+      "match": {
+        "kind": "enum-member-value-changed"
+      },
+      "bump": "major",
+      "reason_code": "ENUM_MEMBER_VALUE_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "enum-const-changed",
+      "match": {
+        "kind": "enum-const-changed"
+      },
+      "bump": "major",
+      "reason_code": "ENUM_CONST_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "type-changed",
+      "match": {
+        "kind": "type-changed"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_CHANGED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "type-widened-out",
+      "match": {
+        "kind": "type-changed",
+        "position": "out",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_WIDENED_IN_OUTPUT",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "type-narrowed-out",
+      "match": {
+        "kind": "type-changed",
+        "position": "out",
+        "direction": "narrowed"
+      },
+      "bump": "minor",
+      "reason_code": "TYPE_NARROWED_IN_OUTPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "type-widened-in",
+      "match": {
+        "kind": "type-changed",
+        "position": "in",
+        "direction": "widened"
+      },
+      "bump": "minor",
+      "reason_code": "TYPE_WIDENED_IN_INPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "type-narrowed-in",
+      "match": {
+        "kind": "type-changed",
+        "position": "in",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_NARROWED_IN_INPUT",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "type-widened-both",
+      "match": {
+        "kind": "type-changed",
+        "position": "both",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_WIDENED_IN_SHARED_POSITION",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "type-narrowed-both",
+      "match": {
+        "kind": "type-changed",
+        "position": "both",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "TYPE_NARROWED_IN_SHARED_POSITION",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "e-widened-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "E",
+        "position": "out",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "E_WIDENED",
+      "next_action": "Declare a major bump: callers must now handle the new error, or remove it from the error channel."
+    },
+    {
+      "rule_id": "e-narrowed-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "E",
+        "position": "out",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "E_TAG_REMOVED",
+      "next_action": "Declare a major bump: a caller handling the removed error by tag stops compiling."
+    },
+    {
+      "rule_id": "e-widened-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "E",
+        "position": "in",
+        "direction": "widened"
+      },
+      "bump": "minor",
+      "reason_code": "E_WIDENED_IN_INPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "e-narrowed-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "E",
+        "position": "in",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "E_NARROWED_IN_INPUT",
+      "next_action": "Declare a major bump: callers passing effects that fail with the removed error stop compiling."
+    },
+    {
+      "rule_id": "a-widened-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "A",
+        "position": "out",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "A_WIDENED",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "a-narrowed-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "A",
+        "position": "out",
+        "direction": "narrowed"
+      },
+      "bump": "minor",
+      "reason_code": "A_NARROWED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "a-widened-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "A",
+        "position": "in",
+        "direction": "widened"
+      },
+      "bump": "minor",
+      "reason_code": "A_WIDENED_IN_INPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "a-narrowed-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "A",
+        "position": "in",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "A_NARROWED_IN_INPUT",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "r-widened-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "R",
+        "position": "out",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "R_WIDENED",
+      "next_action": "Declare a major bump: callers must now provide the new requirement."
+    },
+    {
+      "rule_id": "r-narrowed-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "R",
+        "position": "out",
+        "direction": "narrowed"
+      },
+      "bump": "minor",
+      "reason_code": "R_NARROWED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "r-widened-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "R",
+        "position": "in",
+        "direction": "widened"
+      },
+      "bump": "minor",
+      "reason_code": "R_WIDENED_IN_INPUT",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "r-narrowed-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "R",
+        "position": "in",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "R_NARROWED_IN_INPUT",
+      "next_action": "Declare a major bump, or restore the previous surface."
+    },
+    {
+      "rule_id": "rout-narrowed-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "ROut",
+        "position": "in",
+        "direction": "narrowed"
+      },
+      "bump": "major",
+      "reason_code": "LAYER_SERVICE_REMOVED",
+      "next_action": "Declare a major bump: consumers relying on the removed service lose it."
+    },
+    {
+      "rule_id": "rout-widened-in",
+      "match": {
+        "kind": "type-changed",
+        "channel": "ROut",
+        "position": "in",
+        "direction": "widened"
+      },
+      "bump": "minor",
+      "reason_code": "LAYER_SERVICE_ADDED",
+      "next_action": "Declare at least a minor bump."
+    },
+    {
+      "rule_id": "rin-widened-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "RIn",
+        "position": "out",
+        "direction": "widened"
+      },
+      "bump": "major",
+      "reason_code": "LAYER_REQUIREMENT_ADDED",
+      "next_action": "Declare a major bump: consumers must now provide the new requirement."
+    },
+    {
+      "rule_id": "rin-narrowed-out",
+      "match": {
+        "kind": "type-changed",
+        "channel": "RIn",
+        "position": "out",
+        "direction": "narrowed"
+      },
+      "bump": "minor",
+      "reason_code": "LAYER_REQUIREMENT_REMOVED",
+      "next_action": "Declare at least a minor bump."
+    }
+  ]
+}

@@ -1,0 +1,440 @@
+import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../model/api-model.ts'
+import { normaliseType, typeKey } from '../model/normalise.ts'
+import type { Member, Parameter, Signature, TypeExpr, TypeParameter } from '../model/type-expr.ts'
+import { canonicalKey, compareCodeUnits } from '../canonical-json.ts'
+import type { ChannelType } from '../rules/corpus.ts'
+import { type Change, type ChangeKind, compose, flip, type Position } from './change.ts'
+import { direction } from './lattice.ts'
+
+type Aliases = ReadonlyMap<string, TypeAliasItem>
+
+interface At {
+  readonly position: Position
+  readonly location: string
+  readonly channel?: string
+}
+
+interface Context {
+  readonly channelTypes: ReadonlyArray<ChannelType>
+}
+
+const change = (kind: ChangeKind, at: At, extra: Partial<Change> = {}): Change => ({
+  kind,
+  location: at.location,
+  position: at.position,
+  ...(at.channel === undefined ? {} : { channel: at.channel }),
+  ...extra,
+})
+
+const step = (at: At, segment: string, position: Position = at.position): At => ({
+  ...at,
+  position,
+  location: `${at.location}/${segment}`,
+})
+
+/**
+ * Same-package type aliases in scope, and the ones being expanded on this
+ * path (a cycle stops expansion), and the type parameters that shadow them.
+ */
+interface Scope {
+  readonly aliases: Aliases
+  readonly bindings: ReadonlyMap<string, TypeExpr>
+  readonly expanding: ReadonlySet<string>
+}
+
+const without = <V>(map: ReadonlyMap<string, V>, names: ReadonlyArray<string>): ReadonlyMap<string, V> =>
+  names.some((name) => map.has(name)) ? new Map([...map].filter(([key]) => !names.includes(key))) : map
+
+const enterSignature = (scope: Scope, signature: Signature): Scope => {
+  const names = signature.typeParameters.map((parameter) => parameter.name)
+  return { ...scope, aliases: without(scope.aliases, names), bindings: without(scope.bindings, names) }
+}
+
+/**
+ * Replaces every reference to a same-package type alias with the alias body,
+ * so a change to an alias shows where it is used and equal keys mean equal surfaces.
+ */
+const expandType = (type: TypeExpr, scope: Scope): TypeExpr => {
+  switch (type.kind) {
+    case 'reference': {
+      if (type.module === undefined && type.args.length === 0) {
+        const bound = scope.bindings.get(type.name)
+        if (bound !== undefined) return bound
+      }
+      const args = type.args.map((arg) => expandType(arg, scope))
+      const alias = type.module === undefined ? scope.aliases.get(type.name) : undefined
+      if (alias === undefined || scope.expanding.has(type.name)) return { ...type, args }
+      const bindings = new Map(
+        alias.typeParameters.map((parameter, index): [string, TypeExpr] => [
+          parameter.name,
+          args[index] ?? parameter.default ?? { kind: 'keyword', name: 'unknown' },
+        ]),
+      )
+      return expandType(alias.type, { aliases: scope.aliases, bindings, expanding: new Set([...scope.expanding, type.name]) })
+    }
+    case 'union':
+    case 'intersection':
+      return normaliseType({ kind: type.kind, members: type.members.map((member) => expandType(member, scope)) })
+    case 'array':
+      return { ...type, element: expandType(type.element, scope) }
+    case 'tuple':
+      return { ...type, elements: type.elements.map((element) => expandType(element, scope)) }
+    case 'function':
+      return { kind: 'function', signature: expandSignature(type.signature, scope) }
+    case 'object':
+      return { kind: 'object', members: type.members.map((member) => expandMember(member, scope)) }
+    case 'keyword':
+    case 'literal':
+    case 'text':
+      return type
+  }
+}
+
+const expandSignature = (signature: Signature, outer: Scope): Signature => {
+  const scope = enterSignature(outer, signature)
+  return {
+    typeParameters: signature.typeParameters,
+    parameters: signature.parameters.map((parameter) => ({ ...parameter, type: expandType(parameter.type, scope) })),
+    returns: expandType(signature.returns, scope),
+  }
+}
+
+const expandMember = (member: Member, scope: Scope): Member => {
+  switch (member.kind) {
+    case 'property':
+      return { ...member, type: expandType(member.type, scope) }
+    case 'method':
+      return { ...member, signatures: member.signatures.map((signature) => expandSignature(signature, scope)) }
+    case 'call':
+      return { kind: 'call', signature: expandSignature(member.signature, scope) }
+  }
+}
+
+const expandItem = (item: ApiItem, scope: Scope): ApiItem => {
+  switch (item.kind) {
+    case 'function':
+      return { ...item, signatures: item.signatures.map((signature) => expandSignature(signature, scope)) }
+    case 'variable':
+      return { ...item, type: expandType(item.type, scope) }
+    case 'typeAlias':
+      return { ...item, type: expandType(item.type, { ...scope, expanding: new Set([...scope.expanding, item.name]) }) }
+    case 'interface':
+    case 'class': {
+      const names = item.typeParameters.map((parameter) => parameter.name)
+      const inner: Scope = { ...scope, aliases: without(scope.aliases, names), bindings: without(scope.bindings, names) }
+      return { ...item, members: item.members.map((member) => expandMember(member, inner)) }
+    }
+    case 'enum':
+      return item
+    case 'namespace':
+      return { ...item, items: item.items.map((child) => expandItem(child, scope)) }
+  }
+}
+
+const channelTypeOf = (context: Context, type: TypeExpr & { readonly kind: 'reference' }): ChannelType | undefined =>
+  context.channelTypes.find(
+    (candidate) =>
+      candidate.names.includes(type.name) &&
+      candidate.channels.length === type.args.length &&
+      (type.module === undefined || candidate.modules.includes(type.module)),
+  )
+
+const compareType = (context: Context, before: TypeExpr, after: TypeExpr, at: At): ReadonlyArray<Change> => {
+  const b = normaliseType(before)
+  const a = normaliseType(after)
+  if (typeKey(b) === typeKey(a)) return []
+  const recurse = (x: TypeExpr, y: TypeExpr, next: At): ReadonlyArray<Change> => compareType(context, x, y, next)
+
+  if (b.kind === 'reference' && a.kind === 'reference' && b.name === a.name && b.module === a.module && b.args.length === a.args.length) {
+    const channelType = channelTypeOf(context, b)
+    if (channelType !== undefined) {
+      return channelType.channels.flatMap((slot, index) =>
+        recurse(b.args[index] as TypeExpr, a.args[index] as TypeExpr, {
+          position: compose(at.position, slot.variance),
+          location: `${at.location}/${slot.name}`,
+          channel: slot.name,
+        }),
+      )
+    }
+    return b.args.flatMap((arg, index) => recurse(arg, a.args[index] as TypeExpr, step(at, `arg[${index}]`, 'both')))
+  }
+  if (b.kind === 'function' && a.kind === 'function') {
+    return compareSignature(context, b.signature, a.signature, at)
+  }
+  if (b.kind === 'object' && a.kind === 'object') {
+    return compareMembers(context, b.members, a.members, at)
+  }
+  if (b.kind === 'array' && a.kind === 'array' && b.readonly === a.readonly) {
+    return recurse(b.element, a.element, step(at, 'element'))
+  }
+  if (b.kind === 'tuple' && a.kind === 'tuple' && b.readonly === a.readonly && b.elements.length === a.elements.length) {
+    return b.elements.flatMap((element, index) => recurse(element, a.elements[index] as TypeExpr, step(at, `element[${index}]`)))
+  }
+  const moved = direction(b, a)
+  return moved === undefined ? [] : [change('type-changed', at, { direction: moved })]
+}
+
+const typeParametersKey = (parameters: ReadonlyArray<TypeParameter>): string =>
+  canonicalKey(
+    parameters.map((parameter) => ({
+      name: parameter.name,
+      constraint: parameter.constraint === undefined ? null : typeKey(parameter.constraint),
+      default: parameter.default === undefined ? null : typeKey(parameter.default),
+    })),
+  )
+
+const compareParameter = (
+  context: Context,
+  before: Parameter,
+  after: Parameter,
+  at: At,
+): ReadonlyArray<Change> => {
+  const flags: ReadonlyArray<Change> = [
+    ...(before.optional && !after.optional ? [change('parameter-became-required', at)] : []),
+    ...(!before.optional && after.optional ? [change('parameter-became-optional', at)] : []),
+    ...(before.rest === after.rest ? [] : [change('parameter-rest-changed', at)]),
+  ]
+  return [...flags, ...compareType(context, before.type, after.type, { ...at, position: flip(at.position) })]
+}
+
+const compareSignature = (
+  context: Context,
+  before: Signature,
+  after: Signature,
+  at: At,
+): ReadonlyArray<Change> => {
+  const typeParameters =
+    typeParametersKey(before.typeParameters) === typeParametersKey(after.typeParameters)
+      ? []
+      : [change('type-parameters-changed', at)]
+  const shared = Math.min(before.parameters.length, after.parameters.length)
+  const parameters = before.parameters.slice(0, shared).flatMap((parameter, index) =>
+    compareParameter(context, parameter, after.parameters[index] as Parameter, step(at, `parameter[${index}]`)),
+  )
+  const added = after.parameters.slice(shared).map((parameter, offset) =>
+    change(
+      parameter.optional || parameter.rest ? 'optional-parameter-added' : 'required-parameter-added',
+      step(at, `parameter[${shared + offset}]`),
+    ),
+  )
+  const removed = before.parameters.slice(shared).map((_, offset) => change('parameter-removed', step(at, `parameter[${shared + offset}]`)))
+  const returns = compareType(context, before.returns, after.returns, step(at, 'returns'))
+  return [...typeParameters, ...parameters, ...added, ...removed, ...returns]
+}
+
+type Form = 'data-first' | 'data-last' | 'plain'
+
+/**
+ * Classifies each signature of an overload set: a `data-last` signature
+ * returns a one-parameter function, and its `data-first` partner takes that
+ * parameter first followed by the same arguments. This is Effect's dual API.
+ */
+const formsOf = (signatures: ReadonlyArray<Signature>): ReadonlyArray<Form> => {
+  const isDataLast = (signature: Signature): boolean =>
+    signature.returns.kind === 'function' && signature.returns.signature.parameters.length === 1
+  const partners = (dataFirst: Signature, dataLast: Signature): boolean => {
+    if (dataLast.returns.kind !== 'function' || dataFirst.parameters.length !== dataLast.parameters.length + 1) return false
+    const self = dataLast.returns.signature.parameters[0] as Parameter
+    return typeKey((dataFirst.parameters[0] as Parameter).type) === typeKey(self.type)
+  }
+  return signatures.map((signature) => {
+    if (isDataLast(signature) && signatures.some((other) => other !== signature && partners(other, signature))) return 'data-last'
+    if (signatures.some((other) => other !== signature && isDataLast(other) && partners(signature, other))) return 'data-first'
+    return 'plain'
+  })
+}
+
+const signatureKey = (signature: Signature): string => canonicalKey(signature)
+
+const compareSignatureSets = (
+  context: Context,
+  before: ReadonlyArray<Signature>,
+  after: ReadonlyArray<Signature>,
+  at: At,
+): ReadonlyArray<Change> => {
+  const beforeForms = formsOf(before)
+  const afterForms = formsOf(after)
+  const afterKeys = new Set(after.map(signatureKey))
+  const beforeKeys = new Set(before.map(signatureKey))
+  const unmatched = (signatures: ReadonlyArray<Signature>, forms: ReadonlyArray<Form>, others: ReadonlySet<string>) =>
+    signatures
+      .map((signature, index) => ({ signature, index, form: forms[index] as Form }))
+      .filter((entry) => !others.has(signatureKey(entry.signature)))
+  const left = unmatched(before, beforeForms, afterKeys)
+  const right = unmatched(after, afterForms, beforeKeys)
+  const forms: ReadonlyArray<Form> = ['data-first', 'data-last', 'plain']
+  return forms.flatMap((form) => {
+    const l = left.filter((entry) => entry.form === form)
+    const r = right.filter((entry) => entry.form === form)
+    const paired = l.slice(0, r.length).flatMap((entry, index) =>
+      compareSignature(context, entry.signature, (r[index] as (typeof r)[number]).signature, step(at, `signature[${entry.index}]`)),
+    )
+    const dual = form !== 'plain'
+    const removed = l.slice(r.length).map((entry) =>
+      change(dual && !afterForms.includes(form) ? 'dual-form-removed' : 'overload-removed', step(at, `signature[${entry.index}]`)),
+    )
+    const added = r.slice(l.length).map((entry) =>
+      change(dual && !beforeForms.includes(form) ? 'dual-form-added' : 'overload-added', step(at, `signature[${entry.index}]`)),
+    )
+    return [...paired, ...removed, ...added]
+  })
+}
+
+const compareMembers = (
+  context: Context,
+  before: ReadonlyArray<Member>,
+  after: ReadonlyArray<Member>,
+  at: At,
+): ReadonlyArray<Change> => {
+  const calls = (members: ReadonlyArray<Member>): ReadonlyArray<Signature> =>
+    members.flatMap((member) => (member.kind === 'call' ? [member.signature] : []))
+  const named = (members: ReadonlyArray<Member>) =>
+    new Map(members.flatMap((member) => (member.kind === 'call' ? [] : [[member.name, member] as const])))
+  const beforeNamed = named(before)
+  const afterNamed = named(after)
+  const callChanges = compareSignatureSets(context, calls(before), calls(after), step(at, 'call'))
+  const removed = [...beforeNamed.keys()]
+    .filter((name) => !afterNamed.has(name))
+    .map((name) => change('member-removed', step(at, `member(${name})`)))
+  const added = [...afterNamed.values()]
+    .filter((member) => !beforeNamed.has(member.name))
+    .map((member) => change(member.optional ? 'optional-member-added' : 'required-member-added', step(at, `member(${member.name})`)))
+  const changed = [...beforeNamed.values()].flatMap((member) => {
+    const next = afterNamed.get(member.name)
+    if (next === undefined) return []
+    const here = step(at, `member(${member.name})`)
+    if (member.kind !== next.kind) return [change('member-kind-changed', here)]
+    const optionality: ReadonlyArray<Change> = [
+      ...(member.optional && !next.optional ? [change('member-became-required', here)] : []),
+      ...(!member.optional && next.optional ? [change('member-became-optional', here)] : []),
+    ]
+    if (member.kind === 'property' && next.kind === 'property') {
+      const mutability: ReadonlyArray<Change> = [
+        ...(!member.readonly && next.readonly ? [change('member-became-readonly', here)] : []),
+        ...(member.readonly && !next.readonly ? [change('member-became-mutable', here)] : []),
+      ]
+      return [...optionality, ...mutability, ...compareType(context, member.type, next.type, here)]
+    }
+    if (member.kind === 'method' && next.kind === 'method') {
+      return [...optionality, ...compareSignatureSets(context, member.signatures, next.signatures, here)]
+    }
+    return optionality
+  })
+  return [...callChanges, ...removed, ...added, ...changed]
+}
+
+const heritageKey = (types: ReadonlyArray<TypeExpr>): string => canonicalKey([...types.map(typeKey)].sort(compareCodeUnits))
+
+const compareItem = (context: Context, before: ApiItem, after: ApiItem, at: At): ReadonlyArray<Change> => {
+  if (before.kind !== after.kind) return [change('export-kind-changed', at)]
+  switch (before.kind) {
+    case 'function':
+      return compareSignatureSets(context, before.signatures, (after as typeof before).signatures, { ...at, position: 'out' })
+    case 'variable': {
+      const next = after as typeof before
+      if (before.constant !== next.constant) return [change('variable-mutability-changed', { ...at, position: 'both' })]
+      return compareType(context, before.type, next.type, { ...at, position: before.constant ? 'out' : 'both' })
+    }
+    case 'typeAlias': {
+      const next = after as typeof before
+      const here: At = { ...at, position: 'both' }
+      return [
+        ...(typeParametersKey(before.typeParameters) === typeParametersKey(next.typeParameters) ? [] : [change('type-parameters-changed', here)]),
+        ...compareType(context, before.type, next.type, here),
+      ]
+    }
+    case 'interface':
+    case 'class': {
+      const next = after as typeof before
+      const here: At = { ...at, position: 'both' }
+      const heritage = (item: ApiItem): string =>
+        item.kind === 'class' ? heritageKey([...item.extends, ...item.implements]) : item.kind === 'interface' ? heritageKey(item.extends) : ''
+      const abstract: ReadonlyArray<Change> =
+        before.kind === 'class' && next.kind === 'class' && before.abstract !== next.abstract
+          ? [change(next.abstract ? 'class-became-abstract' : 'class-became-concrete', here)]
+          : []
+      return [
+        ...abstract,
+        ...(typeParametersKey(before.typeParameters) === typeParametersKey(next.typeParameters) ? [] : [change('type-parameters-changed', here)]),
+        ...(heritage(before) === heritage(next) ? [] : [change('heritage-changed', here)]),
+        ...compareMembers(context, before.members, next.members, here),
+      ]
+    }
+    case 'enum': {
+      const next = after as typeof before
+      const here: At = { ...at, position: 'both' }
+      const values = new Map(next.members.map((member) => [member.name, member.value] as const))
+      const names = new Set(before.members.map((member) => member.name))
+      return [
+        ...(before.const === next.const ? [] : [change('enum-const-changed', here)]),
+        ...before.members.flatMap((member) =>
+          !values.has(member.name)
+            ? [change('enum-member-removed', step(here, `member(${member.name})`))]
+            : values.get(member.name) === member.value
+              ? []
+              : [change('enum-member-value-changed', step(here, `member(${member.name})`))],
+        ),
+        ...next.members
+          .filter((member) => !names.has(member.name))
+          .map((member) => change('enum-member-added', step(here, `member(${member.name})`))),
+      ]
+    }
+    case 'namespace':
+      return compareItems(context, before.items, (after as typeof before).items, `${at.location}.`)
+  }
+}
+
+const compareItems = (
+  context: Context,
+  before: ReadonlyArray<ApiItem>,
+  after: ReadonlyArray<ApiItem>,
+  prefix: string,
+): ReadonlyArray<Change> => {
+  const afterByName = new Map(after.map((item) => [item.name, item] as const))
+  const beforeNames = new Set(before.map((item) => item.name))
+  const at = (name: string): At => ({ position: 'out', location: `${prefix}${name}` })
+  return [
+    ...before.flatMap((item) => {
+      const next = afterByName.get(item.name)
+      return next === undefined
+        ? [change('export-removed', at(item.name))]
+        : compareItem(context, item, next, at(item.name))
+    }),
+    ...after.filter((item) => !beforeNames.has(item.name)).map((item) => change('export-added', at(item.name))),
+  ]
+}
+
+/** The entry point's exports with every same-package alias reference expanded. */
+const expandedItems = (entryPoint: EntryPoint): ReadonlyArray<ApiItem> => {
+  const scope: Scope = {
+    aliases: new Map(
+      [...entryPoint.locals, ...entryPoint.items.filter((item): item is TypeAliasItem => item.kind === 'typeAlias')].map(
+        (alias) => [alias.name, alias] as const,
+      ),
+    ),
+    bindings: new Map(),
+    expanding: new Set(),
+  }
+  return entryPoint.items.map((item) => expandItem(item, scope))
+}
+
+/**
+ * Every difference between two models of the same package. Locations read
+ * `<entry point>:<export>/<path>`, e.g. `.:getUser/signature[0]/returns/E`.
+ */
+export const diffModels = (before: ApiModel, after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): ReadonlyArray<Change> => {
+  const context: Context = { channelTypes }
+  const afterByPath = new Map(after.entryPoints.map((entryPoint) => [entryPoint.path, entryPoint] as const))
+  const beforePaths = new Set(before.entryPoints.map((entryPoint) => entryPoint.path))
+  return [
+    ...before.entryPoints.flatMap((entryPoint) => {
+      const next = afterByPath.get(entryPoint.path)
+      return next === undefined
+        ? [change('entry-point-removed', { position: 'out', location: entryPoint.path })]
+        : compareItems(context, expandedItems(entryPoint), expandedItems(next), `${entryPoint.path}:`)
+    }),
+    ...after.entryPoints
+      .filter((entryPoint) => !beforePaths.has(entryPoint.path))
+      .map((entryPoint) => change('entry-point-added', { position: 'out', location: entryPoint.path })),
+  ]
+}
