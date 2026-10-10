@@ -360,7 +360,6 @@ const compareMembers = (
 const heritageKey = (types: ReadonlyArray<TypeExpr>): string => canonicalKey([...types.map(typeKey)].sort(compareCodeUnits))
 
 const compareItem = (context: Context, before: ApiItem, after: ApiItem, at: At): ReadonlyArray<Change> => {
-  if (before.kind !== after.kind) return [change('export-kind-changed', at)]
   switch (before.kind) {
     case 'function':
       return compareSignatureSets(context, before.signatures, (after as typeof before).signatures, { ...at, position: 'out' })
@@ -439,17 +438,23 @@ const compareItems = (
   )
 }
 
-/**
- * The exports sharing one name. A name can denote a value and a type at once
- * (`const X` beside `type X`), so items pair with their own kind first and only
- * the leftovers pair across kinds.
- */
+const unmatched = (from: ReadonlyArray<ApiItem>, to: ReadonlyArray<ApiItem>): ReadonlyArray<ApiItem> => {
+  const [fromKeys, toKeys] = [from.map(canonicalKey), to.map(canonicalKey)]
+  return from.filter((_, index) => {
+    const key = fromKeys[index]
+    return fromKeys.slice(0, index).filter((other) => other === key).length >= toKeys.filter((other) => other === key).length
+  })
+}
+
+const inCanonicalOrder = (items: ReadonlyArray<ApiItem>): ReadonlyArray<ApiItem> =>
+  [...items].sort((left, right) => compareCodeUnits(canonicalKey(left), canonicalKey(right)))
+
 const compareNamed = (context: Context, before: ReadonlyArray<ApiItem>, after: ReadonlyArray<ApiItem>, at: At): ReadonlyArray<Change> => {
   const kinds = new Set([...before, ...after].map((item) => item.kind))
-  const groups = [...kinds].map((kind) => ({
-    from: before.filter((item) => item.kind === kind),
-    to: after.filter((item) => item.kind === kind),
-  }))
+  const groups = [...kinds].map((kind) => {
+    const [from, to] = [before.filter((item) => item.kind === kind), after.filter((item) => item.kind === kind)]
+    return { from: inCanonicalOrder(unmatched(from, to)), to: inCanonicalOrder(unmatched(to, from)) }
+  })
   const paired = groups.flatMap(({ from, to }) => from.slice(0, to.length).flatMap((item, index) => compareItem(context, item, to[index] as ApiItem, at)))
   const removed = groups.flatMap(({ from, to }) => from.slice(to.length))
   const added = groups.flatMap(({ from, to }) => to.slice(from.length))

@@ -319,6 +319,29 @@ describe('verdict on a value and a type sharing a name', (it) => {
   )
 })
 
+describe('verdict on exports sharing a name and a kind', (it) => {
+  it.prop(
+    'has no changes between two models storing them in either order',
+    { of: [ApiModel, TypeExpr, TypeExpr], subject: judge },
+    (judge, [surrounding, first, second]) => {
+      const pair = [returning(first), returning(second)]
+      return same(located(judge(rootedWith(surrounding, pair), rootedWith(surrounding, [...pair].reverse()))), verdict('none'))
+    },
+  )
+
+  it.prop(
+    'judges a change to one of them as that export alone would be judged, whatever order they are stored in',
+    { of: [ApiModel, TypeExpr, TypeExpr, ...tags], subject: judge },
+    (judge, [surrounding, beside, value, first, rest]) => {
+      const { smaller, larger } = grown(first, rest)
+      const [from, to] = [returning(effect(value, smaller)), returning(effect(value, larger))]
+      const alone = located(judge(target(surrounding, from), target(surrounding, to)))
+      const shared = located(judge(rootedWith(surrounding, [returning(beside), from]), rootedWith(surrounding, [to, returning(beside)])))
+      return alone.bump !== 'none' && same(shared, alone)
+    },
+  )
+})
+
 describe('verdict invariants', (it) => {
   it.prop('a model has no changes against itself', { of: [ApiModel], subject: judge }, (judge, [model]) =>
     same(located(judge(model, model)), verdict('none')))

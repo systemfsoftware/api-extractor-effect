@@ -49,13 +49,33 @@ const channelRow = (
   moved: 'widened' | 'narrowed',
   bump: 'major' | 'minor',
   reason: string,
-): readonly [string, ApiModel.ApiItem, ApiModel.ApiItem, 'major' | 'minor', string] => {
+): Row => {
   const [from, to] = moved === 'widened' ? [ref('A'), either] : [either, ref('A')]
   const surface = (slot: ApiModel.TypeExpr) => (position === 'out' ? returning : taking)(channels[channel](slot))
   return [`an Effect ${channel} channel ${moved} in ${position === 'out' ? 'a return' : 'a parameter'}`, surface(from), surface(to), bump, reason]
 }
+const dualForms = (() => {
+  const mapper = parameter('f', fn(signature([parameter('a', ref('A'))], ref('B'))))
+  const self = parameter('self', effect(ref('A'), ref('Failure')))
+  return [signature([mapper], fn(signature([self], effect(ref('B'), ref('Failure'))))), signature([self, mapper], effect(ref('B'), ref('Failure')))]
+})()
+const dual = (...forms: ReadonlyArray<ApiModel.Signature>): ApiModel.ApiItem => variable(true, object(...forms.map((sig): ApiModel.Member => ({ kind: 'call', signature: sig }))))
+const servicesLayer = (services: ApiModel.TypeExpr) => returning(ref('Layer', services, never, never))
+const withEntryPoint = { ...empty, entryPoints: [...empty.entryPoints, { path: './extra', items: [], locals: [] }] }
 
-const rows: ReadonlyArray<readonly [string, ApiModel.ApiItem, ApiModel.ApiItem, 'major' | 'minor', string]> = [
+type Row = readonly [string, ApiModel.ApiItem | ApiModel.ApiModel, ApiModel.ApiItem | ApiModel.ApiModel, 'major' | 'minor', string]
+const rows: ReadonlyArray<Row> = [
+  ['an entry point is removed', withEntryPoint, empty, 'major', 'ENTRY_POINT_REMOVED'],
+  ['an entry point is added', empty, withEntryPoint, 'minor', 'ENTRY_POINT_ADDED'],
+  ['an export is removed', withExport(empty, returning(ref('A'))), empty, 'major', 'EXPORT_REMOVED'],
+  ['an export is added', empty, withExport(empty, returning(ref('A'))), 'minor', 'EXPORT_ADDED'],
+  ['a function export becomes a variable', returning(ref('A')), variable(true, ref('A')), 'major', 'EXPORT_KIND_CHANGED'],
+  ['a dual loses its data-last form', dual(...dualForms), dual(dualForms[1]!), 'major', 'DUAL_FORM_REMOVED'],
+  ['a data-first function gains its data-last form', dual(dualForms[1]!), dual(...dualForms), 'minor', 'DUAL_FORM_ADDED'],
+  ['a function gains a required parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'))], voidType)), 'major', 'REQUIRED_PARAMETER_ADDED'],
+  ['a function gains an optional parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'), true)], voidType)), 'minor', 'OPTIONAL_PARAMETER_ADDED'],
+  ['a returned layer provides one service fewer', servicesLayer(either), servicesLayer(ref('A')), 'major', 'LAYER_SERVICE_REMOVED'],
+  ['a returned layer provides another service', servicesLayer(ref('A')), servicesLayer(either), 'minor', 'LAYER_SERVICE_ADDED'],
   ['an overload is dropped', functionItem(signature([], ref('A')), signature([parameter('x', ref('X'))], ref('A'))), functionItem(signature([], ref('A'))), 'major', 'OVERLOAD_REMOVED'],
   ['an overload is added', functionItem(signature([], ref('A'))), functionItem(signature([], ref('A')), signature([parameter('x', ref('X'))], ref('A'))), 'minor', 'OVERLOAD_ADDED'],
   ['a parameter is removed', functionItem(signature([parameter('x', ref('X'))], voidType)), functionItem(signature([], voidType)), 'major', 'PARAMETER_REMOVED'],
@@ -113,7 +133,8 @@ describe('verdict on each change kind', (it) => {
   it.each(rows.map(([label, before, after, bump, reason]) => ({ label, before, after, bump, reason })))(
     '$label is $bump $reason',
     function* ({ before, after, bump, reason }, { expect }) {
-      const result = Verdict.judge(new Verdict.CompareSurfaces({ before: withExport(empty, before), after: withExport(empty, after), corpus: Verdict.defaultCorpus }))
+      const surface = (side: ApiModel.ApiItem | ApiModel.ApiModel) => ('entryPoints' in side ? side : withExport(empty, side))
+      const result = Verdict.judge(new Verdict.CompareSurfaces({ before: surface(before), after: surface(after), corpus: Verdict.defaultCorpus }))
       yield* expect(Result.map(result, (verdict) => [verdict.bump, verdict.findings.map((finding) => finding.reason_code)])).toEqual(Result.succeed([bump, [reason]]))
     },
   )

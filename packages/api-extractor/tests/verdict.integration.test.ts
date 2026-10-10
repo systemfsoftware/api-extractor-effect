@@ -13,6 +13,12 @@ const before = withExport(empty, functionItem(signature([], effect(ref('User'), 
 const after = withExport(empty, functionItem(signature([], effect(ref('User'), union([ref('NotFound'), ref('Timeout')])))))
 const [first] = Verdict.defaultCorpus.rules
 const ambiguous = { ...Verdict.defaultCorpus, rules: [...Verdict.defaultCorpus.rules, { ...first!, rule_id: 'copy' }] }
+const entry = { path: '.', items: [], locals: [] }
+const enumOf = (...names: ReadonlyArray<string>): ApiModel.ApiItem => ({ kind: 'enum', name: 'Mode', const: false, members: names.map((name) => ({ name })) })
+const repeatedKeys = [
+  { label: 'an entry-point path', surface: { ...empty, entryPoints: [entry, entry] } },
+  { label: 'an enum member name', surface: withExport(empty, enumOf('On', 'On')) },
+]
 
 describe('verdict cell', (it) => {
   it('answers the verdict document as canonical JSON', function* ({ expect }) {
@@ -27,6 +33,12 @@ describe('verdict cell', (it) => {
     const wrongVersion = { ...before, schemaVersion: ApiModel.SCHEMA_VERSION + 1 } as unknown as ApiModel.ApiModel
     const refusal = yield* Effect.flip(Verdict.cell.run({ before: wrongVersion, after }))
     yield* expect(refusal._tag).toBe('SurfaceRejected')
+  })
+
+  it.each(repeatedKeys)('refuses a surface repeating $label with SurfaceRejected', function* ({ surface }, { expect }) {
+    const repeated = yield* Effect.flip(Verdict.cell.run({ before: surface, after }))
+    const distinct = yield* Verdict.cell.run({ before: withExport(empty, enumOf('On', 'Off')), after })
+    yield* expect({ repeated: repeated._tag, distinct: JSON.parse(distinct)._tag }).toEqual({ repeated: 'SurfaceRejected', distinct: 'Verdict' })
   })
 
   it('refuses an ambiguous corpus with RuleCorpusRejected naming the shared match', function* ({ expect }) {
