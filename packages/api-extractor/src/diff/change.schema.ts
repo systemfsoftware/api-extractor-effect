@@ -68,10 +68,12 @@ export const ChangeKind = Schema.Literals([
 ])
 export type ChangeKind = typeof ChangeKind.Type
 
+/** One difference between two models, before any rule judges it. */
 export type Change = {
   readonly kind: ChangeKind
   readonly location: string
   readonly position: Position
+  /** The Effect-family channel (`A`, `E`, `R`, ...) the change sits under, if any. */
   readonly channel?: string
   readonly direction?: Direction
 }
@@ -530,12 +532,11 @@ const arityMatches = (dataFirst: ReadonlyArray<Parameter>, dataLast: ReadonlyArr
 const firstTypesMatch = (dataFirst: ReadonlyArray<Parameter>, dataLast: ReadonlyArray<Parameter>): boolean =>
   typeKey(firstParameter(dataFirst).type) === typeKey(firstParameter(dataLast).type)
 
-const matchingPartner = (dataFirst: Signature, dataLastReturns: Signature): boolean =>
-  arityMatches(dataFirst.parameters, dataLastReturns.parameters) &&
-  firstTypesMatch(dataFirst.parameters, dataLastReturns.parameters)
+const matchingPartner = (dataFirst: Signature, dataLast: Signature, dataLastReturns: Signature): boolean =>
+  arityMatches(dataFirst.parameters, dataLast.parameters) && firstTypesMatch(dataFirst.parameters, dataLastReturns.parameters)
 
 const partners = (dataFirst: Signature, dataLast: Signature): boolean =>
-  dataLast.returns.kind === 'function' && matchingPartner(dataFirst, dataLast.returns.signature)
+  dataLast.returns.kind === 'function' && matchingPartner(dataFirst, dataLast, dataLast.returns.signature)
 
 const signatureKey = (signature: Signature): string => canonicalKey(signature)
 
@@ -905,6 +906,10 @@ const expandedItems = (entryPoint: EntryPoint): ReadonlyArray<ApiItem> => {
   return entryPoint.items.map((item) => expandItem(item, scope))
 }
 
+/**
+ * Every difference between two models of the same package. Locations read
+ * `<entry point>:<export>/<path>`, e.g. `.:getUser/signature[0]/returns/E`.
+ */
 export const diffModels: {
   (after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): (before: ApiModel) => Changes
   (before: ApiModel, after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): Changes

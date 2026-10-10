@@ -77,6 +77,15 @@ const dualForms: readonly [Signature, Signature] = (() => {
   const self = parameter('self', effect(ref('A'), ref('Failure')))
   return [signature([mapper], fn(signature([self], effect(ref('B'), ref('Failure'))))), signature([self, mapper], effect(ref('B'), ref('Failure')))]
 })()
+const twoArgumentDualForms: readonly [Signature, Signature] = (() => {
+  const mapper = parameter('f', fn(signature([parameter('a', ref('A'))], ref('B'))))
+  const fallback = parameter('orElse', ref('B'))
+  const self = parameter('self', effect(ref('A'), ref('Failure')))
+  return [
+    signature([mapper, fallback], fn(signature([self], effect(ref('B'), ref('Failure'))))),
+    signature([self, mapper, fallback], effect(ref('B'), ref('Failure'))),
+  ]
+})()
 const dual = (...forms: ReadonlyArray<Signature>): Item => variable(true, object(...forms.map((sig): Member => ({ kind: 'call', signature: sig }))))
 const servicesLayer = (services: TypeExpr) => returning(ref('Layer', services, never, never))
 const withEntryPoint: Model = withEntryPoints(empty, [...empty.entryPoints, { path: './extra', items: [], locals: [] }])
@@ -90,6 +99,8 @@ const rows: ReadonlyArray<Row> = [
   ['a function export becomes a variable', returning(ref('A')), variable(true, ref('A')), 'major', 'EXPORT_KIND_CHANGED'],
   ['a dual loses its data-last form', dual(...dualForms), dual(dualForms[1]), 'major', 'DUAL_FORM_REMOVED'],
   ['a data-first function gains its data-last form', dual(dualForms[1]), dual(...dualForms), 'minor', 'DUAL_FORM_ADDED'],
+  ['a two-argument dual loses its data-last form', dual(...twoArgumentDualForms), dual(twoArgumentDualForms[1]), 'major', 'DUAL_FORM_REMOVED'],
+  ['a two-argument data-first function gains its data-last form', dual(twoArgumentDualForms[1]), dual(...twoArgumentDualForms), 'minor', 'DUAL_FORM_ADDED'],
   ['a function gains a required parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'))], voidType)), 'major', 'REQUIRED_PARAMETER_ADDED'],
   ['a function gains an optional parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'), true)], voidType)), 'minor', 'OPTIONAL_PARAMETER_ADDED'],
   ['a returned layer provides one service fewer', servicesLayer(either), servicesLayer(ref('A')), 'major', 'LAYER_SERVICE_REMOVED'],

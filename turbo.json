@@ -8,8 +8,14 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    "lint": {},
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "lint": {
+      "dependsOn": ["transit"]
+    },
     "test": {
+      "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", "vitest.config.ts"]
     }
   }

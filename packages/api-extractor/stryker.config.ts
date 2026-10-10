@@ -17,7 +17,7 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-ignorer-effect-schema-declarations'),
     import.meta.resolve('@systemfsoftware/stryker-ignorer-in-source-vitest-block'),
   ],
-  mutate: shardMutate(['src/**/*.workflow.ts']),
+  mutate: shardMutate(['src/**/*.workflow.ts', 'src/**/*.schema.ts']),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
 })
