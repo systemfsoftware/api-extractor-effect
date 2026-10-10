@@ -15,7 +15,7 @@ execution: code
 - **Objective:** a maintainer of an Effect-heavy TypeScript library runs one command on a pull request and gets, within seconds, an api-extractor-compatible API report, a versioned JSON API model, and a semver verdict that fails the PR when its changeset under-declares the bump.
 - **Means:** a standalone product repository, `systemfsoftware/api-extractor-effect`, built around one versioned API model that a fast syntactic path and a compiler fallback both produce. Upstream `@microsoft/api-extractor` 7.59.1 is the behaviour oracle for the report, never the implementation.
 - **Product authority:** the root's round-3 contract (Done 1-9, "does not count", scope). systemfsoftware PR #552 (head `3a135a19cb`) is reference material only. Plan `0530dd7` on `feat/import-api-extractor` is void as a bar; its verified facts are reused below.
-- **Open blockers:** P1 (O1's PR making `tsdown-config`, `vitest-config` and `stryker-config` public) and O1's org reusable workflows. Both gate only the toolchain jobs and the lockfile entries that need them (R27).
+- **Open blockers:** P1 (O1's PR making `tsdown-config`, `vitest-config` and `stryker-config` public) and O1's org reusable workflows. Both gate only the toolchain jobs and the lockfile entries that need them (R3, R22, KTD1).
 
 ## Product Contract
 
@@ -163,9 +163,116 @@ Each requirement names the Done item it serves.
 
 **Resolve Before Planning:** none.
 
-**Deferred to Planning:**
+**Deferred to Planning:** none; the Planning Contract answers the PR split (KTD1), the fallback compiler (KTD9), the renderer's source of truth (KTD10) and the corpus (KTD11).
 
-- The PR split and order, given that toolchain jobs and the lockfile entries for the three private packages wait on O1/P1.
-- Which compiler serves the fallback before TS 7.1: the TypeScript 6 API (`typescript@6`) or the TS7 `tsc` binary's declaration emit.
-- How the report renderer reproduces upstream's ordering and annotations from the model; which upstream rules port, with provenance.
-- The real-corpus selection for R15/R16 and how the benchmark runs upstream on it within CI time.
+---
+
+## Planning Contract
+
+### Key Technical Decisions
+
+- KTD1. **Six sequential PRs on `main`, each green on its own head.** PR1 model, diff and verdict core plus the repository foundation; PR2 front-ends; PR3 report renderer, differential lane and adversarial corpus; PR4 profile and CI benchmark; PR5 CLI and changeset-bump check; PR6 toolchain integration (flake, `.sfs-deps`, family packages, O1 reusable jobs, release caller, mutation, consumer-flake journey). Only PR6 waits on O1/P1, so PR1-PR5 never need a family package. Governs R3, R21, R22, R23.
+- KTD2. **PR1-PR5 depend on no `@systemfsoftware/*` package.** `.sfs-deps` materialisation is a generic job blocked on O1 (Key Decisions), so a family dependency now would make every product job blocked. Third-party dependencies are those already in #552's `package.json` (`effect`, `fast-check`, `vitest`, `typescript`, `@types/node`, `@microsoft/api-extractor`) plus the pre-approved Microsoft and oxc packages. Cell-architecture's `Workflow`/`Sandwich` cells (pack: cell-architecture) arrive with `@systemfsoftware/effect-cell-types` in PR6; until then decisions are plain pure functions over immutable data, which already satisfies R19.
+- KTD3. **The model is an Effect Schema with a literal `schemaVersion: 1`.** Decoding rejects any other version. Type expressions are a small structural AST (keyword, literal, reference with optional module and arguments, union, intersection, array, tuple, function, object, opaque text), so rules reason about structure, not printed text. Governs R10, R13.
+- KTD4. **One canonical serialiser for every output.** Object keys sorted by UTF-16 code unit (`Array.prototype.sort` with no comparator), arrays ordered at construction by the same comparison, two-space JSON with a trailing newline. No `Intl`, `toLocale*`, `localeCompare`, dates or paths enter output. Governs R5, R7.
+- KTD5. **Diff carries position polarity.** A function's parameters are `in`, its return `out`; a `const` is `out`; interface members, class members, type-alias bodies and `let` variables are `both`. Effect types decompose into channels from a declarative channel table (`Effect`, `Stream`: `A`/`E`/`R`; `Layer`: `ROut`/`E`/`RIn`); each channel inherits the position. Local type aliases expand before comparison (cycle-guarded), so a widened alias surfaces on the function that uses it. Governs R11, R13.
+- KTD6. **Direction is decided on a small lattice:** union membership by canonical key (`never` is the empty union), literal below its keyword, `unknown`/`any` at the top. Anything else is `changed`. Governs R11.
+- KTD7. **The rule corpus is versioned JSON data** (`corpusVersion`, the channel table, and rules keyed by change kind plus optional `channel`/`position`/`direction`), decoded through a schema at load. Each rule carries `rule_id`, `bump`, `reason_code`, `next_action`. The engine picks the most specific matching rule; no match yields `major`/`UNCLASSIFIED_CHANGE`. Governs R11, R12.
+- KTD8. **Locale determinism is proven across real processes.** Node fixes its default locale at start-up, so no in-process test can vary it. The property test serialises a generated batch in child processes under `LC_ALL`/`TZ`/`cwd` variants, asserts each child really resolved its locale (so the test cannot pass vacuously), and compares bytes. This is one of the 2-4 process-level tests the test-layer gate allows. Governs R6.
+- KTD9. **Front-ends meet at declaration text behind an emitter port** (PR2). The compiler fallback runs TypeScript 7's `tsc --declaration --emitDeclarationOnly` as a process (TS7 has no API until 7.1); the fast path emits isolated declarations without a checker. Which emitter serves the fast path (TypeScript's `transpileDeclaration` or `oxc-transform` 0.150.0) is decided by PR2's profile, per R15. The 7.1 API becomes another adapter of the same port. Governs R17, R18.
+- KTD10. **The report renderer reads only the model** (PR3), so the model keeps what the report needs: declaration text spans with their TSDoc, release tags and analysis messages. Upstream rules that port carry provenance headers (R2). Governs R8, R9.
+- KTD11. **The real corpus is systemfsoftware's public packages at the pinned SHA** (PR4), measured against upstream 7.59.1 on the same packages. Governs R15, R16.
+- KTD12. **CI for PR1 is one product job** that installs with pnpm and runs the package's property and determinism tests on Node 24. Lint, typecheck, build, release, mutation and `.sfs-deps` are listed in the PR body as blocked on O1; no local equivalent is written. Typecheck runs locally as verification evidence. Governs R22.
+
+### Assumptions challenged (destructive review, Edge-First lens)
+
+1. *Both front-ends yield the same model.* Compiler emit prints inferred types and `import("x").Y` references that isolated emit never produces. PR2 canonicalises import-type references in the builder and proves fast-path and fallback models equal on the isolated-clean corpus (R17).
+2. *The report can be rendered from a model.* Upstream copies declaration text verbatim and adds messages from analysis. KTD10 keeps spans and messages in the model; the differential lane (R9) arbitrates.
+3. *A syntax-only verdict is sound.* A changed local alias changes `E` without changing the function's text. KTD5 expands local aliases; changes inside dependencies are out of scope, and anything unclassified fails closed (KTD7).
+
+---
+
+## Implementation Units
+
+PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the start of each PR (KTD1).
+
+### U1. Repository foundation (PR1)
+
+- **Goal:** the repository is a licensed, provenance-stating product home with pinned packs.
+- **Requirements:** R1, R2, R3, R4.
+- **Files:** `LICENSE`, `README.md`, `AGENTS.md`, `.compound-engineering/config.yaml`, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, `packages/api-extractor/{package.json,tsconfig.json,vitest.config.ts}`.
+- **Approach:** `LICENSE` is MIT ("Copyright (c) 2026 System F Software") followed by Microsoft's MIT notice for `rushstack@bc4cd29` `apps/api-extractor`. README states the provenance policy (R2) and the PR roadmap. Packs: one git source `https://github.com/systemfsoftware/systemfsoftware.git`, `ref` = systemfsoftware `main` `df908ddfe497e53c1c03b92519a96c913c441a58`, `path: compound-packs`, packs `cell-architecture`, `boundary-testing`, `schema-laws`, `package-topology`. `packageManager` pins pnpm 12.10.1. The package `tsconfig.json` is a minimal strict config owned by this package; PR6 moves it onto `@systemfsoftware/tsconfig`.
+- **Test expectation:** none - configuration and documents.
+- **Verification:** the CE pack resolver returns four roots with no errors; `git grep -n '/tree/main' -- .compound-engineering` prints nothing.
+
+### U2. Versioned API model and canonical serialiser (PR1)
+
+- **Goal:** a decodable, versioned model and one byte-stable serialiser.
+- **Requirements:** R5, R7, R10; KTD3, KTD4.
+- **Files:** `packages/api-extractor/src/model/*.ts`, `src/canonical-json.ts`, `src/version.ts`.
+- **Approach:** Effect Schema for `ApiModel` (`schemaVersion`, `producer {engine, declarations}`, `package`, `entryPoints[].items[]`) and the type AST. Constructors sort arrays by code unit.
+- **Test scenarios:** (schema law) for any generated model, decode(encode(m)) equals m and canonical bytes are stable through a JSON round trip; a document with `schemaVersion: 2` fails to decode.
+- **Verification:** the property suite passes; no `toLocale`, `localeCompare` or `Intl` in `src`.
+
+### U3. Diff with polarity and Effect channels (PR1)
+
+- **Goal:** two models produce position-aware change records.
+- **Requirements:** R11, R13; KTD5, KTD6.
+- **Files:** `src/diff/*.ts`.
+- **Approach:** compare entry points, exports, overloads (matched by exact form, then dual form, then index), parameters, members, enum members and types; decompose Effect references by the channel table; expand local aliases.
+- **Test scenarios:** (property, through the verdict - U4) diff of a model with itself is empty.
+- **Verification:** U4's suite.
+
+### U4. Declarative rule corpus and verdict (PR1)
+
+- **Goal:** change records become findings and a verdict.
+- **Requirements:** R11, R12, R13; KTD7.
+- **Files:** `src/rules/corpus.v1.json`, `src/rules/*.ts`, `src/verdict.ts`, `src/mod.ts`.
+- **Approach:** decode the corpus; for each change pick the most specific rule; build `{rule_id, reason_code, next_action, locations}`; verdict = highest bump; stamp engine and corpus versions.
+- **Test scenarios (properties over generated surrounding models, each targeting one rule):** AE1 (`E` widened in output, major `E_WIDENED`); `E` member removed in output (major `E_TAG_REMOVED`); AE2 (`E` widened in input, minor); `A` and `R` widened/narrowed in both positions; the same change through a local alias; AE3 (dual form removed, major `DUAL_FORM_REMOVED`); export removed (major) and added (minor); required parameter added (major), optional added (minor); AE4 (a corpus without the matching rule yields `UNCLASSIFIED_CHANGE`); the verdict equals the highest finding bump and adding an unrelated change never lowers it.
+- **Verification:** the property suite passes, and each Effect rule's property fails when the rule's `bump` or the diff's polarity is flipped by hand (checked once during development, not committed).
+
+### U5. Locale and host determinism proof (PR1)
+
+- **Goal:** R5 holds across real process environments.
+- **Requirements:** R5, R6; KTD8.
+- **Files:** `tests/locale-determinism.property.test.ts`, `tests/__fixtures__/serialise-probe.ts`.
+- **Approach:** fast-check generates models whose names draw on `i I ı İ ß` and mixed scripts; children under `C`/`UTC`, `tr_TR.UTF-8`/`Europe/Istanbul`, `de_DE.UTF-8`/`America/Los_Angeles` and a different `cwd` serialise models and verdicts.
+- **Test scenarios:** AE5; each child reports the locale it resolved, and the test fails if `tr-TR` was not actually in effect.
+- **Verification:** the test fails when the serialiser's key sort is switched to `localeCompare` (checked once during development).
+
+### U6. PR1 CI (PR1)
+
+- **Goal:** the PR head proves U2-U5 on GitHub-hosted Linux.
+- **Requirements:** R22; KTD12.
+- **Files:** `.github/workflows/ci.yml`.
+- **Approach:** one job: checkout, pnpm via `pnpm/action-setup` (reads `packageManager`), Node 24, `pnpm install --frozen-lockfile`, `pnpm test`. `permissions: contents: read`; no secrets.
+- **Verification:** the run on the PR head is green.
+
+### U7-U11. Later PRs (scoped)
+
+- **U7 (PR2) Front-ends:** syntactic model builder over declaration text; isolated fast path; TS7 `tsc` fallback; emitter port; fast-vs-fallback model equality on an isolated-clean corpus. R17, R18; KTD9.
+- **U8 (PR3) Report:** `.api.md` renderer from the model; differential lane against upstream 7.59.1 on a fast-check-generated corpus plus the adversarial corpus (namespace barrels, `declare global`, re-export cycles, overloads, Effect dual APIs). R8, R9; KTD10.
+- **U9 (PR4) Performance:** per-phase profile; cold/warm benchmark in CI on the real corpus vs upstream; 10x target or measured ceiling. R15, R16; KTD11.
+- **U10 (PR5) CLI and bump check:** one command, JSON with `schemaVersion`, bounded concise reporter; a PR job fails when a changeset under-declares. R14, R20.
+- **U11 (PR6) Toolchain integration:** flake inputs (systemfsoftware at the P1 SHA, stryker-js-effect, are-the-types-wrong-effect, pnpm-release-management), `.sfs-deps` with the stryker `npm:` alias override, family packages, O1's reusable lint/typecheck/build/mutation jobs, thin release caller, mutation on `main` with the dispatch proof, consumer-flake journey. R3, R21, R23. Blocked on P1 and O1.
+
+---
+
+## Verification Contract
+
+| Gate | Command or evidence | Proves |
+|---|---|---|
+| Product tests | `pnpm test` (Node 24) on the PR head, in CI | R5, R6, R10-R13 |
+| Typecheck (local until O1) | `pnpm --filter @systemfsoftware/api-extractor exec tsc --noEmit` | KTD12 |
+| Locale sensitivity is real | U5's test fails with `localeCompare` swapped in (development check) | R6 |
+| Packs | CE pack resolver: 4 roots, 0 errors | R4 |
+| No locale APIs | `git grep -nE 'toLocale|localeCompare|Intl\\.' -- packages/api-extractor/src` prints nothing | R5 |
+
+## Definition of Done (PR1)
+
+- U1-U6 verified on the PR head; CI green on that exact SHA.
+- The PR body lists every blocked generic job with its O1/P1 blocker, and every review finding with its disposition.
+- No `@systemfsoftware/*` dependency, no copied toolchain file, no secrets.
+
+## Document Review Dispositions
