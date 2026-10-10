@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/effect-schema-law": "^5.0.1",
+    "@systemfsoftware/effect-schema-vite": "^3.0.1",
     "@systemfsoftware/tsconfig": "^2.0.1",
     "@systemfsoftware/vitest": "^2.0.0",
     "@types/node": "catalog:",

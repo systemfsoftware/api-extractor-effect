@@ -16,9 +16,12 @@ const literal = fc.oneof(
   fc.constantFrom('true', 'false'),
 )
 
-const typeParameters = fc.array(fc.record({ name }) as fc.Arbitrary<TypeParameter>, { maxLength: 2 })
-
-const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; member: Member }>((tie) => ({
+const { typeExpr, member, typeParameters } = fc.letrec<{
+  typeExpr: TypeExpr
+  signature: Signature
+  member: Member
+  typeParameters: ReadonlyArray<TypeParameter>
+}>((tie) => ({
   typeExpr: fc.oneof(
     { depthSize: 'small', withCrossShrink: true },
     keyword.map((value): TypeExpr => ({ kind: 'keyword', name: value })),
@@ -34,8 +37,12 @@ const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; membe
     fc.array(tie('member'), { maxLength: 3 }).map((members): TypeExpr => ({ kind: 'object', members })),
     fc.string({ unit, minLength: 1, maxLength: 6 }).map((text): TypeExpr => ({ kind: 'text', text })),
   ),
+  typeParameters: fc.array(
+    fc.record({ name, constraint: tie('typeExpr'), default: tie('typeExpr') }, { requiredKeys: ['name'] }),
+    { maxLength: 2 },
+  ),
   signature: fc.record({
-    typeParameters,
+    typeParameters: tie('typeParameters') as fc.Arbitrary<ReadonlyArray<TypeParameter>>,
     parameters: fc.array(
       fc.record({ name, type: tie('typeExpr'), optional: fc.boolean(), rest: fc.boolean() }) as fc.Arbitrary<Parameter>,
       { maxLength: 3 },
@@ -49,6 +56,9 @@ const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; membe
   ),
 }))
 
+/** Any type expression. */
+export { typeExpr }
+
 const typeAlias: fc.Arbitrary<TypeAliasItem> = fc.record({
   kind: fc.constant('typeAlias' as const),
   name,
@@ -60,6 +70,22 @@ const leafItem: fc.Arbitrary<ApiItem> = fc.oneof(
   fc.record({ kind: fc.constant('function' as const), name, signatures: fc.array(fc.record({ typeParameters, parameters: fc.constant([]), returns: typeExpr }) as fc.Arbitrary<Signature>, { minLength: 1, maxLength: 2 }) }),
   fc.record({ kind: fc.constant('variable' as const), name, constant: fc.boolean(), type: typeExpr }),
   typeAlias,
+  fc.record({
+    kind: fc.constant('interface' as const),
+    name,
+    typeParameters,
+    extends: fc.array(typeExpr, { maxLength: 2 }),
+    members: fc.array(member, { maxLength: 3 }),
+  }),
+  fc.record({
+    kind: fc.constant('class' as const),
+    name,
+    abstract: fc.boolean(),
+    typeParameters,
+    extends: fc.array(typeExpr, { maxLength: 1 }),
+    implements: fc.array(typeExpr, { maxLength: 2 }),
+    members: fc.array(member, { maxLength: 3 }),
+  }),
   fc.record({ kind: fc.constant('enum' as const), name, const: fc.boolean(), members: fc.uniqueArray(fc.record({ name }), { selector: (member) => member.name, maxLength: 3 }) }),
 )
 

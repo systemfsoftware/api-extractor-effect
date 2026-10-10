@@ -1,5 +1,6 @@
 import { Schema } from 'effect'
 import { ChangeKind, Direction, Position, Variance } from '../diff/change.ts'
+import { TypeExpr } from '../model/type-expr.ts'
 import corpusV1 from './corpus.v1.json' with { type: 'json' }
 
 export const Bump = Schema.Literals(['none', 'patch', 'minor', 'major'])
@@ -11,7 +12,11 @@ export interface ChannelType {
   readonly names: ReadonlyArray<string>
   /** Packages the type comes from; a reference with no module matches any of them. */
   readonly modules: ReadonlyArray<string>
-  readonly channels: ReadonlyArray<{ readonly name: string; readonly variance: Variance }>
+  /**
+   * The type arguments in declaration order. A trailing channel with a `default`
+   * may be left out of a reference, as `Effect<A, E>` leaves out `R = never`.
+   */
+  readonly channels: ReadonlyArray<{ readonly name: string; readonly variance: Variance; readonly default?: TypeExpr }>
 }
 
 export interface RuleMatch {
@@ -38,7 +43,7 @@ export interface RuleCorpus {
 const ChannelType: Schema.Codec<ChannelType> = Schema.Struct({
   names: Schema.Array(Schema.String),
   modules: Schema.Array(Schema.String),
-  channels: Schema.Array(Schema.Struct({ name: Schema.String, variance: Variance })),
+  channels: Schema.Array(Schema.Struct({ name: Schema.String, variance: Variance, default: Schema.optionalKey(TypeExpr) })),
 })
 
 const Rule: Schema.Codec<Rule> = Schema.Struct({

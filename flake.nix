@@ -19,7 +19,15 @@
       # Every @systemfsoftware package the lockfile resolves, by attribute name.
       # package.json and the overrides in pnpm-workspace.yaml name each one as
       # `file:.sfs-deps/<attr>-<version>.tgz`.
-      sfsPackages = [ "effect-cell-types" "effect-schema-law" "tsconfig" "vitest" ];
+      sfsPackages = [
+        "effect-cell-types"
+        "effect-schema-discovery"
+        "effect-schema-law"
+        "effect-schema-recursion-budget"
+        "effect-schema-vite"
+        "tsconfig"
+        "vitest"
+      ];
     in
     {
       packages = forEachSystem (pkgs:

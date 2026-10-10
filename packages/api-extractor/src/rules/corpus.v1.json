@@ -1,5 +1,5 @@
 {
-  "corpusVersion": "1.0.0",
+  "corpusVersion": "1.1.0",
   "channelTypes": [
     {
       "names": [
@@ -17,11 +17,19 @@
         },
         {
           "name": "E",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         },
         {
           "name": "R",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         }
       ]
     },
@@ -41,11 +49,19 @@
         },
         {
           "name": "E",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         },
         {
           "name": "R",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         }
       ]
     },
@@ -65,11 +81,19 @@
         },
         {
           "name": "E",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         },
         {
           "name": "RIn",
-          "variance": "out"
+          "variance": "out",
+          "default": {
+            "kind": "keyword",
+            "name": "never"
+          }
         }
       ]
     }

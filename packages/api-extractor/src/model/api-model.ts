@@ -102,7 +102,8 @@ export const TypeAliasItem: Schema.Codec<TypeAliasItem> = Schema.Struct({
 
 const apiItem = Schema.suspend((): Schema.Codec<ApiItem> => ApiItem)
 
-export const ApiItem: Schema.Codec<ApiItem> = Schema.Union([
+/** The recursion point of the item tree (namespaces nest items); generation stays within the declared budget. */
+export const ApiItem: Schema.Codec<ApiItem> = Schema.suspend((): Schema.Codec<ApiItem> => Schema.Union([
   Schema.Struct({ kind: Schema.Literal('function'), name: Schema.String, signatures: Schema.Array(Signature) }),
   Schema.Struct({ kind: Schema.Literal('variable'), name: Schema.String, constant: Schema.Boolean, type: TypeExpr }),
   TypeAliasItem,
@@ -129,7 +130,7 @@ export const ApiItem: Schema.Codec<ApiItem> = Schema.Union([
     members: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.optionalKey(Schema.String) })),
   }),
   Schema.Struct({ kind: Schema.Literal('namespace'), name: Schema.String, items: Schema.Array(apiItem) }),
-])
+])).annotate({ recursionBudget: { maxDepth: 8, depthSize: 'small' } })
 
 export const ApiModel: Schema.Codec<ApiModel> = Schema.Struct({
   schemaVersion: Schema.Literal(API_MODEL_SCHEMA_VERSION),

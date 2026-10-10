@@ -1,13 +1,9 @@
-import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { API_MODEL_SCHEMA_VERSION, ApiModel, decodeApiModel } from './api-model.ts'
+import { API_MODEL_SCHEMA_VERSION, decodeApiModel } from './api-model.ts'
 import { sortModel } from './normalise.ts'
 import { serialiseApiModel } from './serialise.ts'
-import { apiModel } from '../../tests/__fixtures__/arbitraries.ts'
-
-// Codec laws: round trip and encode stability over values generated from the schema.
-ruleOfSchemas('ApiModel', ApiModel)
+import { apiModel, typeExpr } from '../../tests/__fixtures__/arbitraries.ts'
 
 describe('ApiModel wire document', () => {
   it('decodes its own canonical bytes back to the same model', () => {
@@ -33,6 +29,19 @@ describe('ApiModel wire document', () => {
       fc.property(apiModel, (model) => {
         const shuffled = { ...model, entryPoints: [...model.entryPoints].reverse().map((entry) => ({ ...entry, items: [...entry.items].reverse() })) }
         expect(serialiseApiModel(shuffled)).toBe(serialiseApiModel(model))
+      }),
+    )
+  })
+
+  it('orders a value and a type sharing a name the same way whatever order they arrive in', () => {
+    fc.assert(
+      fc.property(apiModel, typeExpr, (model, type) => {
+        const pair = [
+          { kind: 'variable', name: 'Shared', constant: true, type },
+          { kind: 'typeAlias', name: 'Shared', typeParameters: [], type },
+        ] as const
+        const withItems = (items: ReadonlyArray<(typeof pair)[number]>) => ({ ...model, entryPoints: [{ path: '.', items, locals: [] }] })
+        expect(serialiseApiModel(withItems([...pair].reverse()))).toBe(serialiseApiModel(withItems(pair)))
       }),
     )
   })

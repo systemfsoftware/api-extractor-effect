@@ -150,7 +150,8 @@ export const Signature: Schema.Codec<Signature> = Schema.Struct({
   returns: typeExpr,
 })
 
-export const Member: Schema.Codec<Member> = Schema.Union([
+/** A recursion point too: members hold signatures, which hold types, which hold members. */
+export const Member: Schema.Codec<Member> = Schema.suspend((): Schema.Codec<Member> => Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('property'),
     name: Schema.String,
@@ -165,9 +166,10 @@ export const Member: Schema.Codec<Member> = Schema.Union([
     signatures: Schema.Array(signature),
   }),
   Schema.Struct({ kind: Schema.Literal('call'), signature }),
-])
+])).annotate({ recursionBudget: { maxDepth: 6, depthSize: 'small' } })
 
-export const TypeExpr: Schema.Codec<TypeExpr> = Schema.Union([
+/** The recursion point of the type AST; generation stays within the declared budget. */
+export const TypeExpr: Schema.Codec<TypeExpr> = Schema.suspend((): Schema.Codec<TypeExpr> => Schema.Union([
   Schema.Struct({ kind: Schema.Literal('keyword'), name: KeywordName }),
   Schema.Struct({ kind: Schema.Literal('literal'), text: Schema.String }),
   Schema.Struct({
@@ -183,4 +185,4 @@ export const TypeExpr: Schema.Codec<TypeExpr> = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('function'), signature }),
   Schema.Struct({ kind: Schema.Literal('object'), members: Schema.Array(Member) }),
   Schema.Struct({ kind: Schema.Literal('text'), text: Schema.String }),
-])
+])).annotate({ recursionBudget: { maxDepth: 4, depthSize: 'small' } })

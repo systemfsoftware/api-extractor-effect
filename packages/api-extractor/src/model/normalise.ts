@@ -73,8 +73,12 @@ export const normaliseType = (type: TypeExpr): TypeExpr => {
 /** The structural identity of a type: equal keys mean the same type. */
 export const typeKey = (type: TypeExpr): string => canonicalKey(normaliseType(type))
 
-const byName = <A extends { readonly name: string }>(values: ReadonlyArray<A>): ReadonlyArray<A> =>
-  [...values].sort((left, right) => compareCodeUnits(left.name, right.name))
+/** By name; items sharing a name (a value beside a type) by kind, then by content, so input order never shows. */
+const byName = <A extends { readonly name: string; readonly kind: string }>(values: ReadonlyArray<A>): ReadonlyArray<A> =>
+  [...values].sort(
+    (left, right) =>
+      compareCodeUnits(left.name, right.name) || compareCodeUnits(left.kind, right.kind) || compareCodeUnits(canonicalKey(left), canonicalKey(right)),
+  )
 
 const sortItem = (item: ApiItem): ApiItem =>
   item.kind === 'namespace' ? { ...item, items: byName(item.items.map(sortItem)) } : item

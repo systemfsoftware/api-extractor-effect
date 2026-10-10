@@ -29,7 +29,7 @@ const matches = (rule: Rule, change: Change): boolean =>
   (rule.match.channel === undefined || rule.match.channel === change.channel) &&
   (rule.match.direction === undefined || rule.match.direction === change.direction)
 
-/** The most specific matching rule; among equally specific rules, the first in corpus order. */
+/** The most specific matching rule; a corpus `ambiguitiesOf` accepts never has two equally specific ones. */
 export const classify = (corpus: RuleCorpus, change: Change): Rule =>
   corpus.rules
     .filter((rule) => matches(rule, change))
@@ -58,8 +58,28 @@ const repeated = (keys: ReadonlyArray<string>, describe: (key: string) => string
     .map(([key]) => describe(key))
     .sort(compareCodeUnits)
 
-/** Why a corpus cannot pick one rule per change: rules sharing a match, and repeated rule ids. */
+/** Some change matches both rules: same kind, and every field both rules state agrees. */
+const overlap = (left: RuleMatch, right: RuleMatch): boolean =>
+  left.kind === right.kind &&
+  (['position', 'channel', 'direction'] as const).every((field) => left[field] === undefined || right[field] === undefined || left[field] === right[field])
+
+/** Pairs of rules that tie on some change: they overlap and neither is more specific, so corpus order would decide. */
+const ties = (rules: ReadonlyArray<Rule>): ReadonlyArray<string> =>
+  Arr.dedupe(
+    rules.flatMap((left, index) =>
+      rules
+        .slice(index + 1)
+        .filter((right) => specificity(left) === specificity(right) && overlap(left.match, right.match))
+        .map((right) => {
+          const [first, second] = [matchKey(left.match), matchKey(right.match)].sort(compareCodeUnits)
+          return first === second ? `two rules match ${first}` : `two rules match ${first} and ${second}`
+        }),
+    ),
+  ).sort(compareCodeUnits)
+
+/** Why a corpus cannot pick one rule per change: rules that tie, repeated rule ids, and a rule taking the fallback's id. */
 export const ambiguitiesOf = (corpus: RuleCorpus): ReadonlyArray<string> => [
-  ...repeated(corpus.rules.map((rule) => matchKey(rule.match)), (key) => `two rules match ${key}`),
+  ...ties(corpus.rules),
   ...repeated(corpus.rules.map((rule) => rule.rule_id), (id) => `duplicate rule id ${id}`),
+  ...(corpus.rules.some((rule) => rule.rule_id === UNCLASSIFIED.rule_id) ? [`rule id ${UNCLASSIFIED.rule_id} is reserved for unclassified changes`] : []),
 ]

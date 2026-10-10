@@ -45,11 +45,6 @@ interface Scope {
 const without = <V>(map: ReadonlyMap<string, V>, names: ReadonlyArray<string>): ReadonlyMap<string, V> =>
   names.some((name) => map.has(name)) ? new Map([...map].filter(([key]) => !names.includes(key))) : map
 
-const enterSignature = (scope: Scope, signature: Signature): Scope => {
-  const names = signature.typeParameters.map((parameter) => parameter.name)
-  return { ...scope, aliases: without(scope.aliases, names), bindings: without(scope.bindings, names) }
-}
-
 /**
  * Replaces every reference to a same-package type alias with the alias body,
  * so a change to an alias shows where it is used and equal keys mean equal surfaces.
@@ -64,13 +59,23 @@ const expandType = (type: TypeExpr, scope: Scope): TypeExpr => {
       const args = type.args.map((arg) => expandType(arg, scope))
       const alias = type.module === undefined ? scope.aliases.get(type.name) : undefined
       if (alias === undefined || scope.expanding.has(type.name)) return { ...type, args }
-      const bindings = new Map(
-        alias.typeParameters.map((parameter, index): [string, TypeExpr] => [
-          parameter.name,
-          args[index] ?? parameter.default ?? { kind: 'keyword', name: 'unknown' },
-        ]),
+      const expanding = new Set([...scope.expanding, type.name])
+      // A default may name an alias or an earlier parameter, so it is expanded where it is declared.
+      const bindings = alias.typeParameters.reduce<ReadonlyMap<string, TypeExpr>>(
+        (bound, parameter, index) =>
+          new Map([
+            ...bound,
+            [
+              parameter.name,
+              args[index] ??
+                (parameter.default === undefined
+                  ? { kind: 'keyword', name: 'unknown' }
+                  : expandType(parameter.default, { aliases: scope.aliases, bindings: bound, expanding })),
+            ],
+          ]),
+        new Map(),
       )
-      return expandType(alias.type, { aliases: scope.aliases, bindings, expanding: new Set([...scope.expanding, type.name]) })
+      return expandType(alias.type, { aliases: scope.aliases, bindings, expanding })
     }
     case 'union':
     case 'intersection':
@@ -90,10 +95,23 @@ const expandType = (type: TypeExpr, scope: Scope): TypeExpr => {
   }
 }
 
+/** Constraints and defaults, in the scope the parameters themselves open. */
+const expandTypeParameters = (parameters: ReadonlyArray<TypeParameter>, scope: Scope): ReadonlyArray<TypeParameter> =>
+  parameters.map((parameter) => ({
+    name: parameter.name,
+    ...(parameter.constraint === undefined ? {} : { constraint: expandType(parameter.constraint, scope) }),
+    ...(parameter.default === undefined ? {} : { default: expandType(parameter.default, scope) }),
+  }))
+
+const enterTypeParameters = (scope: Scope, parameters: ReadonlyArray<TypeParameter>): Scope => {
+  const names = parameters.map((parameter) => parameter.name)
+  return { ...scope, aliases: without(scope.aliases, names), bindings: without(scope.bindings, names) }
+}
+
 const expandSignature = (signature: Signature, outer: Scope): Signature => {
-  const scope = enterSignature(outer, signature)
+  const scope = enterTypeParameters(outer, signature.typeParameters)
   return {
-    typeParameters: signature.typeParameters,
+    typeParameters: expandTypeParameters(signature.typeParameters, scope),
     parameters: signature.parameters.map((parameter) => ({ ...parameter, type: expandType(parameter.type, scope) })),
     returns: expandType(signature.returns, scope),
   }
@@ -116,13 +134,18 @@ const expandItem = (item: ApiItem, scope: Scope): ApiItem => {
       return { ...item, signatures: item.signatures.map((signature) => expandSignature(signature, scope)) }
     case 'variable':
       return { ...item, type: expandType(item.type, scope) }
-    case 'typeAlias':
-      return { ...item, type: expandType(item.type, { ...scope, expanding: new Set([...scope.expanding, item.name]) }) }
+    case 'typeAlias': {
+      const inner = enterTypeParameters({ ...scope, expanding: new Set([...scope.expanding, item.name]) }, item.typeParameters)
+      return { ...item, typeParameters: expandTypeParameters(item.typeParameters, inner), type: expandType(item.type, inner) }
+    }
     case 'interface':
     case 'class': {
-      const names = item.typeParameters.map((parameter) => parameter.name)
-      const inner: Scope = { ...scope, aliases: without(scope.aliases, names), bindings: without(scope.bindings, names) }
-      return { ...item, members: item.members.map((member) => expandMember(member, inner)) }
+      const inner = enterTypeParameters(scope, item.typeParameters)
+      return {
+        ...item,
+        typeParameters: expandTypeParameters(item.typeParameters, inner),
+        members: item.members.map((member) => expandMember(member, inner)),
+      }
     }
     case 'enum':
       return item
@@ -131,13 +154,21 @@ const expandItem = (item: ApiItem, scope: Scope): ApiItem => {
   }
 }
 
-const channelTypeOf = (context: Context, type: TypeExpr & { readonly kind: 'reference' }): ChannelType | undefined =>
+type Reference = TypeExpr & { readonly kind: 'reference' }
+
+/** The channel type a reference spells, given every channel it leaves out has a default. */
+const channelTypeOf = (context: Context, type: Reference): ChannelType | undefined =>
   context.channelTypes.find(
     (candidate) =>
       candidate.names.includes(type.name) &&
-      candidate.channels.length === type.args.length &&
-      (type.module === undefined || candidate.modules.includes(type.module)),
+      (type.module === undefined || candidate.modules.includes(type.module)) &&
+      type.args.length <= candidate.channels.length &&
+      candidate.channels.slice(type.args.length).every((slot) => slot.default !== undefined),
   )
+
+/** Every channel's argument, the left-out ones filled with their defaults. */
+const channelArgs = (channelType: ChannelType, type: Reference): ReadonlyArray<TypeExpr> =>
+  channelType.channels.map((slot, index) => type.args[index] ?? (slot.default as TypeExpr))
 
 const compareType = (context: Context, before: TypeExpr, after: TypeExpr, at: At): ReadonlyArray<Change> => {
   const b = normaliseType(before)
@@ -145,17 +176,20 @@ const compareType = (context: Context, before: TypeExpr, after: TypeExpr, at: At
   // Both sides are normalised, so their canonical keys are their structural identity.
   if (canonicalKey(b) === canonicalKey(a)) return []
 
-  if (b.kind === 'reference' && a.kind === 'reference' && b.name === a.name && b.module === a.module && b.args.length === a.args.length) {
+  if (b.kind === 'reference' && a.kind === 'reference' && b.name === a.name && b.module === a.module) {
     const channelType = channelTypeOf(context, b)
-    if (channelType !== undefined) {
+    if (channelType !== undefined && channelTypeOf(context, a) === channelType) {
+      const [from, to] = [channelArgs(channelType, b), channelArgs(channelType, a)]
       return channelType.channels.flatMap((slot, index) =>
-        compareType(context, b.args[index] as TypeExpr, a.args[index] as TypeExpr, {
+        compareType(context, from[index] as TypeExpr, to[index] as TypeExpr, {
           position: compose(at.position, slot.variance),
           location: `${at.location}/${slot.name}`,
           channel: slot.name,
         }),
       )
     }
+  }
+  if (b.kind === 'reference' && a.kind === 'reference' && b.name === a.name && b.module === a.module && b.args.length === a.args.length) {
     return b.args.flatMap((arg, index) => compareType(context, arg, a.args[index] as TypeExpr, step(at, `arg[${index}]`, 'both')))
   }
   if (b.kind === 'function' && a.kind === 'function') {
@@ -348,7 +382,11 @@ const compareItem = (context: Context, before: ApiItem, after: ApiItem, at: At):
       const next = after as typeof before
       const here: At = { ...at, position: 'both' }
       const heritage = (item: ApiItem): string =>
-        item.kind === 'class' ? heritageKey([...item.extends, ...item.implements]) : item.kind === 'interface' ? heritageKey(item.extends) : ''
+        item.kind === 'class'
+          ? canonicalKey([heritageKey(item.extends), heritageKey(item.implements)])
+          : item.kind === 'interface'
+            ? heritageKey(item.extends)
+            : ''
       const abstract: ReadonlyArray<Change> =
         before.kind === 'class' && next.kind === 'class' && before.abstract !== next.abstract
           ? [change(next.abstract ? 'class-became-abstract' : 'class-became-concrete', here)]
@@ -390,17 +428,36 @@ const compareItems = (
   after: ReadonlyArray<ApiItem>,
   prefix: string,
 ): ReadonlyArray<Change> => {
-  const afterByName = new Map(after.map((item) => [item.name, item] as const))
-  const beforeNames = new Set(before.map((item) => item.name))
-  const at = (name: string): At => ({ position: 'out', location: `${prefix}${name}` })
+  const names = new Set([...before, ...after].map((item) => item.name))
+  return [...names].flatMap((name) =>
+    compareNamed(
+      context,
+      before.filter((item) => item.name === name),
+      after.filter((item) => item.name === name),
+      { position: 'out', location: `${prefix}${name}` },
+    ),
+  )
+}
+
+/**
+ * The exports sharing one name. A name can denote a value and a type at once
+ * (`const X` beside `type X`), so items pair with their own kind first and only
+ * the leftovers pair across kinds.
+ */
+const compareNamed = (context: Context, before: ReadonlyArray<ApiItem>, after: ReadonlyArray<ApiItem>, at: At): ReadonlyArray<Change> => {
+  const kinds = new Set([...before, ...after].map((item) => item.kind))
+  const groups = [...kinds].map((kind) => ({
+    from: before.filter((item) => item.kind === kind),
+    to: after.filter((item) => item.kind === kind),
+  }))
+  const paired = groups.flatMap(({ from, to }) => from.slice(0, to.length).flatMap((item, index) => compareItem(context, item, to[index] as ApiItem, at)))
+  const removed = groups.flatMap(({ from, to }) => from.slice(to.length))
+  const added = groups.flatMap(({ from, to }) => to.slice(from.length))
   return [
-    ...before.flatMap((item) => {
-      const next = afterByName.get(item.name)
-      return next === undefined
-        ? [change('export-removed', at(item.name))]
-        : compareItem(context, item, next, at(item.name))
-    }),
-    ...after.filter((item) => !beforeNames.has(item.name)).map((item) => change('export-added', at(item.name))),
+    ...paired,
+    ...removed.slice(0, added.length).map(() => change('export-kind-changed', at)),
+    ...removed.slice(added.length).map(() => change('export-removed', at)),
+    ...added.slice(removed.length).map(() => change('export-added', at)),
   ]
 }
 
