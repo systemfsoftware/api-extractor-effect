@@ -13,12 +13,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The @systemfsoftware tarballs the lockfile installs from, built by this
+  # repository's flake from the pinned systemfsoftware commit. The tarballs are
+  # architecture-independent, so one build serves every job below.
+  sfs-deps:
+    name: systemfsoftware tarballs from the flake
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - name: Build the tarballs the lockfile names
+        run: cp -rL "$(nix build --no-link --print-out-paths .#sfs-deps)" .sfs-deps
+      - name: The lockfile's recorded integrities match the flake's tarballs
+        run: nix build --no-link .#checks.x86_64-linux.consumer-store
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sfs-deps
+          path: .sfs-deps/
+          retention-days: 1
+
   test:
     name: Product tests
+    needs: sfs-deps
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: sfs-deps
+          path: .sfs-deps
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -26,3 +51,48 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  host-bytes:
+    name: Output bytes on ${{ matrix.arch }}
+    needs: sfs-deps
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: sfs-deps
+          path: .sfs-deps
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Serialise a fixed-seed sample of models and verdicts
+        run: node packages/api-extractor/tests/__fixtures__/host-digest.ts > host-output.bin
+      - run: sha256sum host-output.bin && uname -m
+      - uses: actions/upload-artifact@v7
+        with:
+          name: host-output-${{ matrix.arch }}
+          path: host-output.bin
+
+  host-compare:
+    name: Same bytes on every host
+    needs: host-bytes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: host-output-*
+      - run: sha256sum host-output-*/host-output.bin
+      - name: Compare x86_64 and arm64 outputs byte for byte
+        run: cmp host-output-x86_64/host-output.bin host-output-arm64/host-output.bin

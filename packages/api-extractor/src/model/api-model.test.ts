@@ -1,25 +1,28 @@
+import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { canonicalJson } from '../src/canonical-json.ts'
-import { decodeApiModel, encodeApiModel } from '../src/model/api-model.ts'
-import { sortModel } from '../src/model/normalise.ts'
-import { apiModel } from './__fixtures__/arbitraries.ts'
+import { API_MODEL_SCHEMA_VERSION, ApiModel, decodeApiModel } from './api-model.ts'
+import { sortModel } from './normalise.ts'
+import { serialiseApiModel } from './serialise.ts'
+import { apiModel } from '../../tests/__fixtures__/arbitraries.ts'
 
-describe('ApiModel schema', () => {
-  it('round-trips every model through its JSON bytes', () => {
+// Codec laws: round trip and encode stability over values generated from the schema.
+ruleOfSchemas('ApiModel', ApiModel)
+
+describe('ApiModel wire document', () => {
+  it('decodes its own canonical bytes back to the same model', () => {
     fc.assert(
       fc.property(apiModel, (model) => {
-        const bytes = canonicalJson(encodeApiModel(model))
-        const decoded = decodeApiModel(JSON.parse(bytes))
-        expect(decoded).toEqual(model)
-        expect(canonicalJson(encodeApiModel(decoded))).toBe(bytes)
+        const bytes = serialiseApiModel(model)
+        expect(serialiseApiModel(decodeApiModel(JSON.parse(bytes)))).toBe(bytes)
+        expect(decodeApiModel(JSON.parse(bytes))).toEqual(sortModel(model))
       }),
     )
   })
 
   it('rejects a model of any other schemaVersion', () => {
     fc.assert(
-      fc.property(apiModel, fc.integer().filter((version) => version !== 1), (model, version) => {
+      fc.property(apiModel, fc.integer().filter((version) => version !== API_MODEL_SCHEMA_VERSION), (model, version) => {
         expect(() => decodeApiModel({ ...model, schemaVersion: version })).toThrow()
       }),
     )
@@ -29,7 +32,7 @@ describe('ApiModel schema', () => {
     fc.assert(
       fc.property(apiModel, (model) => {
         const shuffled = { ...model, entryPoints: [...model.entryPoints].reverse().map((entry) => ({ ...entry, items: [...entry.items].reverse() })) }
-        expect(canonicalJson(sortModel(shuffled))).toBe(canonicalJson(sortModel(model)))
+        expect(serialiseApiModel(shuffled)).toBe(serialiseApiModel(model))
       }),
     )
   })

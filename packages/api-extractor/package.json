@@ -21,9 +21,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "^12.0.0",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@systemfsoftware/effect-schema-law": "^5.0.1",
+    "@systemfsoftware/tsconfig": "^2.0.1",
+    "@systemfsoftware/vitest": "^2.0.0",
     "@types/node": "catalog:",
     "fast-check": "catalog:",
     "typescript": "catalog:",

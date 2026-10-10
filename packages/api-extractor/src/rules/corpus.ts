@@ -60,26 +60,8 @@ export const RuleCorpus: Schema.Codec<RuleCorpus> = Schema.Struct({
   rules: Schema.Array(Rule),
 })
 
-const matchKey = (match: RuleMatch): string =>
-  [match.kind, match.position ?? '*', match.channel ?? '*', match.direction ?? '*'].join('|')
-
-/**
- * Decodes a rule corpus and rejects one whose rules are ambiguous: two rules
- * with the same match, or a repeated rule id.
- */
-export const decodeRuleCorpus = (input: unknown): RuleCorpus => {
-  const corpus = Schema.decodeUnknownSync(RuleCorpus)(input)
-  const seen = new Set<string>()
-  const ids = new Set<string>()
-  for (const rule of corpus.rules) {
-    const key = matchKey(rule.match)
-    if (seen.has(key)) throw new Error(`rule corpus ${corpus.corpusVersion}: two rules match ${key}`)
-    if (ids.has(rule.rule_id)) throw new Error(`rule corpus ${corpus.corpusVersion}: duplicate rule id ${rule.rule_id}`)
-    seen.add(key)
-    ids.add(rule.rule_id)
-  }
-  return corpus
-}
+/** Decodes a rule corpus; whether its rules are unambiguous is the verdict decision's to judge. */
+export const decodeRuleCorpus: (input: unknown) => RuleCorpus = Schema.decodeUnknownSync(RuleCorpus)
 
 /** The rule corpus this engine ships. */
 export const defaultCorpus: RuleCorpus = decodeRuleCorpus(corpusV1)

@@ -1,11 +1,15 @@
+import { Result } from 'effect'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { diffModels } from '../src/diff/diff.ts'
-import { type Bump, decodeRuleCorpus, defaultCorpus } from '../src/rules/corpus.ts'
-import { maxBump, verdict } from '../src/verdict.ts'
-import type { ApiItem } from '../src/model/api-model.ts'
-import type { Signature, TypeExpr } from '../src/model/type-expr.ts'
-import { apiModel, items, name } from './__fixtures__/arbitraries.ts'
+import { compareCodeUnits } from './canonical-json.ts'
+import { diffModels } from './diff/diff.ts'
+import { bumpOf, maxBump } from './findings.ts'
+import { judgeSurfaces } from './judge-surfaces.workflow.ts'
+import { type RuleCorpus, defaultCorpus } from './rules/corpus.ts'
+import { CompareSurfaces, type Verdict } from './verdict.schema.ts'
+import type { ApiItem, ApiModel } from './model/api-model.ts'
+import type { Signature, TypeExpr } from './model/type-expr.ts'
+import { apiModel, items, name } from '../tests/__fixtures__/arbitraries.ts'
 import {
   alias,
   effect,
@@ -20,7 +24,7 @@ import {
   union,
   voidType,
   withExport,
-} from './__fixtures__/surfaces.ts'
+} from '../tests/__fixtures__/surfaces.ts'
 
 /** Distinct error tags; the `Tag` prefix keeps them apart from generated names. */
 const tags = (min: number) => fc.uniqueArray(name.map((tag) => ref(`Tag${tag}`)), { minLength: min, maxLength: 4, selector: (tag) => (tag as { name: string }).name })
@@ -34,7 +38,9 @@ const grown = fc
     return { smaller: union(all.slice(0, keep)), larger: union(all) }
   })
 
-const BUMP_ORDER = ['none', 'patch', 'minor', 'major'] as const
+/** The verdict decision on two surfaces; these properties are about judged corpora, so a refusal fails the test. */
+const judged = (before: ApiModel, after: ApiModel, corpus: RuleCorpus = defaultCorpus): Verdict =>
+  Result.getOrThrow(judgeSurfaces(new CompareSurfaces({ before, after, corpus })))
 
 describe('verdict on Effect channels', () => {
   it('AE1: a widened error channel in a return type is major E_WIDENED at the return type', () => {
@@ -42,10 +48,23 @@ describe('verdict on Effect channels', () => {
       fc.property(apiModel, success, grown, (surrounding, value, { smaller, larger }) => {
         const before = withExport(surrounding, functionItem(signature([], effect(value, smaller))))
         const after = withExport(surrounding, functionItem(signature([], effect(value, larger))))
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect(result.bump).toBe('major')
         expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
           ['E_WIDENED', [`.:${TARGET}/signature[0]/returns/E`]],
+        ])
+      }),
+    )
+  })
+
+  it('one rule firing at several exports is one finding listing every location once, in code-unit order', () => {
+    fc.assert(
+      fc.property(apiModel, success, grown, fc.uniqueArray(name, { minLength: 2, maxLength: 4 }), (surrounding, value, { smaller, larger }, names) => {
+        const exportsOf = (failure: TypeExpr) => (model: ApiModel) =>
+          names.reduce((acc, exported) => withExport(acc, { ...functionItem(signature([], effect(value, failure))), name: `fn${exported}` }), model)
+        const result = judged(exportsOf(smaller)(surrounding), exportsOf(larger)(surrounding))
+        expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
+          ['E_WIDENED', names.map((exported) => `.:fn${exported}/signature[0]/returns/E`).sort(compareCodeUnits)],
         ])
       }),
     )
@@ -56,7 +75,7 @@ describe('verdict on Effect channels', () => {
       fc.property(apiModel, success, grown, (surrounding, value, { smaller, larger }) => {
         const before = withExport(surrounding, functionItem(signature([], effect(value, larger))))
         const after = withExport(surrounding, functionItem(signature([], effect(value, smaller))))
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect(result.bump).toBe('major')
         expect(result.findings.map((finding) => finding.reason_code)).toEqual(['E_TAG_REMOVED'])
       }),
@@ -68,7 +87,7 @@ describe('verdict on Effect channels', () => {
       fc.property(apiModel, success, grown, (surrounding, value, { smaller, larger }) => {
         const before = withExport(surrounding, functionItem(signature([parameter('self', effect(value, smaller))], voidType)))
         const after = withExport(surrounding, functionItem(signature([parameter('self', effect(value, larger))], voidType)))
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect(result.bump).toBe('minor')
         expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
           ['E_WIDENED_IN_INPUT', [`.:${TARGET}/signature[0]/parameter[0]/E`]],
@@ -101,7 +120,7 @@ describe('verdict on Effect channels', () => {
           channel === 'A' ? effect(slot, union(failure)) : channel === 'E' ? effect(value, slot) : effect(value, union(failure), slot)
         const surface = (slot: TypeExpr) =>
           functionItem(position === 'out' ? signature([], build(slot)) : signature([parameter('self', build(slot))], voidType))
-        const result = verdict(withExport(surrounding, surface(from)), withExport(surrounding, surface(to)))
+        const result = judged(withExport(surrounding, surface(from)), withExport(surrounding, surface(to)))
         expect(result.bump).toBe(bump)
         expect(result.findings.map((finding) => finding.reason_code)).toEqual([reason])
         expect(result.findings[0]?.locations[0]?.endsWith(`/${channel}`)).toBe(true)
@@ -115,7 +134,7 @@ describe('verdict on Effect channels', () => {
       fc.property(apiModel, success, grown, (surrounding, value, { smaller, larger }) => {
         const surface = (slot: TypeExpr) =>
           functionItem(signature([parameter('handler', fn(signature([parameter('event', effect(value, slot))], voidType)))], voidType))
-        const result = verdict(withExport(surrounding, surface(smaller)), withExport(surrounding, surface(larger)))
+        const result = judged(withExport(surrounding, surface(smaller)), withExport(surrounding, surface(larger)))
         expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
           ['E_WIDENED', [`.:${TARGET}/signature[0]/parameter[0]/parameter[0]/E`]],
         ])
@@ -129,7 +148,7 @@ describe('verdict on Effect channels', () => {
         const item = functionItem(signature([], effect(value, ref('Err'))))
         const before = withExport(surrounding, item, [alias('Err', smaller)])
         const after = withExport(surrounding, item, [alias('Err', larger)])
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
           ['E_WIDENED', [`.:${TARGET}/signature[0]/returns/E`]],
         ])
@@ -141,8 +160,8 @@ describe('verdict on Effect channels', () => {
     fc.assert(
       fc.property(apiModel, tags(1), grown, (surrounding, failure, { smaller, larger }) => {
         const layer = (services: TypeExpr) => functionItem(signature([], ref('Layer', services, union(failure), never)))
-        const removed = verdict(withExport(surrounding, layer(larger)), withExport(surrounding, layer(smaller)))
-        const added = verdict(withExport(surrounding, layer(smaller)), withExport(surrounding, layer(larger)))
+        const removed = judged(withExport(surrounding, layer(larger)), withExport(surrounding, layer(smaller)))
+        const added = judged(withExport(surrounding, layer(smaller)), withExport(surrounding, layer(larger)))
         expect([removed.bump, removed.findings.map((finding) => finding.reason_code)]).toEqual(['major', ['LAYER_SERVICE_REMOVED']])
         expect([added.bump, added.findings.map((finding) => finding.reason_code)]).toEqual(['minor', ['LAYER_SERVICE_ADDED']])
       }),
@@ -172,7 +191,7 @@ describe('verdict on dual APIs', () => {
         const { dataLast, dataFirst } = dual(value, union(failure))
         const before = withExport(surrounding, constant(dataLast, dataFirst))
         const after = withExport(surrounding, constant(dropDataLast ? dataFirst : dataLast))
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect(result.bump).toBe('major')
         expect(result.findings.map((finding) => [finding.reason_code, finding.locations])).toEqual([
           ['DUAL_FORM_REMOVED', [`.:${TARGET}/call/signature[${dropDataLast ? 0 : 1}]`]],
@@ -185,7 +204,7 @@ describe('verdict on dual APIs', () => {
     fc.assert(
       fc.property(apiModel, success, tags(1), (surrounding, value, failure) => {
         const { dataLast, dataFirst } = dual(value, union(failure))
-        const result = verdict(withExport(surrounding, constant(dataFirst)), withExport(surrounding, constant(dataLast, dataFirst)))
+        const result = judged(withExport(surrounding, constant(dataFirst)), withExport(surrounding, constant(dataLast, dataFirst)))
         expect([result.bump, result.findings.map((finding) => finding.reason_code)]).toEqual(['minor', ['DUAL_FORM_ADDED']])
       }),
     )
@@ -200,8 +219,8 @@ describe('verdict on exports and parameters', () => {
       fc.property(apiModel, someItem, (surrounding, item) => {
         const base = rooted(surrounding)
         const withTarget = withExport(base, item)
-        expect(verdict(withTarget, base).findings.map((finding) => [finding.reason_code, finding.bump])).toEqual([['EXPORT_REMOVED', 'major']])
-        expect(verdict(base, withTarget).findings.map((finding) => [finding.reason_code, finding.bump])).toEqual([['EXPORT_ADDED', 'minor']])
+        expect(judged(withTarget, base).findings.map((finding) => [finding.reason_code, finding.bump])).toEqual([['EXPORT_REMOVED', 'major']])
+        expect(judged(base, withTarget).findings.map((finding) => [finding.reason_code, finding.bump])).toEqual([['EXPORT_ADDED', 'minor']])
       }),
     )
   })
@@ -211,7 +230,7 @@ describe('verdict on exports and parameters', () => {
       fc.property(apiModel, success, fc.boolean(), (surrounding, value, optional) => {
         const before = withExport(surrounding, functionItem(signature([], value)))
         const after = withExport(surrounding, functionItem(signature([parameter('extra', value, optional)], value)))
-        const result = verdict(before, after)
+        const result = judged(before, after)
         expect([result.bump, result.findings.map((finding) => finding.reason_code)]).toEqual(
           optional ? ['minor', ['OPTIONAL_PARAMETER_ADDED']] : ['major', ['REQUIRED_PARAMETER_ADDED']],
         )
@@ -225,7 +244,7 @@ describe('verdict invariants', () => {
     fc.assert(
       fc.property(apiModel, (model) => {
         expect(diffModels(model, model, defaultCorpus.channelTypes)).toEqual([])
-        expect(verdict(model, model).bump).toBe('none')
+        expect(judged(model, model).bump).toBe('none')
       }),
     )
   })
@@ -233,10 +252,10 @@ describe('verdict invariants', () => {
   it('the verdict is the highest finding bump, and an extra change never lowers it', () => {
     fc.assert(
       fc.property(apiModel.map(rooted), apiModel.map(rooted), success, (before, after, value) => {
-        const result = verdict(before, after)
-        expect(result.bump).toBe(result.findings.reduce<Bump>((bump, finding) => maxBump(bump, finding.bump), 'none'))
-        const more = verdict(before, withExport(after, functionItem(signature([], value))))
-        expect(BUMP_ORDER.indexOf(more.bump)).toBeGreaterThanOrEqual(BUMP_ORDER.indexOf(result.bump))
+        const result = judged(before, after)
+        expect(result.bump).toBe(bumpOf(result.findings))
+        const more = judged(before, withExport(after, functionItem(signature([], value))))
+        expect(maxBump(more.bump, result.bump)).toBe(more.bump)
       }),
     )
   })
@@ -247,14 +266,22 @@ describe('verdict invariants', () => {
       fc.property(apiModel, success, grown, (surrounding, value, { smaller, larger }) => {
         const before = withExport(surrounding, functionItem(signature([], effect(value, smaller))))
         const after = withExport(surrounding, functionItem(signature([], effect(value, larger))))
-        const result = verdict(before, after, partial)
+        const result = judged(before, after, partial)
         expect([result.bump, result.findings.map((finding) => finding.reason_code)]).toEqual(['major', ['UNCLASSIFIED_CHANGE']])
       }),
     )
   })
 
-  it('rejects a corpus in which two rules match the same change', () => {
-    const [first] = defaultCorpus.rules
-    expect(() => decodeRuleCorpus({ ...defaultCorpus, rules: [...defaultCorpus.rules, { ...first, rule_id: 'copy' }] })).toThrow(/two rules match/)
+  it('refuses a corpus in which two rules match the same change, naming the match', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: defaultCorpus.rules.length - 1 }), apiModel, (index, model) => {
+        const rule = defaultCorpus.rules[index]!
+        const corpus = { ...defaultCorpus, rules: [...defaultCorpus.rules, { ...rule, rule_id: `${rule.rule_id}-copy` }] }
+        const refusal = Result.flip(judgeSurfaces(new CompareSurfaces({ before: model, after: model, corpus })))
+        expect(Result.getOrThrow(refusal).ambiguities).toEqual([
+          `two rules match ${[rule.match.kind, rule.match.position ?? '*', rule.match.channel ?? '*', rule.match.direction ?? '*'].join('|')}`,
+        ])
+      }),
+    )
   })
 })
