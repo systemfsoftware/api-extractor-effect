@@ -30,7 +30,6 @@
     "@systemfsoftware/tsconfig": "^2.0.1",
     "@systemfsoftware/vitest": "^2.0.0",
     "@types/node": "catalog:",
-    "fast-check": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -40,3 +40,8 @@ export const rooted = (model: ApiModel): ApiModel => {
   const entries = model.entryPoints.map((entry) => ({ ...entry, items: entry.items.filter((item) => item.name !== TARGET) }))
   return { ...model, entryPoints: entries.some((entry) => entry.path === '.') ? entries : [...entries, { path: '.', items: [], locals: [] }] }
 }
+
+export const rootedWith = (model: ApiModel, items: ReadonlyArray<ApiItem>, locals: ReadonlyArray<TypeAliasItem> = []): ApiModel => ({
+  ...model,
+  entryPoints: [...model.entryPoints.filter((entry) => entry.path !== '.'), { path: '.', items, locals }],
+})

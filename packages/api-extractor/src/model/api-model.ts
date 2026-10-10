@@ -2,7 +2,7 @@ import { Schema } from 'effect'
 import { Member, Signature, TypeExpr, TypeParameter } from './type-expr.ts'
 
 /** The model's wire version. Any change to the model schema bumps it. */
-export const API_MODEL_SCHEMA_VERSION = 1
+export const API_MODEL_SCHEMA_VERSION = 2
 
 export interface FunctionItem {
   readonly kind: 'function'
@@ -91,6 +91,12 @@ export interface ApiModel {
   readonly entryPoints: ReadonlyArray<EntryPoint>
 }
 
+const uniqueBy = <A>(what: string, key: (value: A) => string) =>
+  Schema.makeFilter((values: ReadonlyArray<A>) => new Set(values.map(key)).size === values.length, {
+    expected: `${what} unique by key`,
+    arbitraryConstraint: { uniqueBy: key },
+  })
+
 const typeParameters = Schema.Array(TypeParameter)
 
 export const TypeAliasItem: Schema.Codec<TypeAliasItem> = Schema.Struct({
@@ -127,7 +133,9 @@ export const ApiItem: Schema.Codec<ApiItem> = Schema.suspend((): Schema.Codec<Ap
     kind: Schema.Literal('enum'),
     name: Schema.String,
     const: Schema.Boolean,
-    members: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.optionalKey(Schema.String) })),
+    members: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.optionalKey(Schema.String) })).check(
+      uniqueBy('enum members', (member: { readonly name: string }) => member.name),
+    ),
   }),
   Schema.Struct({ kind: Schema.Literal('namespace'), name: Schema.String, items: Schema.Array(apiItem) }),
 ])).annotate({ recursionBudget: { maxDepth: 8, depthSize: 'small' } })
@@ -138,7 +146,7 @@ export const ApiModel: Schema.Codec<ApiModel> = Schema.Struct({
   package: Schema.Struct({ name: Schema.String, version: Schema.String }),
   entryPoints: Schema.Array(
     Schema.Struct({ path: Schema.String, items: Schema.Array(ApiItem), locals: Schema.Array(TypeAliasItem) }),
-  ),
+  ).check(uniqueBy('entry points', (entry: { readonly path: string }) => entry.path)),
 })
 
 /** Decodes an unknown value (e.g. parsed JSON) into a model; rejects any other `schemaVersion`. */
