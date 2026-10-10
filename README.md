@@ -16,8 +16,10 @@ The design and its requirements live in
 | Front-ends (isolated-declarations fast path, compiler fallback) | next |
 | `.api.md` report with a differential test against `@microsoft/api-extractor` 7.59.1 | planned |
 | Benchmark, CLI, changeset-bump check | planned |
-| systemfsoftware packages from the flake (`.sfs-deps`) | in this repository |
-| Release, mutation, shared lint/build jobs, tsdown and vitest presets | waits on shared family tooling |
+| systemfsoftware and stryker-js-effect packages from the flake (`.sfs-deps`) | in this repository |
+| Lint, typecheck, build and test on systemfsoftware's reusable checks; tsdown, vitest and lint presets | in this repository |
+| Releases: changesets and GitHub Releases through pnpm-release-management | in this repository |
+| Mutation testing on `main` | waits on systemfsoftware's reusable mutation workflow (#710) |
 
 ## The verdict
 
@@ -49,13 +51,15 @@ major `E_TAG_REMOVED`, because a caller's `catchTag` for that tag stops compilin
 ## Development
 
 The `@systemfsoftware/*` packages install from tarballs that this repository's flake
-builds from a pinned systemfsoftware commit, never from a registry:
+builds from pinned systemfsoftware and stryker-js-effect commits, never from a registry.
+The dev shell copies them into `.sfs-deps/`; `bootstrap` installs inside the
+pnpm-release-management sandbox:
 
 ```sh
-cp -rL "$(nix build --no-link --print-out-paths .#sfs-deps)" .sfs-deps
-pnpm install
-pnpm test
-pnpm typecheck
+nix develop --command pnpm run bootstrap
+nix develop --command pnpm test
+nix develop --command pnpm lint
+nix develop --command pnpm typecheck
 ```
 
 ## Provenance

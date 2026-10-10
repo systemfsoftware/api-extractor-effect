@@ -18,12 +18,18 @@ verdict. Requirements and decisions: `docs/plans/2026-10-10-0846-feat-effect-api
   naming the repository, path and commit.
 - Shared tooling (tsconfig bases, lint presets, release, mutation) comes from
   systemfsoftware family flakes and reusable workflows. Never copy it in.
+- The family lint preset is never overridden locally: no rule set to `off`, ignore
+  pattern or disable comment (gate: review of `oxlint.config.ts` and source diffs). A rule
+  that forbids correct code is reported upstream as a preset defect.
 - Mutation testing runs on `main` only.
 
 ## Commands
 
+Run inside the dev shell (`nix develop --command …`), which copies `.sfs-deps/`:
+
 ```sh
-pnpm install
-pnpm test        # property tests, including the cross-locale process test
+pnpm run bootstrap   # sandboxed pnpm install --frozen-lockfile
+pnpm test            # unit, property and the cross-locale e2e feature
+pnpm lint
 pnpm typecheck
 ```
