@@ -1,31 +1,18 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
-import { Array as Arr, Effect, Layer, Option, Result, Schema } from 'effect'
-import { effect, functionItem, ref, rooted, signature, union, withExport } from './__fixtures__/surfaces.ts'
+import { Array as Arr, Effect, Layer, Option, Result } from 'effect'
+import { decodeVerdict, effect, empty, functionItem, ref, signature, union, withEntryPoints, withExport } from './__fixtures__/surfaces.ts'
 
 type Model = ApiModel.ApiModel
 type Item = ApiModel.ApiItem
 
 const Feature = makeFeature({ it })
 
-const decoded = (document: string) => Schema.decodeResult(Schema.fromJsonString(Verdict.Verdict))(document)
-
-const empty: Model = rooted({
-  schemaVersion: ApiModel.SCHEMA_VERSION,
-  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: [],
-})
 const before = withExport(empty, functionItem(signature([], effect(ref('User'), ref('NotFound')))))
 const after = withExport(empty, functionItem(signature([], effect(ref('User'), union([ref('NotFound'), ref('Timeout')])))))
 
 const entry: ApiModel.EntryPoint = { path: '.', items: [], locals: [] }
-const entryRepeated: Model = {
-  schemaVersion: empty.schemaVersion,
-  producer: empty.producer,
-  package: empty.package,
-  entryPoints: [entry, entry],
-}
+const entryRepeated: Model = withEntryPoints(empty, [entry, entry])
 const enumOf = (...names: ReadonlyArray<string>): Item => ({ kind: 'enum', name: 'Mode', const: false, members: names.map((name) => ({ name })) })
 const enumRepeated = withExport(empty, enumOf('On', 'On'))
 const enumDistinct = withExport(empty, enumOf('On', 'Off'))
@@ -37,12 +24,8 @@ const repeatedKeys: ReadonlyArray<{ readonly label: string; readonly repeated: M
 
 const first: Verdict.Rule = Option.getOrThrow(Arr.get(Verdict.defaultCorpus.rules, 0))
 const ambiguous: Verdict.RuleCorpus = {
-  corpusVersion: Verdict.defaultCorpus.corpusVersion,
-  channelTypes: Verdict.defaultCorpus.channelTypes,
-  rules: [
-    ...Verdict.defaultCorpus.rules,
-    { rule_id: `${first.rule_id}-copy`, match: first.match, bump: first.bump, reason_code: first.reason_code, next_action: first.next_action },
-  ],
+  ...Verdict.defaultCorpus,
+  rules: [...Verdict.defaultCorpus.rules, { ...first, rule_id: `${first.rule_id}-copy` }],
 }
 const sharedMatch = [first.match.kind, first.match.position ?? '*', first.match.channel ?? '*', first.match.direction ?? '*'].join('|')
 
@@ -57,7 +40,7 @@ Feature('The verdict cell judges two surfaces and refuses the ones it cannot')
         Then('the document is canonical JSON naming the widened error')((scope, expect) =>
           expect({
             terminated: scope.document.endsWith('}\n'),
-            body: Result.getOrThrow(decoded(scope.document)),
+            body: Result.getOrThrow(decodeVerdict(scope.document)),
           }).toMatchObject({
             terminated: true,
             body: {
@@ -80,7 +63,7 @@ Feature('The verdict cell judges two surfaces and refuses the ones it cannot')
             Effect.flatMap(Effect.flip(Verdict.cell.run({ before: scope.row.repeated, after })), (repeated) =>
               Effect.map(Verdict.cell.run({ before: scope.row.distinct, after }), (document) => ({
                 repeated,
-                distinct: Result.getOrThrow(decoded(document)),
+                distinct: Result.getOrThrow(decodeVerdict(document)),
               })),
             ),
           ),

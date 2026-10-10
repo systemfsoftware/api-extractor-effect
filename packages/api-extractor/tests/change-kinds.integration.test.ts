@@ -1,7 +1,22 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
-import { Effect, Layer, Result, Schema } from 'effect'
-import { effect, fn, functionItem, never, parameter, ref, rooted, signature, TARGET, union, voidType, withExport } from './__fixtures__/surfaces.ts'
+import { Effect, Layer, Result } from 'effect'
+import {
+  decodeVerdict,
+  effect,
+  empty,
+  fn,
+  functionItem,
+  never,
+  parameter,
+  ref,
+  signature,
+  TARGET,
+  union,
+  voidType,
+  withEntryPoints,
+  withExport,
+} from './__fixtures__/surfaces.ts'
 
 type Model = ApiModel.ApiModel
 type Item = ApiModel.ApiItem
@@ -9,16 +24,9 @@ type Member = ApiModel.Member
 type Parameter = ApiModel.Parameter
 type Signature = ApiModel.Signature
 type TypeExpr = ApiModel.TypeExpr
-type Bump = 'major' | 'minor'
+type Bump = Extract<Verdict.Bump, 'major' | 'minor'>
 
 const Feature = makeFeature({ it })
-
-const empty: Model = rooted({
-  schemaVersion: ApiModel.SCHEMA_VERSION,
-  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: [],
-})
 
 const classItem = (overrides: Partial<ApiModel.ClassItem> = {}): Item => ({
   kind: 'class',
@@ -71,12 +79,7 @@ const dualForms: readonly [Signature, Signature] = (() => {
 })()
 const dual = (...forms: ReadonlyArray<Signature>): Item => variable(true, object(...forms.map((sig): Member => ({ kind: 'call', signature: sig }))))
 const servicesLayer = (services: TypeExpr) => returning(ref('Layer', services, never, never))
-const withEntryPoint: Model = {
-  schemaVersion: empty.schemaVersion,
-  producer: empty.producer,
-  package: empty.package,
-  entryPoints: [...empty.entryPoints, { path: './extra', items: [], locals: [] }],
-}
+const withEntryPoint: Model = withEntryPoints(empty, [...empty.entryPoints, { path: './extra', items: [], locals: [] }])
 
 type Row = readonly [string, Item | Model, Item | Model, Bump, string]
 const rows: ReadonlyArray<Row> = [
@@ -163,9 +166,7 @@ Feature('The verdict judges every change kind the diff emits')
         Gherkin.Do.pipe(
           Given('the two surfaces of the fixture package')('row', () => Effect.sync(() => row)),
           When('the verdict cell judges them against the shipped corpus')('verdict', (scope) =>
-            Effect.map(Verdict.cell.run({ before: scope.row.before, after: scope.row.after }), (document) =>
-              Schema.decodeResult(Schema.fromJsonString(Verdict.Verdict))(document),
-            ),
+            Effect.map(Verdict.cell.run({ before: scope.row.before, after: scope.row.after }), decodeVerdict),
           ),
           Then('the verdict reports the expected bump and reason')((scope, expect) =>
             expect(Result.map(scope.verdict, (verdict) => [verdict.bump, verdict.findings.map((finding) => finding.reason_code)])).toEqual(

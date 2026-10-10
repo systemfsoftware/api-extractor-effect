@@ -1,19 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel } from '@systemfsoftware/api-extractor'
 import { Effect, Layer, type Schema } from 'effect'
-import { functionItem, ref, rooted, rootedWith, signature } from './__fixtures__/surfaces.ts'
+import { empty, functionItem, ref, rootedWith, signature } from './__fixtures__/surfaces.ts'
 
 type Model = ApiModel.ApiModel
 type Item = ApiModel.ApiItem
 
 const Feature = makeFeature({ it })
-
-const empty: Model = rooted({
-  schemaVersion: ApiModel.SCHEMA_VERSION,
-  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: [],
-})
 
 const value: Item = { kind: 'variable', name: 'Shared', constant: true, type: ref('A') }
 const type: Item = { kind: 'typeAlias', name: 'Shared', typeParameters: [], type: ref('B') }

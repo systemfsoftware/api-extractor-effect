@@ -31,10 +31,13 @@ export const CorpusAmbiguities = {
   ambiguities: Schema.Array(Schema.String),
 }
 
+const ambiguityMessage = ({ corpusVersion, ambiguities }: { readonly corpusVersion: string; readonly ambiguities: ReadonlyArray<string> }): string =>
+  `rule corpus ${corpusVersion} cannot pick one rule per change: ${ambiguities.join('; ')}`
+
 /** A corpus whose rules do not pick one rule per change: two rules share a match, or a rule id repeats. */
 export class AmbiguousRuleCorpus extends Schema.TaggedError<AmbiguousRuleCorpus>()('AmbiguousRuleCorpus', CorpusAmbiguities) {
   override get message(): string {
-    return `rule corpus ${this.corpusVersion} cannot pick one rule per change: ${this.ambiguities.join('; ')}`
+    return ambiguityMessage(this)
   }
 }
 
@@ -50,7 +53,7 @@ export class SurfaceRejected extends Schema.TaggedError<SurfaceRejected>()('Surf
 /** A corpus whose rules cannot pick one rule per change, refused by the verdict cell. */
 export class RuleCorpusRejected extends Schema.TaggedError<RuleCorpusRejected>()('RuleCorpusRejected', CorpusAmbiguities) {
   override get message(): string {
-    return `rule corpus ${this.corpusVersion} cannot pick one rule per change: ${this.ambiguities.join('; ')}`
+    return ambiguityMessage(this)
   }
 }
 

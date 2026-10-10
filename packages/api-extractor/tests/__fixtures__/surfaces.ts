@@ -1,5 +1,5 @@
-import type { ApiModel } from '@systemfsoftware/api-extractor'
-import { Function } from 'effect'
+import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
+import { Function, Schema } from 'effect'
 
 type TypeExpr = ApiModel.TypeExpr
 type Parameter = ApiModel.Parameter
@@ -45,12 +45,15 @@ export const TARGET = 'target'
 
 export const functionItem = (...signatures: ReadonlyArray<Signature>): ApiItem => ({ kind: 'function', name: TARGET, signatures })
 
-const rebuilt = (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model => ({
+export const withEntryPoints: {
+  (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model
+  (entryPoints: ReadonlyArray<EntryPoint>): (model: Model) => Model
+} = Function.dual(2, (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model => ({
   schemaVersion: model.schemaVersion,
   producer: model.producer,
   package: model.package,
   entryPoints,
-})
+}))
 
 /** The model with `item` exported from `.` (and `locals` added there), keeping everything else. */
 export const withExport: {
@@ -66,7 +69,7 @@ export const withExport: {
       items: [...(root?.items ?? []).filter((existing) => existing.name !== item.name), item],
       locals: [...(root?.locals ?? []).filter((alias) => !locals.some((local) => local.name === alias.name)), ...locals],
     }
-    return rebuilt(model, [...others, entry])
+    return withEntryPoints(model, [...others, entry])
   },
 )
 
@@ -79,8 +82,17 @@ export const rooted = (model: Model): Model => {
   const entries = model.entryPoints.map(
     (entry): EntryPoint => ({ path: entry.path, items: entry.items.filter((item) => item.name !== TARGET), locals: entry.locals }),
   )
-  return rebuilt(model, entries.some((entry) => entry.path === '.') ? entries : [...entries, { path: '.', items: [], locals: [] }])
+  return withEntryPoints(model, entries.some((entry) => entry.path === '.') ? entries : [...entries, { path: '.', items: [], locals: [] }])
 }
+
+export const empty: Model = rooted({
+  schemaVersion: ApiModel.SCHEMA_VERSION,
+  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
+  package: { name: 'fixture', version: '1.0.0' },
+  entryPoints: [],
+})
+
+export const decodeVerdict = (document: string) => Schema.decodeResult(Schema.fromJsonString(Verdict.Verdict))(document)
 
 export const rootedWith: {
   (model: Model, items: ReadonlyArray<ApiItem>, locals?: ReadonlyArray<TypeAliasItem>): Model
@@ -88,5 +100,5 @@ export const rootedWith: {
 } = Function.dual(
   (args) => args.length >= 2,
   (model: Model, items: ReadonlyArray<ApiItem>, locals: ReadonlyArray<TypeAliasItem> = []): Model =>
-    rebuilt(model, [...model.entryPoints.filter((entry) => entry.path !== '.'), { path: '.', items, locals }]),
+    withEntryPoints(model, [...model.entryPoints.filter((entry) => entry.path !== '.'), { path: '.', items, locals }]),
 )

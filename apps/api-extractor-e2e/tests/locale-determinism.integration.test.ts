@@ -90,8 +90,10 @@ Feature('Locale-independent API model bytes')
             const runs = yield* Effect.forEach(scope.sample, (models) => {
               const input = JSON.stringify(models.map(ApiModel.encode))
               const expected = outputsOf(models)
-              return Effect.forEach(environments, (environment) =>
-                Effect.map(runProbe(environment, input, probePath), (result) => ({ environment, expected, result })),
+              return Effect.forEach(
+                environments,
+                (environment) => Effect.map(runProbe(environment, input, probePath), (result) => ({ environment, expected, result })),
+                { concurrency: ENVIRONMENT_COUNT },
               )
             })
             return runs.flat()

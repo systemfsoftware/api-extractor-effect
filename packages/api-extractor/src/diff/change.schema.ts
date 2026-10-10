@@ -178,25 +178,26 @@ const expandAlias = (alias: TypeAliasItem, type: Reference, args: ReadonlyArray<
   return expandType(alias.type, { aliases: scope.aliases, bindings, expanding })
 }
 
+type Expansion = { readonly scope: Scope; readonly expanding: ReadonlySet<string> }
+
 const bindParameter = (
   bound: ReadonlyMap<string, TypeExpr>,
   parameter: TypeParameter,
   arg: TypeExpr | undefined,
-  { scope, expanding }: { readonly scope: Scope; readonly expanding: ReadonlySet<string> },
-): ReadonlyMap<string, TypeExpr> =>
-  new Map([...bound, [parameter.name, argumentOrDefault(bound, parameter, arg, { scope, expanding })]])
+  expansion: Expansion,
+): ReadonlyMap<string, TypeExpr> => new Map([...bound, [parameter.name, argumentOrDefault(bound, parameter, arg, expansion)]])
 
 const argumentOrDefault = (
   bound: ReadonlyMap<string, TypeExpr>,
   parameter: TypeParameter,
   arg: TypeExpr | undefined,
-  { scope, expanding }: { readonly scope: Scope; readonly expanding: ReadonlySet<string> },
-): TypeExpr => arg ?? defaultArgument(bound, parameter, { scope, expanding })
+  expansion: Expansion,
+): TypeExpr => arg ?? defaultArgument(bound, parameter, expansion)
 
 const defaultArgument = (
   bound: ReadonlyMap<string, TypeExpr>,
   parameter: TypeParameter,
-  { scope, expanding }: { readonly scope: Scope; readonly expanding: ReadonlySet<string> },
+  { scope, expanding }: Expansion,
 ): TypeExpr => {
   const fallback = parameter.default
   if (fallback === undefined) return unknownKeyword
@@ -510,13 +511,9 @@ const hasDataLastPartner = (signatures: ReadonlyArray<Signature>, signature: Sig
 const hasDataFirstPartner = (signatures: ReadonlyArray<Signature>, signature: Signature): boolean =>
   signatures.some((other) => dataLastPartner(other, signature))
 
-const distinct = (left: Signature, right: Signature): boolean => left !== right
+const partnership = (other: Signature, signature: Signature): boolean => other !== signature && partners(other, signature)
 
-const partnership = (other: Signature, signature: Signature): boolean =>
-  distinct(other, signature) && partners(other, signature)
-
-const distinctDataLast = (other: Signature, signature: Signature): boolean =>
-  distinct(other, signature) && isDataLast(other)
+const distinctDataLast = (other: Signature, signature: Signature): boolean => other !== signature && isDataLast(other)
 
 const dataLastPartner = (other: Signature, signature: Signature): boolean =>
   distinctDataLast(other, signature) && partners(signature, other)
@@ -575,17 +572,13 @@ const unmatchedSignatures = (
 
 const isDualForm = (form: Form): boolean => form !== 'plain'
 
-const dualRemoved = (form: Form, otherForms: ReadonlyArray<Form>): boolean =>
-  isDualForm(form) && !otherForms.includes(form)
-
-const dualAdded = (form: Form, otherForms: ReadonlyArray<Form>): boolean =>
-  isDualForm(form) && !otherForms.includes(form)
+const dualGone = (form: Form, otherForms: ReadonlyArray<Form>): boolean => isDualForm(form) && !otherForms.includes(form)
 
 const removedSignatureKind = (form: Form, otherForms: ReadonlyArray<Form>): ChangeKind =>
-  dualRemoved(form, otherForms) ? 'dual-form-removed' : 'overload-removed'
+  dualGone(form, otherForms) ? 'dual-form-removed' : 'overload-removed'
 
 const addedSignatureKind = (form: Form, otherForms: ReadonlyArray<Form>): ChangeKind =>
-  dualAdded(form, otherForms) ? 'dual-form-added' : 'overload-added'
+  dualGone(form, otherForms) ? 'dual-form-added' : 'overload-added'
 
 const formChanges = (
   form: Form,
