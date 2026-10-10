@@ -6,7 +6,7 @@ and gives a semver verdict that understands Effect's `A`/`E`/`R` channels and du
 APIs. Every output is byte-identical across locales, time zones and hosts.
 
 The design and its requirements live in
-[`docs/plans/2026-10-10-1111-feat-effect-api-extractor-plan.md`](docs/plans/2026-10-10-1111-feat-effect-api-extractor-plan.md).
+[`docs/plans/2026-10-10-1131-feat-effect-api-extractor-plan.md`](docs/plans/2026-10-10-1131-feat-effect-api-extractor-plan.md).
 
 ## Status
 

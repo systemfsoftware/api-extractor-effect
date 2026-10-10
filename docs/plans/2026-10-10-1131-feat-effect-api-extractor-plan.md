@@ -5,7 +5,7 @@ date: 2026-10-10
 topic: effect-api-extractor
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
-supersedes: docs/plans/2026-10-10-1007-feat-effect-api-extractor-plan.md
+supersedes: docs/plans/2026-10-10-1111-feat-effect-api-extractor-plan.md
 execution: code
 ---
 
@@ -216,11 +216,11 @@ Each requirement names the Done item it serves.
 
   `sfs-deps` links the systemfsoftware members the lockfile names and the stryker release tarballs. `systemfsoftware.lib.mkConsumerStore` lays only systemfsoftware members into `.sfs-deps`, so its store build would fail on the stryker `file:` entries. `checks.consumer-store` therefore becomes `pnpm-release-management.lib.mkPnpmConsumerStore` with `files.".sfs-deps"` set to `sfs-deps`, which keeps the integrity check over both producers. Overrides stay `file:.sfs-deps/...`. They add the `"@systemfsoftware/stryker-js-vm-runner@npm:@systemfsoftware/stryker-js-vitest-runner@^9.0.1"` alias entry, pointing at the runner tarball. Governs R3.
 - KTD16. **pnpm is pinned to the flake's `pnpm_12`.** `packageManager` moves from `pnpm@12.10.1` to `pnpm@12.9.0`, the `pnpm_12` of the followed nixpkgs. `mkPnpmWorkspacePackages` and the sandbox both refuse a mismatch. The lockfile is regenerated with 12.9.0. Governs R3.
-- KTD17. **Turbo is a root devDependency, `turbo: 2.10.12` in the catalog** (root ruling 2026-10-10). The root `turbo.json` defines four tasks:
+- KTD17. **Turbo is a root devDependency, `turbo: 2.10.12` in the catalog** (root ruling 2026-10-10). The root `turbo.json` defines five tasks:
   - `build`: depends on `^build`, outputs `dist/**`.
-  - `typecheck`: depends on `^build`.
-  - `lint`.
-  - `test`: its inputs include `vitest.config.ts`.
+  - `transit`: no script; depends on `^transit`, so a task that depends on it carries every workspace dependency's files in its key.
+  - `typecheck` and `lint`: depend on `transit`.
+  - `test`: depends on `transit`; its inputs include `vitest.config.ts`.
 
   The root scripts `build`, `lint`, `typecheck` and `test` call `turbo run`. The remote cache stays off: `turbo-team` is never set and no `turbo-api`/`turbo-token` secret is passed. Governs R22.
 - KTD18. **CI calls `reusable-checks.yml` at `732f66a0c8` and supplies its own `checks-lane` action.** The reusable workflow's contract asks the caller for `.github/actions/checks-lane` (`reusable-checks.yml:3-6`). This repository writes its own adapter. systemfsoftware's action is not copied: it runs that repository's repo checks, rust and gritlint lanes. Phases:
@@ -390,9 +390,9 @@ PR1 and PR2 units are implementation-ready; PR3-PR6 are scoped here and refined 
 
 - **Goal:** build, lint, typecheck and test run through turbo on the family configs.
 - **Requirements:** R3, R19; KTD17, KTD21.
-- **Files:** `turbo.json`, root `package.json` (scripts, `turbo` and `@effect/tsgo` devDependencies), `pnpm-workspace.yaml` (`turbo: 2.10.12`), `packages/api-extractor/{package.json,tsdown.config.ts,tsconfig.build.json,oxlint.config.ts,vitest.config.ts,stryker.config.ts}`, `apps/api-extractor-e2e/{package.json,vitest.config.ts,oxlint.config.ts,tsconfig.json}`, and the lint conformance of `src`, `tests` and the e2e app (KTD21).
+- **Files:** `turbo.json`, root `package.json` (scripts, `turbo` and `@effect/tsgo` devDependencies), `pnpm-workspace.yaml` (`turbo: 2.10.12`), `packages/api-extractor/{package.json,tsdown.config.ts,tsconfig.json,tsconfig.build.json,oxlint.config.ts,vitest.config.ts,stryker.config.ts}`, `apps/api-extractor-e2e/{package.json,vitest.config.ts,oxlint.config.ts,tsconfig.json}`, and the lint conformance of `src`, `tests` and the e2e app (KTD21).
 - **Execution note:** lint fixes are refactors, in separate commits by group (structural, complexity, test discipline, e2e). `apps/api-extractor-e2e/host-digest.ts` must still print sha256 `e4478f035b5334cb722f2d4848046e027c33a2b7a74083dc0108bdedf1ee6da2`.
-- **Approach:** KTD21. Vitest resolves the package's source through the `@systemfsoftware/source` condition (`vitest-config`'s `sourceResolveConditions`), so tests need no build. Two entry points run under plain Node, whose default conditions would resolve `dist/mod.mjs`: the locale feature's spawned `probe.ts` and CI's `node host-digest.ts`. Both pass `--conditions=@systemfsoftware/source`, so neither needs a build. Typecheck depends on `^build` only if the base tsconfig sets no matching `customConditions`.
+- **Approach:** KTD21. Vitest resolves the package's source through the `@systemfsoftware/source` condition (`vitest-config`'s `sourceResolveConditions`), so tests need no build. Two entry points run under plain Node, whose default conditions would resolve `dist/mod.mjs`: the locale feature's spawned `probe.ts` and CI's `node host-digest.ts`. Both pass `--conditions=@systemfsoftware/source`, so neither needs a build. The family base tsconfig sets no `customConditions`, so the package's and the e2e app's `tsconfig.json` set `customConditions: ["@systemfsoftware/source"]`: typecheck and type-aware lint read the package's source, and neither needs a build. Without it they read `dist/` types, which only a leftover local build provides; CI's lint lane has none and reports every package import as an `error` type.
 - **Test expectation:** no new behaviour. The existing package tests and the e2e locale proof move into the preset's lanes, and each keeps what it proves; the serialiser's round-trip and order laws run as a Gherkin feature over a fixed-seed generated sample of models, since the preset gives a property suite of a public schema module no file home under `src/`.
 - **Verification:** `pnpm build`, `pnpm lint` (0 diagnostics), `pnpm typecheck` and `pnpm test` pass locally. `nix run .#attw -- --pack packages/api-extractor` passes. The host digest is unchanged. No stryker command runs.
 

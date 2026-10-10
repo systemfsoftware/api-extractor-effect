@@ -72,11 +72,12 @@ In turbo, this holds only if a `dependsOn` path runs from T to some task in D. S
 
 ## Prevention
 
-- Any new task whose output reads a workspace dependency's source depends on `transit`. That includes a new lane, a new `apps/*` consumer, and a typecheck that resolves `@systemfsoftware/source` through `customConditions`. Never leave such a task with no upstream edge.
+- Any new task whose output reads a workspace dependency's source depends on `transit`. That includes a new lane, a new `apps/*` consumer, and typecheck and type-aware lint, which resolve `@systemfsoftware/source` through `customConditions`. Never leave such a task with no upstream edge.
+- Every workspace `tsconfig.json` that imports a workspace dependency sets `customConditions: ["@systemfsoftware/source"]`; the family base tsconfig sets none. Without it, typecheck and type-aware lint read the dependency's `dist/` types. They pass locally only while a leftover build exists, and fail in a clean CI checkout with `no-unsafe-*` errors on an `error` typed value. Check: `rm -rf packages/*/dist && pnpm turbo run lint typecheck --force` must pass.
 - Do not delete `transit` because it has no script. It has no script on purpose.
 - To check a cache key, run the task, append a newline to a source file of a dependency, and run it again. The second run must print `cache miss` with a new hash.
 
 ## Related Issues
 
-- Plan: `docs/plans/2026-10-10-1111-feat-effect-api-extractor-plan.md`, U13 approach (tests resolve source through `@systemfsoftware/source`, so they need no build).
+- Plan: `docs/plans/2026-10-10-1131-feat-effect-api-extractor-plan.md`, U13 approach (tests, typecheck and lint resolve source through `@systemfsoftware/source`, so none needs a build).
 - Turbo's transit-node pattern: [Configuring tasks](https://turborepo.dev/docs/crafting-your-repository/configuring-tasks), and "Transit Nodes for Parallel Tasks" in vercel/turborepo's skill reference `tasks.md`.
