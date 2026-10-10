@@ -7,6 +7,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   actions: write
@@ -15,6 +16,15 @@ permissions:
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@b9b4a1d48cc16241b33f9afd8ab99b82b05ce04f
     with:
       ci-workflow: ci.yml
+  noop:
+    name: no release off main, so the run concludes success, not skipped
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - run: echo "Release writes only from refs/heads/main; $GITHUB_REF runs nothing."
