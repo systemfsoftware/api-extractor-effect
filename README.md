@@ -6,7 +6,7 @@ and gives a semver verdict that understands Effect's `A`/`E`/`R` channels and du
 APIs. Every output is byte-identical across locales, time zones and hosts.
 
 The design and its requirements live in
-[`docs/plans/2026-10-10-0205-feat-effect-api-extractor-plan.md`](docs/plans/2026-10-10-0205-feat-effect-api-extractor-plan.md).
+[`docs/plans/2026-10-10-0314-feat-effect-api-extractor-plan.md`](docs/plans/2026-10-10-0314-feat-effect-api-extractor-plan.md).
 
 ## Status
 
@@ -16,18 +16,25 @@ The design and its requirements live in
 | Front-ends (isolated-declarations fast path, compiler fallback) | next |
 | `.api.md` report with a differential test against `@microsoft/api-extractor` 7.59.1 | planned |
 | Benchmark, CLI, changeset-bump check | planned |
-| Toolchain integration (flake, release, mutation) | waits on shared family tooling |
+| systemfsoftware packages from the flake (`.sfs-deps`) | in this repository |
+| Release, mutation, shared lint/build jobs, tsdown and vitest presets | waits on shared family tooling |
 
 ## The verdict
 
 ```ts
-import { decodeApiModel, serialiseVerdict, verdict } from '@systemfsoftware/api-extractor'
+import { Effect } from 'effect'
+import { Verdict } from '@systemfsoftware/api-extractor'
 
-const result = verdict(decodeApiModel(before), decodeApiModel(after))
-result.bump // 'none' | 'patch' | 'minor' | 'major'
-result.findings // [{ rule_id, reason_code, bump, next_action, locations }]
-process.stdout.write(serialiseVerdict(result))
+// `before` and `after` are encoded API models (the JSON this tool writes).
+const document = await Effect.runPromise(Verdict.cell.run({ before, after }))
+process.stdout.write(document) // canonical JSON: { _tag, schemaVersion, engine, corpusVersion, declarations, bump, findings }
 ```
+
+`bump` is `none`, `patch`, `minor` or `major`; each finding is
+`{ rule_id, reason_code, bump, next_action, locations }`. A model that does not decode
+fails the cell with `SurfaceRejected`; a rule corpus in which two rules match the same
+change fails it with `RuleCorpusRejected`. The decision itself, `Verdict.judge`, is a
+pure `effect-cell-types` workflow over decoded values.
 
 Rules are data: [`src/rules/corpus.v1.json`](packages/api-extractor/src/rules/corpus.v1.json)
 maps each kind of change, its position (`in`, `out`, `both`), its Effect channel and
@@ -41,7 +48,11 @@ major `E_TAG_REMOVED`, because a caller's `catchTag` for that tag stops compilin
 
 ## Development
 
+The `@systemfsoftware/*` packages install from tarballs that this repository's flake
+builds from a pinned systemfsoftware commit, never from a registry:
+
 ```sh
+cp -rL "$(nix build --no-link --print-out-paths .#sfs-deps)" .sfs-deps
 pnpm install
 pnpm test
 pnpm typecheck

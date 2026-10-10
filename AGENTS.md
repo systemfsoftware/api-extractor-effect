@@ -1,7 +1,7 @@
 # AGENTS.md
 
 `@systemfsoftware/api-extractor`: versioned API model, diff and Effect-aware semver
-verdict. Requirements and decisions: `docs/plans/2026-10-10-0205-feat-effect-api-extractor-plan.md`.
+verdict. Requirements and decisions: `docs/plans/2026-10-10-0314-feat-effect-api-extractor-plan.md`.
 
 ## Rules
 

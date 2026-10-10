@@ -5,6 +5,7 @@ date: 2026-10-10
 topic: effect-api-extractor
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
+supersedes: docs/plans/2026-10-10-0205-feat-effect-api-extractor-plan.md
 execution: code
 ---
 
@@ -15,7 +16,7 @@ execution: code
 - **Objective:** a maintainer of an Effect-heavy TypeScript library runs one command on a pull request and gets, within seconds, an api-extractor-compatible API report, a versioned JSON API model, and a semver verdict that fails the PR when its changeset under-declares the bump.
 - **Means:** a standalone product repository, `systemfsoftware/api-extractor-effect`, built around one versioned API model that a fast syntactic path and a compiler fallback both produce. Upstream `@microsoft/api-extractor` 7.59.1 is the behaviour oracle for the report, never the implementation.
 - **Product authority:** the root's round-3 contract (Done 1-9, "does not count", scope). systemfsoftware PR #552 (head `3a135a19cb`) is reference material only. Plan `0530dd7` on `feat/import-api-extractor` is void as a bar; its verified facts are reused below.
-- **Open blockers:** P1 (O1's PR making `tsdown-config`, `vitest-config` and `stryker-config` public) and O1's org reusable workflows. They hold only PR6's work: the flake inputs, `.sfs-deps`, family packages, O1's reusable lint/typecheck/build/mutation jobs, the release caller and mutation (KTD1). R22 is met PR by PR without them; PR1's instance is KTD12's product job.
+- **Open blockers:** P1 (O1's PR making `tsdown-config`, `vitest-config` and `stryker-config` public) and O1's org reusable workflows. They hold only PR6's work: the three private toolchain packages, O1's reusable lint/typecheck/build/mutation jobs, the release caller and mutation (KTD1). The public family packages and `.sfs-deps` are not blocked: PR1 installs them through this repository's flake (KTD2). R22 is met PR by PR; PR1's instance is KTD12's CI.
 
 ## Product Contract
 
@@ -58,7 +59,9 @@ B is the only approach where Done 2, 5, 6 and 7 hold together.
 - **Licence MIT with Microsoft's notice; provenance on every ported file.** (session-settled: user-directed - chosen over #552's Apache-2.0.)
 - **#552 is reference, not baseline; its differential test against upstream 7.59.1 is kept.** (session-settled: user-directed - chosen over importing #552 as the starting point.)
 - **Shared tooling only through flake inputs, org reusable workflows and the flake template; nothing copied.** (session-settled: user-directed - chosen over vendoring monorepo tsconfig/vitest/oxlint presets, scripts or packs.)
-- **Generic toolchain CI jobs (lint, typecheck, build, release, mutation runner, `.sfs-deps` materialisation) come from O1's reusable workflows; until O1 ships one, that job is marked blocked, never replaced locally.** (session-settled: user-directed - chosen over a local equivalent.)
+- **Generic toolchain CI jobs (lint, typecheck, build, release, mutation runner) come from O1's reusable workflows; until O1 ships one, that job is marked blocked, never replaced locally.** (session-settled: user-directed - chosen over a local equivalent.)
+- **`.sfs-deps` materialisation evaluates this repository's own flake in CI** (install Nix, `nix build .#sfs-deps`, then `pnpm install --frozen-lockfile`); a shared `.sfs-deps` action is listed in the PR body as an O1 candidate. (session-settled: root ruling 2026-10-10 - reverses the earlier "blocked on O1" for `.sfs-deps`; chosen over copying stryker-js-effect's `released-tarballs` action.)
+- **Public family packages are used now: the verdict pipeline is an `effect-cell-types` workflow and cell, codec laws come from `effect-schema-law`, PR3's lane uses `differential-spec`.** (session-settled: root ruling 2026-10-10 - chosen over plain functions rewritten onto cells in PR6, and over hand-rolled law and differential harnesses.)
 - **Mutation runs on `main` only, with the shared stryker config, proven once by the dispatch workaround (temporary branch trigger, every job `if:`-skipped, `gh workflow run --ref`, removed before the final head).** (session-settled: user-directed - chosen over local or per-PR mutation.)
 - **Carried rulings:** drop `stryker-test-contribution` (deleted by its owner, stryker-js-effect `1cf39f2`); `attw` from the are-the-types-wrong-effect flake binary; the stryker `npm:` alias override. (session-settled: user-directed.)
 - **Dependency families pre-approved:** official Microsoft packages (`@microsoft/api-extractor`, `@microsoft/api-extractor-model`, `typescript`, `@typescript/native-preview`) once Microsoft is confirmed as publisher, and oxc-project packages (`oxc-transform`, `oxc-parser`) pinned exactly on the family's `0.150.0` line. Any other new executable dependency is an ask. (session-settled: user-directed - chosen over asking per package.)
@@ -80,7 +83,7 @@ Each requirement names the Done item it serves.
 **Determinism** (Done 2)
 
 - R5. Every output (model, report, verdict) is byte-identical across process locales (including `tr-TR`), time zones, working directories and hosts.
-- R6. A property test generates arbitrary inputs and proves R5 by running the serialiser under several locales and time zones and comparing bytes.
+- R6. A property test generates arbitrary inputs and proves R5 by running the serialiser under several locales and time zones and comparing bytes; a CI job serialises the same fixed-seed generated sample on x86_64 and arm64 hosted runners and compares the two outputs byte for byte, with no committed golden on either side.
 - R7. Every output stamps the engine version, the compiler or emitter that produced its declarations, and the rule-corpus version.
 
 **Report compatibility** (Done 3)
@@ -155,9 +158,13 @@ Each requirement names the Done item it serves.
 | No tool is fast + stable model + semver verdict | Survey above | Confirmed for the tools found; absence beyond them unverified |
 | Microsoft publishes the pre-approved packages | `npm view <pkg> maintainers`: `@microsoft/api-extractor`, `@microsoft/api-extractor-model` (microsoft1es, microsoft-oss-releases, odspnpm @microsoft.com; repo microsoft/rushstack); `typescript`, `@typescript/native-preview` (microsoft1es, typescript-bot; repos microsoft/TypeScript, microsoft/typescript-go) | Confirmed 2026-10-10 |
 | The family's oxc line is 0.150.0 | systemfsoftware `main` and stryker-js-effect lockfiles resolve `oxc-parser@0.150.0`; `oxc-transform@0.150.0` exists on npm (maintainer boshen, repo oxc-project/oxc) | Confirmed |
-| P1 has not landed | systemfsoftware `main` `df908ddf`: `packages/toolchain/{tsdown,vitest,stryker}-config/package.json` `"private": true` | Confirmed 2026-10-10 |
-| O1's reusable workflows and flake template do not exist yet | systemfsoftware `main` has `reusable-checks.yml` (needs a repo-local composite action and turbo) and `reusable-smoke.yml`; no flake template output; pnpm-release-management offers `release.yml` and `changeset-check.yml` | Confirmed; lint/typecheck/build/mutation/`.sfs-deps` jobs are blocked on O1 |
+| P1 has not landed | systemfsoftware `main` `ba6664c1`: `packages/toolchain/{tsdown,vitest,stryker}-config/package.json` `"private": true`; `packages/toolchain/tsconfig` 2.0.1 is public | Confirmed 2026-10-10 |
+| Public family packages are available now | systemfsoftware `ba6664c1` `flake.nix:58` `lib.mkConsumerStore` picks from `workspace-tarballs.members` (41 tarballs, including `effect-cell-types-12.0.0`, `effect-schema-law-5.0.1`, `vitest-2.0.0`, `tsconfig-2.0.1`, `differential-spec-1.0.1`); this repository's `nix build .#checks.x86_64-linux.consumer-store` builds | Confirmed (local build) |
+| O1's reusable workflows and flake template do not exist yet | systemfsoftware `main` has `reusable-checks.yml` (needs a repo-local composite action and turbo) and `reusable-smoke.yml`; no flake template output; pnpm-release-management offers `release.yml` and `changeset-check.yml` | Confirmed; lint/typecheck/build/mutation jobs are blocked on O1 |
+| A cold `.sfs-deps` build is long on hosted runners | systemfsoftware `ba6664c1` `.github/workflows/nix.yml` builds `workspace-tarballs` in a 60-minute job with no binary cache; this repository's `sfs-deps` output depends on the same derivation | Confirmed as configuration; PR1's first CI run records the time |
+| A workflow decision is a plain function returning `Result` | `effect-cell-types` 12.0.0 `dist/index.d.ts`: `MadeWorkflow` is `((command) => Result<Decision, Error>) & WorkflowBrand`; `Sandwich.named(...).decide(...).write(handlers)` decodes the command and answers every encoded variant including `CommandRejected` | Confirmed (types and the cell test) |
 | Effect's `catchTag` constrains its tag to `E` | effect 4.0.2 `dist/Effect.d.ts` `catchTag`: `<const K extends Tags<E> \| Arr.NonEmptyReadonlyArray<Tags<E>>, ...>` | Confirmed |
+| The oracle's compiler and TS7 print inferred types differently, so R8 cannot hold on a TS7 fallback | Upstream 7.59.1 bundles `typescript` 5.9.3 (`rushstack@bc4cd29:apps/api-extractor/package.json`). Local probe, `--declaration --emitDeclarationOnly` on three inferred exports: 5.9.3 prints `Zed \| Alpha` and `"zeta" \| "alpha" \| 42`; 7.0.2 prints `Alpha \| Zed` and `"alpha" \| "zeta" \| 42` and drops the `b?: undefined` member 5.9.3 adds to an object-literal union. 6.0.3 with `--stableTypeOrdering` matches neither (`b?: undefined` before `a`). 5.9.3 has no `stableTypeOrdering` option (0 occurrences in `lib/typescript.js`); 6.0.3 has it | Confirmed on 3 of 3 probes; the rate on real packages is measured in PR2 (KTD9) |
 
 ### Outstanding Questions
 
@@ -171,25 +178,36 @@ Each requirement names the Done item it serves.
 
 ### Key Technical Decisions
 
-- KTD1. **Six sequential PRs on `main`, each green on its own head.** PR1 model, diff and verdict core plus the repository foundation; PR2 front-ends, the syntactic resolver and the phase profile; PR3 report renderer, differential lane and adversarial corpus; PR4 CI benchmark; PR5 CLI and changeset-bump check; PR6 toolchain integration (flake, `.sfs-deps`, family packages, O1 reusable jobs, release caller, mutation, consumer-flake journey). Only PR6 waits on O1/P1, so PR1-PR5 never need a family package. Governs R3, R21, R22, R23.
-- KTD2. **PR1-PR5 depend on no `@systemfsoftware/*` package.** `.sfs-deps` materialisation is a generic job blocked on O1 (Key Decisions), so a family dependency now would make every product job blocked. Third-party dependencies are those already in #552's `package.json` (`effect`, `fast-check`, `vitest`, `typescript`, `@types/node`, `@microsoft/api-extractor`) plus the pre-approved Microsoft and oxc packages. Until PR6 the decisions are plain pure functions over immutable data, which already satisfies R19; PR6 (U11) moves the verdict pipeline onto `@systemfsoftware/effect-cell-types` cells as the cell-architecture pack requires.
+- KTD1. **Six sequential PRs on `main`, each green on its own head.** PR1 model, diff and verdict core on `effect-cell-types` cells, plus the repository foundation and the flake that supplies the public family packages; PR2 front-ends, the syntactic resolver and the phase profile; PR3 report renderer, differential lane on `@systemfsoftware/differential-spec`, and adversarial corpus; PR4 CI benchmark; PR5 CLI and changeset-bump check; PR6 toolchain integration (the three private toolchain packages, the other flake inputs, O1 reusable jobs, release caller, mutation, consumer-flake journey). Only PR6 waits on O1/P1. Governs R3, R21, R22, R23.
+- KTD2. **Public family packages come from the flake now; only the private ones wait.** `flake.nix` pins systemfsoftware `ba6664c1` (`flake.lock`); its `sfs-deps` output links the `workspace-tarballs` members this lockfile names, and `checks.consumer-store` is systemfsoftware's `lib.mkConsumerStore` over the same list, so a recorded integrity that does not match the flake's tarball fails the build. `pnpm-workspace.yaml` overrides each `@systemfsoftware/*` package to `file:.sfs-deps/<name>-<version>.tgz`; manifests keep semver ranges. PR1 uses `effect-cell-types` (KTD14), `effect-schema-law` (codec laws for every wire schema), `vitest` and `tsconfig` (the package `tsconfig.json` extends `tsc/no-dom/library`). PR3's differential lane uses `differential-spec`. `tsdown-config`, `vitest-config` and `stryker-config` stay blocked on P1; until then the package keeps its minimal `vitest.config.ts`. Third-party dependencies are those already in #552's `package.json` plus the pre-approved Microsoft and oxc packages. Governs R3, R19, R21.
 - KTD3. **The model is an Effect Schema with a literal `schemaVersion: 1`.** Decoding rejects any other version. Type expressions are a small structural AST (keyword, literal, reference with optional module and arguments, union, intersection, array, tuple, function, object, opaque text), so rules reason about structure, not printed text. Governs R10, R13.
 - KTD4. **One canonical serialiser for every output.** Object keys ordered by UTF-16 code unit (`compareCodeUnits`), model arrays ordered at construction by the same comparison, two-space JSON with a trailing newline. No `Intl`, `toLocale*`, `localeCompare`, dates or paths enter output. Code-unit order is the model's and the JSON's order only; the report renderer (KTD10) orders declarations as upstream does. Governs R5, R7.
 - KTD5. **Diff carries position polarity.** A function's parameters are `in`, its return `out`; a `const` is `out`; interface members, class members, type-alias bodies and `let` variables are `both`. Effect types decompose into channels from a declarative channel table (`Effect`, `Stream`: `A`/`E`/`R`; `Layer`: `ROut`/`E`/`RIn`); each channel inherits the position. Local type aliases expand before comparison (cycle-guarded), so a widened alias surfaces on the function that uses it. Governs R11, R13.
 - KTD6. **Direction is decided on a small lattice:** union membership by canonical key (`never` is the empty union), literal below its keyword, `unknown`/`any` at the top. Anything else is `changed`. Governs R11.
 - KTD7. **The rule corpus is versioned JSON data** (`corpusVersion`, the channel table, and rules keyed by change kind plus optional `channel`/`position`/`direction`), decoded through a schema at load. Each rule carries `rule_id`, `bump`, `reason_code`, `next_action`. The engine picks the most specific matching rule; no match yields `major`/`UNCLASSIFIED_CHANGE`. Governs R11, R12.
 - KTD8. **Locale determinism is proven across real processes.** Node fixes its default locale at start-up, so no in-process test can vary it. The property test serialises a generated batch in child processes under `LC_ALL`/`TZ`/`cwd` variants, asserts each child really resolved its locale (so the test cannot pass vacuously), and compares bytes. This is one of the 2-4 process-level tests the test-layer gate allows. Governs R6.
-- KTD9. **Front-ends meet at declaration text behind an emitter port** (PR2). The compiler fallback runs TypeScript 7's `tsc --declaration --emitDeclarationOnly` as a process (TS7 has no API until 7.1); the fast path emits isolated declarations without a checker. PR2 commits a per-phase profile (R15) on the corpus of KTD11 before choosing the fast-path emitter (TypeScript's `transpileDeclaration` or `oxc-transform` 0.150.0). The 7.1 API becomes another adapter of the same port. Governs R15, R17, R18.
+- KTD9. **Front-ends meet at declaration text behind an emitter port** (PR2). The compiler fallback runs TypeScript 7's `tsc --declaration --emitDeclarationOnly` as a process (TS7 has no API until 7.1); the fast path emits isolated declarations without a checker. PR2 commits a per-phase profile (R15) on the corpus of KTD11 before choosing the fast-path emitter (TypeScript's `transpileDeclaration` or `oxc-transform` 0.150.0). R8 is not loosened: the profile records how often TS7 `tsc` prints declarations differently from the oracle's TypeScript 5.9.3 on the KTD11 corpus, and when they diverge, the report-path fallback emits with the oracle's compiler line behind the same port while TS7 stays an adapter. The 7.1 API becomes another adapter of the same port. Governs R8, R15, R17, R18.
 - KTD10. **The report renderer reads only the model** (PR3), so the model keeps what the report needs: declaration text spans with their TSDoc, release tags and analysis messages; adding them bumps `schemaVersion` (R10). The renderer orders declarations with upstream's `getSortKeyIgnoringUnderscore` (lower-case first, `_`-prefixed last), ported with an R2 provenance header. "Keeping #552's differential test" means keeping the live run against upstream 7.59.1; PR3 writes the lane fresh against the rebuilt renderer, using #552's `upstream-parity.differential.test.ts` as a design reference. Governs R8, R9.
 - KTD11. **The real corpus is systemfsoftware's public packages, read from a checkout of systemfsoftware `main` at the pinned SHA** (a source read, not a dependency, so KTD2 holds), plus this repository's own package, made isolatedDeclarations-clean in PR2, as the real input the fast path can take. systemfsoftware's packages are not isolatedDeclarations-clean (none enables it; `packages/discern/src` alone has 133 unannotated exported `const`s), so they measure the fallback. PR2 profiles phases on it (R15); PR4 benchmarks both paths against upstream 7.59.1 on the same packages (R16). Governs R15, R16.
-- KTD12. **CI for PR1 is one product job** that installs with pnpm and runs the package's property and determinism tests on Node 24. Lint, typecheck, build, release, mutation and `.sfs-deps` are listed in the PR body as blocked on O1; no local equivalent is written. Typecheck runs locally as verification evidence. Governs R22.
+- KTD12. **CI for PR1** builds `.sfs-deps` once from the flake, runs the `consumer-store` check, and hands the tarballs as an artifact to the product job (pnpm, Node 24, property, integration and determinism tests) and to the x86_64 and arm64 host-bytes jobs, which a compare job checks byte for byte. Lint, typecheck, build, release and mutation are listed in the PR body as blocked on O1; no local equivalent is written. Typecheck runs locally as verification evidence. Governs R6, R22.
 - KTD13. **Analysis messages come from a syntactic resolver over the declaration files** (PR2), not the checker. `ae-forgotten-export`, `ae-missing-release-tag` and the other messages the report carries depend on the module graph and TSDoc, which declaration text holds. A message that needs the checker routes the package to the fallback, so R8 holds on both paths. The differential lane (R9) is the arbiter: a mismatch is either a port gap (fix the resolver) or a checker-only message (add it to the fallback routing). Governs R8, R17.
+- KTD14. **The verdict is a cell.** `judgeSurfaces` is a `Workflow.make` decision over a `CompareSurfaces` command (two decoded models and a corpus) that returns `Verdict` or `AmbiguousRuleCorpus`; corpus ambiguity is the decision's to judge, so `decodeRuleCorpus` only decodes. `verdictCell` is a `Sandwich.named('api_extractor.verdict')` shell that decodes the command, runs the decision and writes canonical JSON, failing with `SurfaceRejected` (undecodable input) or `RuleCorpusRejected`. The public surface is two namespaces, `ApiModel` and `Verdict`. Schema-backed tagged classes are immutable values, so R19 holds. Governs R11, R12, R19.
 
 ### Assumptions challenged (destructive review, Edge-First lens)
 
 1. *Both front-ends yield the same model.* Compiler emit prints inferred types and `import("x").Y` references that isolated emit never produces. PR2 canonicalises import-type references in the builder and proves fast-path and fallback models equal on the isolated-clean corpus (R17).
 2. *The report can be rendered from a model.* Upstream copies declaration text verbatim and adds messages from analysis. KTD10 keeps spans and messages in the model; the differential lane (R9) arbitrates.
 3. *A syntax-only verdict is sound.* A changed local alias changes `E` without changing the function's text. KTD5 expands local aliases; changes inside dependencies are out of scope, and anything unclassified fails closed (KTD7).
+
+### Assumptions challenged (destructive review, Substitution lens)
+
+Rotated from Edge-First because the plan's primary pattern was substituted: plain functions became a workflow and a cell, and a no-dependency PR1 became a flake consumer.
+
+1. *Building `.sfs-deps` from the flake is cheap enough for every PR.* systemfsoftware's own job budgets 60 minutes for the same derivation with no binary cache. KTD12 builds it once per run and hands the tarballs to every other job as an artifact; PR1's first run records the cold time, and a cache belongs in the shared `.sfs-deps` action proposed to O1, not in a local equivalent.
+2. *Moving the ambiguity check from decode time to the decision changes nothing.* A corpus with two rules sharing a match used to throw on load; now it is a typed `AmbiguousRuleCorpus` from the decision. The shipped corpus is still guarded: every decision property runs on `defaultCorpus` and fails if that corpus is refused.
+3. *Tests can stay where #552 put them.* The test-layer gate requires codec laws next to each schema and decision properties next to the workflow, and admits the shell only as an in-process integration test with deterministic inputs. U2 and U4 now name those files.
+
+Radical alternative considered: take the tarballs from systemfsoftware's CI artifacts or GitHub Releases instead of building them. Rejected: neither is a pinned, reproducible input today, and `lib.mkConsumerStore` already checks the lockfile's integrities against the flake's own build.
 
 ---
 
@@ -201,18 +219,18 @@ PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the s
 
 - **Goal:** the repository is a licensed, provenance-stating product home with pinned packs.
 - **Requirements:** R1, R2, R3, R4.
-- **Files:** `LICENSE`, `README.md`, `AGENTS.md`, `.compound-engineering/config.yaml`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.gitignore`, `packages/api-extractor/{package.json,tsconfig.json,vitest.config.ts}`.
-- **Approach:** `LICENSE` is MIT ("Copyright (c) 2026 System F Software") followed by Microsoft's MIT notice for `rushstack@bc4cd29` `apps/api-extractor`. README states the provenance policy (R2) and the PR roadmap. Packs: one git source `https://github.com/systemfsoftware/systemfsoftware.git`, `ref` = systemfsoftware `main` `df908ddfe497e53c1c03b92519a96c913c441a58`, `path: compound-packs`, packs `cell-architecture`, `boundary-testing`, `schema-laws`, `package-topology`. `packageManager` pins pnpm 12.10.1. The package `tsconfig.json` is a minimal strict config owned by this package; PR6 moves it onto `@systemfsoftware/tsconfig`.
+- **Files:** `LICENSE`, `README.md`, `AGENTS.md`, `.compound-engineering/config.yaml`, `flake.nix`, `flake.lock`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.gitignore`, `packages/api-extractor/{package.json,tsconfig.json,vitest.config.ts}`.
+- **Approach:** `LICENSE` is MIT ("Copyright (c) 2026 System F Software") followed by Microsoft's MIT notice for `rushstack@bc4cd29` `apps/api-extractor`. README states the provenance policy (R2), the PR roadmap and how `.sfs-deps` is built. Packs: one git source `https://github.com/systemfsoftware/systemfsoftware.git`, `ref` = systemfsoftware `main` `df908ddfe497e53c1c03b92519a96c913c441a58`, `path: compound-packs`, packs `cell-architecture`, `boundary-testing`, `schema-laws`, `package-topology`. `packageManager` pins pnpm 12.10.1. The flake and the overrides follow KTD2; `.sfs-deps/` is gitignored. The package `tsconfig.json` extends `@systemfsoftware/tsconfig/tsc/no-dom/library`.
 - **Test expectation:** none - configuration and documents.
-- **Verification:** the CE pack resolver returns four roots with no errors; `git grep -n '/tree/main' -- .compound-engineering` prints nothing.
+- **Verification:** the CE pack resolver returns four roots with no errors; `git grep -n '/tree/main' -- .compound-engineering` prints nothing; `nix build .#checks.x86_64-linux.consumer-store` builds; from an empty `.sfs-deps`, `nix build .#sfs-deps` then `pnpm install --frozen-lockfile` succeeds.
 
 ### U2. Versioned API model and canonical serialiser (PR1)
 
 - **Goal:** a decodable, versioned model and one byte-stable serialiser.
 - **Requirements:** R5, R7, R10; KTD3, KTD4.
-- **Files:** `packages/api-extractor/src/model/*.ts`, `src/canonical-json.ts`, `src/version.ts`.
+- **Files:** `packages/api-extractor/src/model/*.ts` (including `serialise.ts` and the colocated `api-model.test.ts`), `src/canonical-json.ts`, `src/version.ts`, `src/ApiModel.ts`.
 - **Approach:** Effect Schema for `ApiModel` (`schemaVersion`, `producer {engine, declarations}`, `package`, `entryPoints[].items[]`, `entryPoints[].locals[]`) and the type AST. `sortModel` orders entry points, exports and locals by code unit. The schema is sized for the verdict; PR2 first validates it against real declaration text and PR3's renderer fields (KTD10) bump `schemaVersion`.
-- **Test scenarios:** (schema law) for any generated model, decode(encode(m)) equals m and canonical bytes are stable through a JSON round trip; a document with `schemaVersion: 2` fails to decode.
+- **Test scenarios:** (schema law, colocated) `ruleOfSchemas('ApiModel', ApiModel)`; for any generated model, its canonical bytes decode back to the sorted model and re-serialise to the same bytes; a document with any other `schemaVersion` fails to decode; exports in any order serialise to the same bytes.
 - **Verification:** the property suite passes; no `toLocale`, `localeCompare` or `Intl` in `src`. R7's stamps are required fields of both schemas, so a model or verdict without them does not decode or typecheck.
 
 ### U3. Diff with polarity and Effect channels (PR1)
@@ -228,26 +246,26 @@ PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the s
 
 - **Goal:** change records become findings and a verdict.
 - **Requirements:** R11, R12, R13; KTD7.
-- **Files:** `src/rules/corpus.v1.json`, `src/rules/*.ts`, `src/verdict.ts`, `src/mod.ts`.
-- **Approach:** decode the corpus; for each change pick the most specific rule; build `{rule_id, reason_code, next_action, locations}`; verdict = highest bump; stamp engine and corpus versions.
-- **Test scenarios (properties over generated surrounding models, each targeting one rule):** AE1 (`E` widened in output, major `E_WIDENED`); `E` member removed in output (major `E_TAG_REMOVED`); AE2 (`E` widened in input, minor); `A` and `R` widened/narrowed in both positions; the same change through a local alias; AE3 (dual form removed, major `DUAL_FORM_REMOVED`); export removed (major) and added (minor); required parameter added (major), optional added (minor); AE4 (a corpus without the matching rule yields `UNCLASSIFIED_CHANGE`); the verdict equals the highest finding bump and adding an unrelated change never lowers it.
-- **Verification:** the property suite passes. Its sensitivity was shown on the way in: the local-alias property failed against the first diff (it compared structural keys before expanding aliases) and passes on the fixed one.
+- **Files:** `src/rules/corpus.v1.json`, `src/rules/corpus.ts`, `src/rules/corpus.test.ts`, `src/verdict.schema.ts`, `src/verdict.schema.test.ts`, `src/findings.ts`, `src/judge-surfaces.workflow.ts`, `src/judge-surfaces.workflow.property.test.ts`, `src/verdict.cell.ts`, `src/Verdict.ts`, `src/mod.ts`, `tests/verdict.integration.test.ts`.
+- **Approach:** KTD14. Decode the corpus; the decision refuses an ambiguous corpus, then for each change picks the most specific rule, groups changes by rule into `{rule_id, reason_code, bump, next_action, locations}` (locations distinct, code-unit order), and takes the highest bump; it stamps engine and corpus versions. The cell writes the encoded verdict through `canonicalJson`.
+- **Test scenarios (properties over generated surrounding models, each targeting one rule):** AE1 (`E` widened in output, major `E_WIDENED`); `E` member removed in output (major `E_TAG_REMOVED`); AE2 (`E` widened in input, minor); `A` and `R` widened/narrowed in both positions; the same change through a local alias; AE3 (dual form removed, major `DUAL_FORM_REMOVED`); export removed (major) and added (minor); required parameter added (major), optional added (minor); AE4 (a corpus without the matching rule yields `UNCLASSIFIED_CHANGE`); the verdict equals the highest finding bump and adding an unrelated change never lowers it; one rule firing at several exports is one finding listing each location once in code-unit order; a corpus with two rules sharing a match is refused naming that match. (schema law, colocated) `ruleOfSchemas` for `RuleCorpus` and `Verdict`. (integration, deterministic inputs) the cell answers canonical JSON for AE1, fails an undecodable surface with `SurfaceRejected`, and fails an ambiguous corpus with `RuleCorpusRejected`.
+- **Verification:** the property suite passes. Its sensitivity was shown on the way in: the local-alias property failed against the first diff (it compared structural keys before expanding aliases) and passes on the fixed one. On the cell move, three hand-applied faults were each caught: a constant `none` bump (20 properties failed), first-location-only findings (the locations property failed), and a swapped refusal in the cell (the integration test failed).
 
 ### U5. Locale and host determinism proof (PR1)
 
 - **Goal:** R5 holds across real process environments.
 - **Requirements:** R5, R6; KTD8.
-- **Files:** `tests/locale-determinism.property.test.ts`, `tests/__fixtures__/serialise-probe.ts`.
-- **Approach:** fast-check generates models whose names draw on `i I ı İ ß` and mixed scripts; children under `C`/`UTC`, `tr_TR.UTF-8`/`Europe/Istanbul`, `de_DE.UTF-8`/`America/Los_Angeles` and a different `cwd` serialise models and verdicts.
+- **Files:** `tests/locale-determinism.property.test.ts`, `tests/__fixtures__/serialise-probe.ts`, `tests/__fixtures__/host-digest.ts`.
+- **Approach:** fast-check generates models whose names draw on `i I ı İ ß` and mixed scripts; children under `C`/`UTC`, `tr_TR.UTF-8`/`Europe/Istanbul`, `de_DE.UTF-8`/`America/Los_Angeles` and a different `cwd` serialise models and verdicts. `host-digest.ts` serialises a fixed-seed sample of models and the verdicts between them through the cell, for KTD12's cross-host comparison.
 - **Test scenarios:** AE5; each child reports the locale it resolved, and the test fails if `tr-TR` was not actually in effect.
 - **Verification:** the test passes and its assertions show each child resolved `tr`/`de` and its own time zone and working directory.
 
 ### U6. PR1 CI (PR1)
 
 - **Goal:** the PR head proves U2-U5 on GitHub-hosted Linux.
-- **Requirements:** R22; KTD12.
+- **Requirements:** R6, R22; KTD12.
 - **Files:** `.github/workflows/ci.yml`.
-- **Approach:** one job: checkout, pnpm via `pnpm/action-setup` (reads `packageManager`), Node 24, `pnpm install --frozen-lockfile`, `pnpm test`. `permissions: contents: read`; no secrets.
+- **Approach:** KTD12. `sfs-deps` job: checkout, `cachix/install-nix-action@v31`, copy `nix build .#sfs-deps` into `.sfs-deps`, build `checks.x86_64-linux.consumer-store`, upload the tarballs. `test` and `host-bytes` (x86_64 `ubuntu-latest`, arm64 `ubuntu-24.04-arm`) download them, then `pnpm/action-setup` (reads `packageManager`), Node 24, `pnpm install --frozen-lockfile`; `host-compare` runs `cmp` on the two outputs. `permissions: contents: read`; no secrets.
 - **Verification:** the run on the PR head is green.
 
 ### U7-U11. Later PRs (scoped)
@@ -256,7 +274,7 @@ PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the s
 - **U8 (PR3) Report:** `.api.md` renderer from the model, ordered by upstream's sort key; differential lane against upstream 7.59.1 on a fast-check-generated corpus plus the adversarial corpus (namespace barrels, `declare global`, re-export cycles, overloads, Effect dual APIs). R8, R9; KTD10, KTD13.
 - **U9 (PR4) Performance:** cold/warm benchmark in CI against upstream on the KTD11 corpus, fast path on the isolated-clean input and fallback on systemfsoftware's packages; 10x target or the measured ceiling with the phase that stops it. R16; KTD11.
 - **U10 (PR5) CLI and bump check:** one command, JSON with `schemaVersion`, bounded concise reporter; a PR job fails when a changeset under-declares. R14, R20.
-- **U11 (PR6) Toolchain integration:** flake inputs (systemfsoftware at the P1 SHA, stryker-js-effect, are-the-types-wrong-effect, pnpm-release-management), `.sfs-deps` with the stryker `npm:` alias override, family packages, the verdict pipeline moved onto `effect-cell-types` cells (KTD2), O1's reusable lint/typecheck/build/mutation jobs, thin release caller, mutation on `main` with the dispatch proof, consumer-flake journey. R3, R19, R21, R23. Blocked on P1 and O1.
+- **U11 (PR6) Toolchain integration:** the three private toolchain packages once P1 lands (`tsdown-config` build, `vitest-config`, `stryker-config`), the other flake inputs (stryker-js-effect, are-the-types-wrong-effect, pnpm-release-management), the stryker `npm:` alias override, O1's reusable lint/typecheck/build/mutation jobs and shared `.sfs-deps` action, thin release caller, mutation on `main` with the dispatch proof, consumer-flake journey. R3, R21, R23. Blocked on P1 and O1.
 
 ---
 
@@ -264,9 +282,11 @@ PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the s
 
 | Gate | Command or evidence | Proves |
 |---|---|---|
-| Product tests | `pnpm test` (Node 24) on the PR head, in CI | R5, R6, R7, R10-R13 |
+| Flake | `nix build .#checks.x86_64-linux.consumer-store` and `nix build .#sfs-deps`, in CI | R3, KTD2 |
+| Product tests | `pnpm test` (Node 24) on the PR head, in CI, installed from the flake's `.sfs-deps` | R5, R6, R7, R10-R13 |
+| Host bytes | `host-compare`: `cmp` of the x86_64 and arm64 `host-digest.ts` outputs, in CI | R5, R6 |
 | Typecheck (local until O1) | `pnpm typecheck` | R7, R10 (schema and stamp types) |
-| Immutable core | review of the diff: no classes, no `let`, no mutation of shared values in `src` | R19 |
+| Immutable core | review of the diff: no `let`, no mutation of shared values in `src`; the only classes are Effect Schema tagged classes and errors (immutable values the cell contract requires) | R19 |
 | Packs | CE pack resolver: 4 roots, 0 errors | R4 |
 | No locale APIs | `git grep -nE 'toLocale|localeCompare|Intl\\.' -- packages/api-extractor/src` prints nothing | R5 |
 
@@ -274,7 +294,8 @@ PR1 units are implementation-ready; PR2-PR6 are scoped here and refined at the s
 
 - U1-U6 verified on the PR head; CI green on that exact SHA.
 - The PR body lists every blocked generic job with its O1/P1 blocker, and every review finding with its disposition.
-- No `@systemfsoftware/*` dependency, no copied toolchain file, no secrets.
+- Every `@systemfsoftware/*` dependency installs from `.sfs-deps` built by this repository's flake at the pinned systemfsoftware commit; no copied toolchain file, no secrets.
+- The PR body lists the shared `.sfs-deps` action as an O1 candidate and the cold `sfs-deps` job time.
 
 ## Document Review Dispositions
 
@@ -287,7 +308,7 @@ Report-only `ce-doc-review` (coherence, feasibility, scope-guardian), dispositio
 | 3 | Verification omits R7 and R19 (coherence P2) | Applied in part: R7 and R19 added to the Verification Contract. Rejected the suggested stamp-presence test: the stamps are required schema fields, so the test would restate the schema. |
 | 4 | U1 omits the lockfile `--frozen-lockfile` needs (coherence P2; feasibility P1) | Applied: `pnpm-lock.yaml` in U1's files, committed in PR1. |
 | 5 | "#552's differential test is kept" vs a rebuilt renderer (coherence P3) | Applied: KTD10 says the live upstream run is kept and the lane is written fresh. |
-| 6 | PR6 cell adoption has no owning unit (coherence P3) | Applied: U11 moves the verdict pipeline onto cells. |
+| 6 | PR6 cell adoption has no owning unit (coherence P3) | Superseded by the root ruling of 2026-10-10: PR1 builds the verdict pipeline on cells (KTD14), so no later unit owns the move. |
 | 7 | No checker-free source for analyzer warnings in the report (feasibility P1) | Applied: KTD13, a syntactic resolver over declaration files with fallback routing for checker-only messages. |
 | 8 | Code-unit model order conflicts with upstream's report order (feasibility P2) | Applied: KTD4 scopes code-unit order to the model and JSON; KTD10 ports upstream's sort key for the report. |
 | 9 | Benchmark corpus has no isolatedDeclarations-clean package (feasibility P2) | Applied: KTD11 adds this repository's own package, made clean in PR2, as the fast path's real input. Rejected vendoring a package for it. |
