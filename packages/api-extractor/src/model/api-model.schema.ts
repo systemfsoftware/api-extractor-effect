@@ -1,4 +1,4 @@
-import { Order, Schema } from 'effect'
+import { Array as Arr, Order, Schema } from 'effect'
 import { canonicalKey, type Json } from '../canonical-json.schema.ts'
 import { Member, Signature, TypeExpr, TypeParameter } from './type-expr.schema.ts'
 
@@ -160,11 +160,13 @@ export const decodeApiModel: (input: Json) => ApiModel = Schema.decodeUnknownSyn
 export const encodeApiModel: (model: ApiModel) => Json = Schema.encodeSync(ApiModel)
 
 /** By name; items sharing a name (a value beside a type) by kind, then by content, so input order never shows. */
-const byName = <A extends ApiItem>(values: ReadonlyArray<A>): ReadonlyArray<A> =>
-  [...values].sort(
-    (left, right) =>
-      Order.String(left.name, right.name) || Order.String(left.kind, right.kind) || Order.String(canonicalKey(left), canonicalKey(right)),
-  )
+const itemOrder: Order.Order<ApiItem> = Order.combineAll([
+  Order.mapInput(Order.String, (item: ApiItem) => item.name),
+  Order.mapInput(Order.String, (item: ApiItem) => item.kind),
+  Order.mapInput(Order.String, canonicalKey),
+])
+
+const byName = <A extends ApiItem>(values: ReadonlyArray<A>): ReadonlyArray<A> => Arr.sort(values, itemOrder)
 
 const sortItem = (item: ApiItem): ApiItem =>
   item.kind === 'namespace' ? { ...item, items: byName(item.items.map(sortItem)) } : item
@@ -178,5 +180,8 @@ const sortEntryPoint = (entryPoint: EntryPoint): EntryPoint => ({
 /** Orders entry points, exports and locals by code unit, so equal surfaces serialise to equal bytes. */
 export const sortModel = (model: ApiModel): ApiModel => ({
   ...model,
-  entryPoints: [...model.entryPoints.map(sortEntryPoint)].sort((left, right) => Order.String(left.path, right.path)),
+  entryPoints: Arr.sort(
+    model.entryPoints.map(sortEntryPoint),
+    Order.mapInput(Order.String, (entryPoint: EntryPoint) => entryPoint.path),
+  ),
 })

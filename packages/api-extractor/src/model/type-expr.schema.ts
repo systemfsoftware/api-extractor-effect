@@ -1,4 +1,4 @@
-import { Order, Schema } from 'effect'
+import { Array as Arr, Order, Schema } from 'effect'
 import { canonicalKey, type Json } from '../canonical-json.schema.ts'
 
 /** TypeScript keyword types the model names directly. */
@@ -191,26 +191,33 @@ export const TypeExpr: Schema.Codec<TypeExpr> = Schema.suspend((): Schema.Codec<
 const never: TypeExpr = { kind: 'keyword', name: 'never' }
 const unknown: TypeExpr = { kind: 'keyword', name: 'unknown' }
 
-const byKey = <A extends Json>(values: ReadonlyArray<A>): ReadonlyArray<A> => {
-  const keyed = values.map((value) => [canonicalKey(value), value] as const)
-  const unique = new Map(keyed)
-  return [...unique.keys()].sort(Order.String).map((key) => unique.get(key) as A)
-}
+const byKey = <A extends Json>(values: ReadonlyArray<A>): ReadonlyArray<A> =>
+  Array.from(new Map(values.map((value) => [canonicalKey(value), value] as const)))
+    .sort(([left], [right]) => Order.String(left, right))
+    .map(([, value]) => value)
 
 const flatten = (kind: 'union' | 'intersection', members: ReadonlyArray<TypeExpr>): ReadonlyArray<TypeExpr> =>
   members.flatMap((member) => (member.kind === kind ? member.members : [member]))
 
-const setType = (kind: 'union' | 'intersection', members: ReadonlyArray<TypeExpr>): TypeExpr => {
-  const normalised = byKey(flatten(kind, members.map(normaliseType)))
-  if (normalised.length === 1) return normalised[0] as TypeExpr
-  if (normalised.length === 0) return kind === 'union' ? never : unknown
-  return { kind, members: normalised }
-}
+/** What an empty set type means: no member admits nothing, no constraint admits anything. */
+const EMPTY_SET: Readonly<Record<'union' | 'intersection', TypeExpr>> = { union: never, intersection: unknown }
+
+const setType = (kind: 'union' | 'intersection', members: ReadonlyArray<TypeExpr>): TypeExpr =>
+  Arr.match(byKey(flatten(kind, members.map(normaliseType))), {
+    onEmpty: () => EMPTY_SET[kind],
+    onNonEmpty: (normalised): TypeExpr => (normalised.length === 1 ? Arr.headNonEmpty(normalised) : { kind, members: normalised }),
+  })
+
+const constraintOf = (parameter: TypeParameter): Pick<TypeParameter, 'constraint'> =>
+  parameter.constraint === undefined ? {} : { constraint: normaliseType(parameter.constraint) }
+
+const defaultOf = (parameter: TypeParameter): Pick<TypeParameter, 'default'> =>
+  parameter.default === undefined ? {} : { default: normaliseType(parameter.default) }
 
 const normaliseTypeParameter = (parameter: TypeParameter): TypeParameter => ({
   name: parameter.name,
-  ...(parameter.constraint === undefined ? {} : { constraint: normaliseType(parameter.constraint) }),
-  ...(parameter.default === undefined ? {} : { default: normaliseType(parameter.default) }),
+  ...constraintOf(parameter),
+  ...defaultOf(parameter),
 })
 
 export const normaliseSignature = (signature: Signature): Signature => ({

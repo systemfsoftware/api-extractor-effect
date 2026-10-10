@@ -27,15 +27,18 @@ export const ChannelType: Schema.Codec<ChannelType> = Schema.Struct({
   channels: Schema.Array(Schema.Struct({ name: Schema.String, variance: Variance, default: Schema.optionalKey(TypeExpr) })),
 })
 
+/** An `out` slot keeps the enclosing position, an `in` slot flips it, and `both` stays `both`. */
+const COMPOSED: Readonly<Record<Position, Readonly<Record<Variance, Position>>>> = {
+  in: { in: 'out', out: 'in' },
+  out: { in: 'in', out: 'out' },
+  both: { in: 'both', out: 'both' },
+}
+
 /** Composes an enclosing position with the variance of a slot inside it. */
 export const compose: {
   (variance: Variance): (position: Position) => Position
   (position: Position, variance: Variance): Position
-} = Function.dual(
-  2,
-  (position: Position, variance: Variance): Position =>
-    position === 'both' ? 'both' : variance === 'out' ? position : position === 'in' ? 'out' : 'in',
-)
+} = Function.dual(2, (position: Position, variance: Variance): Position => COMPOSED[position][variance])
 
 /** A function parameter sits in the opposite position to its function. */
 export const flip = (position: Position): Position => compose(position, 'in')

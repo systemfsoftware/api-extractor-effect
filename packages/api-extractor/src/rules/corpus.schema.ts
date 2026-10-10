@@ -1,4 +1,4 @@
-import { Array as Arr, Function, Order, Schema } from 'effect'
+import { Array as Arr, Function, Option, Order, Schema } from 'effect'
 import type { Json } from '../canonical-json.schema.ts'
 import { type Change, ChangeKind } from '../diff/change.schema.ts'
 import { Direction } from '../diff/direction.schema.ts'
@@ -68,14 +68,19 @@ export const UNCLASSIFIED: Rule = {
   next_action: 'Declare a major bump, or add a rule for this change to the corpus.',
 }
 
-const specificity = (rule: Rule): number =>
-  [rule.match.position, rule.match.channel, rule.match.direction].filter((field) => field !== undefined).length
+/** The optional fields a rule may narrow its match with. */
+const MATCH_FIELDS = ['position', 'channel', 'direction'] as const
+
+const specificity = (rule: Rule): number => MATCH_FIELDS.filter((field) => rule.match[field] !== undefined).length
+
+/** Most specific first; the sort is stable, so corpus order breaks ties. */
+const bySpecificity: Order.Order<Rule> = Order.flip(Order.mapInput(Order.Number, specificity))
+
+/** A field a rule leaves out matches anything. */
+const agrees = (stated: string | undefined, actual: string | undefined): boolean => stated === undefined || stated === actual
 
 const matches = (rule: Rule, change: Change): boolean =>
-  rule.match.kind === change.kind &&
-  (rule.match.position === undefined || rule.match.position === change.position) &&
-  (rule.match.channel === undefined || rule.match.channel === change.channel) &&
-  (rule.match.direction === undefined || rule.match.direction === change.direction)
+  rule.match.kind === change.kind && MATCH_FIELDS.every((field) => agrees(rule.match[field], change[field]))
 
 /** The most specific matching rule; a corpus `ambiguitiesOf` accepts never has two equally specific ones. */
 export const classify: {
@@ -84,14 +89,16 @@ export const classify: {
 } = Function.dual(
   2,
   (corpus: RuleCorpus, change: Change): Rule =>
-    corpus.rules
-      .filter((rule) => matches(rule, change))
-      .reduce<Rule | undefined>((best, rule) => (best === undefined || specificity(rule) > specificity(best) ? rule : best), undefined) ??
-    UNCLASSIFIED,
+    Option.getOrElse(
+      Arr.head(Arr.sort(
+        corpus.rules.filter((rule) => matches(rule, change)),
+        bySpecificity,
+      )),
+      () => UNCLASSIFIED,
+    ),
 )
 
-const matchKey = (match: RuleMatch): string =>
-  [match.kind, match.position ?? '*', match.channel ?? '*', match.direction ?? '*'].join('|')
+const matchKey = (match: RuleMatch): string => [match.kind, ...MATCH_FIELDS.map((field) => match[field] ?? '*')].join('|')
 
 const repeated = (keys: ReadonlyArray<string>, describe: (key: string) => string): ReadonlyArray<string> =>
   Object.entries(Arr.groupBy(keys, (key) => key))
@@ -100,9 +107,10 @@ const repeated = (keys: ReadonlyArray<string>, describe: (key: string) => string
     .sort(Order.String)
 
 /** Some change matches both rules: same kind, and every field both rules state agrees. */
+const compatible = (left: string | undefined, right: string | undefined): boolean => [left, right].includes(undefined) || left === right
+
 const overlap = (left: RuleMatch, right: RuleMatch): boolean =>
-  left.kind === right.kind &&
-  (['position', 'channel', 'direction'] as const).every((field) => left[field] === undefined || right[field] === undefined || left[field] === right[field])
+  left.kind === right.kind && MATCH_FIELDS.every((field) => compatible(left[field], right[field]))
 
 /** Pairs of rules that tie on some change: they overlap and neither is more specific, so corpus order would decide. */
 const ties = (rules: ReadonlyArray<Rule>): ReadonlyArray<string> =>
