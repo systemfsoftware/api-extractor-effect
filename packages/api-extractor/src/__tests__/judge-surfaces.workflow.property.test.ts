@@ -1,13 +1,13 @@
 import { describe } from '@systemfsoftware/vitest'
-import { Order, Result, Schema } from 'effect'
-import { canonicalJson, type Json } from './canonical-json.schema.ts'
-import { judgeSurfaces } from './judge-surfaces.workflow.ts'
-import { ApiItem, ApiModel, type TypeAliasItem } from './model/api-model.schema.ts'
-import { type Signature, TypeExpr } from './model/type-expr.schema.ts'
-import { type Bump, maxBump, type Rule, type RuleCorpus, UNCLASSIFIED } from './rules/corpus.schema.ts'
-import { defaultCorpus } from './rules/default-corpus.ts'
-import { bumpOf } from './rules/finding.schema.ts'
-import { type AmbiguousRuleCorpus, CompareSurfaces, type Verdict } from './verdict.schema.ts'
+import { Array as Arr, Option, Order, Result, Schema } from 'effect'
+import { canonicalJson, type Json } from '../canonical-json.schema.ts'
+import { judgeSurfaces } from '../judge-surfaces.workflow.ts'
+import { ApiItem, ApiModel, type TypeAliasItem } from '../model/api-model.schema.ts'
+import { type Signature, TypeExpr } from '../model/type-expr.schema.ts'
+import { type Bump, maxBump, type Rule, type RuleCorpus, UNCLASSIFIED } from '../rules/corpus.schema.ts'
+import { defaultCorpus } from '../rules/default-corpus.ts'
+import { bumpOf } from '../rules/finding.schema.ts'
+import { type AmbiguousRuleCorpus, CompareSurfaces, type Verdict } from '../verdict.schema.ts'
 import {
   alias,
   effect,
@@ -23,7 +23,8 @@ import {
   union,
   voidType,
   withExport,
-} from '../tests/__fixtures__/surfaces.ts'
+} from '../../tests/__fixtures__/surfaces.ts'
+import { tags } from '../../tests/__fixtures__/verdict-draws.schema.ts'
 
 type Judged = Result.Result<Verdict, AmbiguousRuleCorpus>
 const judge = (before: ApiModel, after: ApiModel, corpus: RuleCorpus = defaultCorpus): Judged =>
@@ -46,7 +47,6 @@ const grown = (first: string, rest: ReadonlyArray<string>) => {
   const before = labels.map((label) => ref(`Tag${label}`))
   return { smaller: union(before), larger: union([...before, ref(`Tag${labels.join('')}+`)]) }
 }
-const tags = [Schema.String, Schema.Array(Schema.String)] as const
 
 const target = (surrounding: ApiModel, item: ApiItem, locals: ReadonlyArray<TypeAliasItem> = []) =>
   rootedWith(surrounding, [item], locals)
@@ -56,7 +56,7 @@ const at = (path: string) => `.:${TARGET}/${path}`
 
 describe('verdict on Effect channels', (it) => {
   it.prop(
-    'AE1: a widened error channel in a return type is major E_WIDENED at the return type',
+    '∀m_EffectErrorReturn_⊆Widened',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -66,13 +66,15 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'one rule firing at several exports is one finding listing every location once, in code-unit order',
+    '∀e_Finding_≡MergedLocationsOnce',
     { of: [ApiModel, TypeExpr, ...tags, Schema.String, Schema.Array(Schema.String)], subject: judge },
     (judge, [surrounding, value, first, rest, one, others]) => {
       const { smaller, larger } = grown(first, rest)
       const names = [one, `${one}+`, ...others].map((label, index) => `fn${index}:${label}`)
-      const exportsOf = (failure: TypeExpr) =>
-        rootedWith(surrounding, names.map((name) => ({ ...returning(effect(value, failure)), name })))
+      const exportsOf = (failure: TypeExpr) => {
+        const signatures = [signature([], effect(value, failure))]
+        return rootedWith(surrounding, names.map((name): ApiItem => ({ kind: 'function', name, signatures })))
+      }
       return same(
         located(judge(exportsOf(smaller), exportsOf(larger))),
         verdict('major', ['E_WIDENED', names.map((name) => `.:${name}/signature[0]/returns/E`).sort(Order.String)]),
@@ -81,7 +83,7 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'removing a tagged error from a returned error channel is major E_TAG_REMOVED',
+    '∀m_EffectErrorReturn_≡TagRemoved',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -91,7 +93,7 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'AE2: a widened error channel in a parameter is minor E_WIDENED_IN_INPUT',
+    '∀m_EffectErrorInput_⊆Widened',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -101,7 +103,7 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'a callback parameter flips position twice: its error channel is an output again',
+    '∀m_CallbackError_⊆Widened',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -111,7 +113,7 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'sees a widened error through a local type alias at the function that uses it',
+    '∀m_LocalAliasUse_⊆Widened',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -122,7 +124,7 @@ describe('verdict on Effect channels', (it) => {
   )
 
   it.prop(
-    'reads Layer output services contravariantly: a removed service is major, an added one minor',
+    '∀m_LayerOutput_≡Contravariant',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, failure, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -152,7 +154,7 @@ describe('verdict on dual APIs', (it) => {
   })
 
   it.prop(
-    'AE3: losing either call form of a dual is major DUAL_FORM_REMOVED',
+    '∀m_DualForm_≡FormRemoved',
     { of: [ApiModel, TypeExpr, TypeExpr, Schema.Boolean], subject: judge },
     (judge, [surrounding, value, failure, dropDataLast]) => {
       const { dataLast, dataFirst } = dual(value, failure)
@@ -162,7 +164,7 @@ describe('verdict on dual APIs', (it) => {
   )
 
   it.prop(
-    'adding the missing call form of a dual is minor DUAL_FORM_ADDED',
+    '∀m_DualForm_≡FormAdded',
     { of: [ApiModel, TypeExpr, TypeExpr], subject: judge },
     (judge, [surrounding, value, failure]) => {
       const { dataLast, dataFirst } = dual(value, failure)
@@ -174,7 +176,7 @@ describe('verdict on dual APIs', (it) => {
 
 describe('verdict on exports and parameters', (it) => {
   it.prop(
-    'a removed export is major and an added export minor',
+    '∀x_Export_≡RemovedAndAdded',
     { of: [ApiModel, ApiItem], subject: judge },
     (judge, [surrounding, item]) => {
       const empty = rootedWith(surrounding, [])
@@ -187,7 +189,7 @@ describe('verdict on exports and parameters', (it) => {
   )
 
   it.prop(
-    'a new required parameter is major; a new optional one is minor',
+    '∀x_Parameter_≡AddedRequiredOrOptional',
     { of: [ApiModel, TypeExpr, Schema.Boolean], subject: judge },
     (judge, [surrounding, value, optional]) => {
       const result = judge(target(surrounding, returning(value)), target(surrounding, functionItem(signature([parameter('extra', value, optional)], value))))
@@ -196,7 +198,7 @@ describe('verdict on exports and parameters', (it) => {
   )
 
   it.prop(
-    'an entry point removed is major and one added is minor',
+    '∀x_EntryPoint_≡RemovedAndAdded',
     { of: [ApiModel], subject: judge },
     (judge, [model]) => {
       const extra = { path: `${model.entryPoints.map((entry) => entry.path).join('')}/extra`, items: [], locals: [] }
@@ -211,7 +213,7 @@ describe('verdict on exports and parameters', (it) => {
 
 describe('verdict on Effect types spelled with defaulted channels', (it) => {
   it.prop(
-    'AE1 and AE2 hold for the two-argument spelling Effect<A, E>',
+    '∀m_TwoArgumentEffect_≡ChannelMapping',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -228,7 +230,7 @@ describe('verdict on Effect types spelled with defaulted channels', (it) => {
   )
 
   it.prop(
-    'a left-out channel is its default: Effect<A> equals Effect<A, never, never>, and gaining an error widens E',
+    '∀m_DefaultedChannel_≡NeverDefault',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { larger } = grown(first, rest)
@@ -241,7 +243,7 @@ describe('verdict on Effect types spelled with defaulted channels', (it) => {
   )
 
   it.prop(
-    'reads a two-argument Layer by its channels: a removed service is major',
+    '∀m_TwoArgumentLayer_≡ServiceRemoved',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, failure, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -260,7 +262,7 @@ describe('verdict through local type aliases', (it) => {
   })
 
   it.prop(
-    'an alias reached through a type-parameter default is seen as if written in place',
+    '∀m_ParameterDefaultAlias_≡InPlace',
     { of: [ApiModel, ...tags, Schema.Boolean], subject: judge },
     (judge, [surrounding, first, rest, output]) => {
       const { smaller, larger } = grown(first, rest)
@@ -274,7 +276,7 @@ describe('verdict through local type aliases', (it) => {
   )
 
   it.prop(
-    'a changed alias in a type-parameter constraint changes the type parameters',
+    '∀m_ParameterConstraintAlias_≡Changed',
     { of: [ApiModel, ...tags], subject: judge },
     (judge, [surrounding, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -290,7 +292,7 @@ describe('verdict on a value and a type sharing a name', (it) => {
   const type = (body: TypeExpr): ApiItem => ({ kind: 'typeAlias', name: TARGET, typeParameters: [], type: body })
 
   it.prop(
-    'has no changes against itself, whatever order the two items come in',
+    '∀m_NameValueTypeOrder_≡Unchanged',
     { of: [ApiModel, TypeExpr], subject: judge },
     (judge, [surrounding, body]) => {
       const pair = [value(ref('Schema', body)), type(body)]
@@ -299,7 +301,7 @@ describe('verdict on a value and a type sharing a name', (it) => {
   )
 
   it.prop(
-    'judges a change to one of them as that item alone would be judged',
+    '∀m_NameValueTypePair_≡ItemAlone',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, body, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -311,7 +313,7 @@ describe('verdict on a value and a type sharing a name', (it) => {
   )
 
   it.prop(
-    'a value that becomes a function beside an unchanged type is one EXPORT_KIND_CHANGED',
+    '∀x_ExportKind_≡KindChanged',
     { of: [ApiModel, TypeExpr], subject: judge },
     (judge, [surrounding, body]) => {
       const result = judge(rootedWith(surrounding, [value(body), type(body)]), rootedWith(surrounding, [returning(body), type(body)]))
@@ -322,7 +324,7 @@ describe('verdict on a value and a type sharing a name', (it) => {
 
 describe('verdict on exports sharing a name and a kind', (it) => {
   it.prop(
-    'has no changes between two models storing them in either order',
+    '∀m_SameKindPair_≡Unchanged',
     { of: [ApiModel, TypeExpr, TypeExpr], subject: judge },
     (judge, [surrounding, first, second]) => {
       const pair = [returning(first), returning(second)]
@@ -331,7 +333,7 @@ describe('verdict on exports sharing a name and a kind', (it) => {
   )
 
   it.prop(
-    'judges a change to one of them as that export alone would be judged, whatever order they are stored in',
+    '∀m_SameKindPair_≡ItemAlone',
     { of: [ApiModel, TypeExpr, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, beside, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -344,11 +346,11 @@ describe('verdict on exports sharing a name and a kind', (it) => {
 })
 
 describe('verdict invariants', (it) => {
-  it.prop('a model has no changes against itself', { of: [ApiModel], subject: judge }, (judge, [model]) =>
+  it.prop('∀m_ApiModel_≡SelfUnchanged', { of: [ApiModel], subject: judge }, (judge, [model]) =>
     same(located(judge(model, model)), verdict('none')))
 
   it.prop(
-    'the verdict is the highest finding bump, and an extra change never lowers it',
+    '∀m_Verdict_≡HighestBump',
     { of: [ApiModel, ApiModel, TypeExpr], subject: judge },
     (judge, [before, after, value]) => {
       const result = judge(rooted(before), rooted(after))
@@ -363,7 +365,7 @@ describe('verdict invariants', (it) => {
   )
 
   it.prop(
-    'AE4: a change no rule covers is reported major UNCLASSIFIED_CHANGE, never dropped',
+    '∀m_UnclassifiedChange_≡MajorNeverDropped',
     { of: [ApiModel, TypeExpr, ...tags], subject: judge },
     (judge, [surrounding, value, first, rest]) => {
       const { smaller, larger } = grown(first, rest)
@@ -377,17 +379,20 @@ describe('verdict invariants', (it) => {
   const withRule = (extra: Rule): RuleCorpus => ({ ...defaultCorpus, rules: [...defaultCorpus.rules, extra] })
 
   it.prop(
-    'refuses a corpus in which two rules match the same change, naming the match',
+    '∀c_Corpus_⊥TiedMatch',
     { of: [ruleIndex, ApiModel], subject: judge },
-    (judge, [index, model]) => {
-      const rule = defaultCorpus.rules[index]!
-      const match = [rule.match.kind, rule.match.position ?? '*', rule.match.channel ?? '*', rule.match.direction ?? '*'].join('|')
-      return same(located(judge(model, model, withRule({ ...rule, rule_id: `${rule.rule_id}-copy` }))), refused(`two rules match ${match}`))
-    },
+    (judge, [index, model]) =>
+      Option.match(Arr.get(defaultCorpus.rules, index), {
+        onNone: () => false,
+        onSome: (rule) => {
+          const match = [rule.match.kind, rule.match.position ?? '*', rule.match.channel ?? '*', rule.match.direction ?? '*'].join('|')
+          return same(located(judge(model, model, withRule({ ...rule, rule_id: `${rule.rule_id}-copy` }))), refused(`two rules match ${match}`))
+        },
+      }),
   )
 
   it.prop(
-    'refuses a corpus in which two rules tie on some change without sharing a match',
+    '∀c_Corpus_⊥TiedOverlap',
     { of: [ApiModel], subject: judge },
     (judge, [model]) => {
       const byPosition = { ...UNCLASSIFIED, rule_id: 'by-position', match: { kind: 'export-added' as const, position: 'out' as const } }
@@ -398,15 +403,18 @@ describe('verdict invariants', (it) => {
   )
 
   it.prop(
-    'refuses a corpus that repeats a rule id, or takes the id unclassified changes are reported under',
+    '∀c_Corpus_⊥RepeatedRuleId',
     { of: [ruleIndex, ApiModel], subject: judge },
-    (judge, [index, model]) => {
-      const rule = defaultCorpus.rules[index]!
-      const apart = { ...rule, match: { kind: 'export-added' as const, position: 'out' as const, channel: 'Q', direction: 'changed' as const } }
-      return same(
-        [located(judge(model, model, withRule({ ...apart, rule_id: rule.rule_id }))), located(judge(model, model, withRule({ ...apart, rule_id: UNCLASSIFIED.rule_id })))],
-        [refused(`duplicate rule id ${rule.rule_id}`), refused(`rule id ${UNCLASSIFIED.rule_id} is reserved for unclassified changes`)],
-      )
-    },
+    (judge, [index, model]) =>
+      Option.match(Arr.get(defaultCorpus.rules, index), {
+        onNone: () => false,
+        onSome: (rule) => {
+          const apart = { ...rule, match: { kind: 'export-added' as const, position: 'out' as const, channel: 'Q', direction: 'changed' as const } }
+          return same(
+            [located(judge(model, model, withRule({ ...apart, rule_id: rule.rule_id }))), located(judge(model, model, withRule({ ...apart, rule_id: UNCLASSIFIED.rule_id })))],
+            [refused(`duplicate rule id ${rule.rule_id}`), refused(`rule id ${UNCLASSIFIED.rule_id} is reserved for unclassified changes`)],
+          )
+        },
+      }),
   )
 })
