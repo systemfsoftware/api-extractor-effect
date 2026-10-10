@@ -5,7 +5,7 @@ date: 2026-10-10
 topic: effect-api-extractor
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
-supersedes: docs/plans/2026-10-10-0517-feat-effect-api-extractor-plan.md
+supersedes: docs/plans/2026-10-10-0846-feat-effect-api-extractor-plan.md
 execution: code
 ---
 
@@ -261,7 +261,9 @@ Each requirement names the Done item it serves.
   - `oxlint.config.ts` extends `@systemfsoftware/oxlint-config-recommended`.
   - `.attw.json` keeps #552's ignore rules (`no-resolution`, `cjs-resolves-to-esm`), since the package is ESM-only.
 
-  New devDependencies come only from #552's list, the family tarballs, turbo (KTD17), and `@microsoft/api-extractor` 7.59.1, which `tsdown-config` requires as a peer (pre-approved). `oxlint-tsgolint` arrives as `oxlint-config-recommended`'s peer, as it did in #552. The family's `api:check` (upstream api-extractor on this package) is not added: PR4 owns this repository's own report. Lint fixes to existing `src` must not change output bytes. Governs R3, R19.
+  New devDependencies come only from #552's list, the family tarballs, turbo (KTD17), and `@microsoft/api-extractor` 7.59.1, which `tsdown-config` requires as a peer (pre-approved). `oxlint-tsgolint` arrives as `oxlint-config-recommended`'s peer, as it did in #552. `@effect/tsgo` 0.50.0 is a root devDependency whose `prepare` script (`effect-tsgo patch --oxlint`) loads the preset's `effecttsgo` plugin (root ruling 2026-10-10). The e2e app adds `@effect/platform-node` (in #552's dependencies) and `effect-gherkin-spec` (a family tarball). The family's `api:check` (upstream api-extractor on this package) is not added: PR4 owns this repository's own report. Governs R3, R19.
+
+  The preset is conformed to inside PR2, never overridden (root ruling 2026-10-10: no rule `off`, ignore pattern or disable comment; a rule that forbids correct code is reported as a preset defect). Conformance restructures `src` without changing output bytes: decision code moves into `*.schema.ts` modules beside its types (`make-body-purity`), every `src` function holds one decision (`complexity` max 2), and casts give way to schema guards and `Match`. Tests follow the preset's lanes: workflow laws in `src/__tests__/*.workflow.property.test.ts`, behaviour in `tests/*.integration.test.ts` features on `effect-gherkin-spec` through the published package, and the e2e locale proof as a feature that spawns the probe.
 
 ### Assumptions challenged (destructive review, Edge-First lens)
 
@@ -299,7 +301,7 @@ Rotated from Inversion because PR2's objective joins independent work: flake inp
 
 Radical alternative considered: skip reusable-checks and run lint, typecheck, build and test as caller jobs, like PR1's `Product tests`. Rejected: those are generic jobs, which the session-settled rule sends to the shared reusable workflow whenever one exists.
 
-PR2 proposes no tests. Each unit is configuration, proven by builds and the CI run, and the test-layer gate admits nothing from it.
+PR2 adds no new behaviour tests. Each unit is configuration, proven by builds and the CI run; the lint conformance moves the existing tests into the preset's lanes and keeps what each proves.
 
 ---
 
@@ -388,11 +390,11 @@ PR1 and PR2 units are implementation-ready; PR3-PR6 are scoped here and refined 
 
 - **Goal:** build, lint, typecheck and test run through turbo on the family configs.
 - **Requirements:** R3, R19; KTD17, KTD21.
-- **Files:** `turbo.json`, root `package.json` (scripts, `turbo` devDependency), `pnpm-workspace.yaml` (`turbo: 2.10.12`), `packages/api-extractor/{package.json,tsdown.config.ts,tsconfig.build.json,oxlint.config.ts,vitest.config.ts,stryker.config.ts,.attw.json}`, `apps/api-extractor-e2e/{vitest.config.ts,oxlint.config.ts,locale-determinism.e2e.test.ts}` (the spawn's Node arguments), and any `src` lint fix.
-- **Execution note:** lint fixes are refactors. `apps/api-extractor-e2e/host-digest.ts` must still print sha256 `e4478f035b5334cb722f2d4848046e027c33a2b7a74083dc0108bdedf1ee6da2`.
-- **Approach:** KTD21. Vitest resolves the package's source through the `@systemfsoftware/source` condition (`vitest-config`'s `sourceResolveConditions`), so tests need no build. Two entry points run under plain Node, whose default conditions would resolve `dist/mod.mjs`: the locale law's spawned `probe.ts` and CI's `node host-digest.ts`. Both pass `--conditions=@systemfsoftware/source`, so neither needs a build. Typecheck depends on `^build` only if the base tsconfig sets no matching `customConditions`.
-- **Test expectation:** none. These are configuration files, and the existing 148 package tests plus the e2e law must stay green under the new configs.
-- **Verification:** `pnpm build`, `pnpm lint`, `pnpm typecheck` and `pnpm test` pass locally. `nix run .#attw -- --pack packages/api-extractor` passes. The host digest is unchanged. No stryker command runs.
+- **Files:** `turbo.json`, root `package.json` (scripts, `turbo` and `@effect/tsgo` devDependencies), `pnpm-workspace.yaml` (`turbo: 2.10.12`), `packages/api-extractor/{package.json,tsdown.config.ts,tsconfig.build.json,oxlint.config.ts,vitest.config.ts,stryker.config.ts,.attw.json}`, `apps/api-extractor-e2e/{package.json,vitest.config.ts,oxlint.config.ts,tsconfig.json}`, and the lint conformance of `src`, `tests` and the e2e app (KTD21).
+- **Execution note:** lint fixes are refactors, in separate commits by group (structural, complexity, test discipline, e2e). `apps/api-extractor-e2e/host-digest.ts` must still print sha256 `e4478f035b5334cb722f2d4848046e027c33a2b7a74083dc0108bdedf1ee6da2`.
+- **Approach:** KTD21. Vitest resolves the package's source through the `@systemfsoftware/source` condition (`vitest-config`'s `sourceResolveConditions`), so tests need no build. Two entry points run under plain Node, whose default conditions would resolve `dist/mod.mjs`: the locale feature's spawned `probe.ts` and CI's `node host-digest.ts`. Both pass `--conditions=@systemfsoftware/source`, so neither needs a build. Typecheck depends on `^build` only if the base tsconfig sets no matching `customConditions`.
+- **Test expectation:** no new behaviour. The existing package tests and the e2e locale proof move into the preset's lanes, and each keeps what it proves; the decode/encode round-trip law is left to the generated schema-laws suite.
+- **Verification:** `pnpm build`, `pnpm lint` (0 diagnostics), `pnpm typecheck` and `pnpm test` pass locally. `nix run .#attw -- --pack packages/api-extractor` passes. The host digest is unchanged. No stryker command runs.
 
 ### U14. Flake outputs for release and CI tools (PR2)
 
