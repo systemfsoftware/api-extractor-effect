@@ -4,7 +4,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['*.e2e.test.ts'],
+    include: ['tests/**/*.integration.test.ts'],
     testTimeout: 120_000,
   },
 })
