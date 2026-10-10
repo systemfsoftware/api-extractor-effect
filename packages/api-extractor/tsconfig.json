@@ -11,12 +11,16 @@
     "types": [
       "node"
     ],
+    "customConditions": ["@systemfsoftware/source"],
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
   "include": [
     "src",
     "tests",
+    "oxlint.config.ts",
+    "stryker.config.ts",
+    "tsdown.config.ts",
     "vitest.config.ts"
   ]
 }

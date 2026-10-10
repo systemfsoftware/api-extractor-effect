@@ -1,8 +1,10 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
+  ...sharedConfig,
   test: {
-    include: ['*.e2e.test.ts'],
+    ...sharedConfig.test,
+    include: ['tests/**/*.integration.test.ts'],
     testTimeout: 120_000,
   },
 })

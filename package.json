@@ -1,12 +1,20 @@
 {
   "name": "api-extractor-effect",
   "private": true,
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.9.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "test": "pnpm --recursive test",
-    "typecheck": "pnpm --recursive typecheck"
+    "prepare": "effect-tsgo patch --oxlint --no-typescript --skip-missing",
+    "bootstrap": "sandbox -- pnpm install --frozen-lockfile && sandbox -- pnpm run prepare",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "turbo": "catalog:"
   }
 }

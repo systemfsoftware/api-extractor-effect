@@ -1,32 +1,51 @@
-import { describe } from '@systemfsoftware/vitest'
-import { Verdict } from '../src/mod.ts'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Verdict } from '@systemfsoftware/api-extractor'
+import { Effect, Layer } from 'effect'
 
-const { ChangeKind, Direction, Position, classify, defaultCorpus } = Verdict
+const Feature = makeFeature({ it })
 
-describe('the shipped rule corpus', (it) => {
-  it('classifies every change kind the diff emits, so none falls through to UNCLASSIFIED_CHANGE', function* ({ expect }) {
-    yield* expect(ChangeKind.literals.filter((kind) => !defaultCorpus.rules.some((rule) => rule.match.kind === kind))).toEqual([])
-  })
-
-  it('has no dead rule: each one is the classification of some change', function* ({ expect }) {
-    const channels = [undefined, ...defaultCorpus.channelTypes.flatMap((type) => type.channels.map((slot) => slot.name))]
-    const directions = [undefined, ...Direction.literals]
-    const changes = ChangeKind.literals.flatMap((kind) =>
-      Position.literals.flatMap((position) =>
-        channels.flatMap((channel) =>
-          directions.map(
-            (direction): Verdict.Change => ({
-              kind,
-              location: '.:x',
-              position,
-              ...(channel === undefined ? {} : { channel }),
-              ...(direction === undefined ? {} : { direction }),
-            }),
-          ),
+Feature('The shipped rule corpus classifies every change and keeps no dead rule')
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'every change kind the diff emits is classified by some rule',
+      Gherkin.Do.pipe(
+        Given('the shipped rule corpus')('corpus', () => Effect.sync(() => Verdict.defaultCorpus)),
+        When('each declared change kind is looked up in the corpus')('unclassified', (scope) =>
+          Effect.sync(() => Verdict.ChangeKind.literals.filter((kind) => !scope.corpus.rules.some((rule) => rule.match.kind === kind))),
         ),
+        Then('no change kind falls through to the unclassified rule')((scope, expect) => expect(scope.unclassified).toEqual([])),
       ),
     )
-    const fired = new Set(changes.map((change) => classify(defaultCorpus, change).rule_id))
-    yield* expect(defaultCorpus.rules.map((rule) => rule.rule_id).filter((id) => !fired.has(id))).toEqual([])
+
+    scenario(
+      'every shipped rule classifies at least one change',
+      Gherkin.Do.pipe(
+        Given('the shipped rule corpus')('corpus', () => Effect.sync(() => Verdict.defaultCorpus)),
+        When('every change in the corpus vocabulary is classified')('dead', (scope) =>
+          Effect.sync(() => {
+            const channels = [undefined, ...scope.corpus.channelTypes.flatMap((type) => type.channels.map((slot) => slot.name))]
+            const directions = [undefined, ...Verdict.Direction.literals]
+            const changes: ReadonlyArray<Verdict.Change> = Verdict.ChangeKind.literals.flatMap((kind) =>
+              Verdict.Position.literals.flatMap((position) =>
+                channels.flatMap((channel) =>
+                  directions.map(
+                    (direction): Verdict.Change => ({
+                      kind,
+                      location: '.:x',
+                      position,
+                      ...(channel === undefined ? {} : { channel }),
+                      ...(direction === undefined ? {} : { direction }),
+                    }),
+                  ),
+                ),
+              ),
+            )
+            const fired = new Set(changes.map((change) => Verdict.classify(scope.corpus, change).rule_id))
+            return scope.corpus.rules.map((rule) => rule.rule_id).filter((id) => !fired.has(id))
+          }),
+        ),
+        Then('no shipped rule is dead')((scope, expect) => expect(scope.dead).toEqual([])),
+      ),
+    )
   })
-})

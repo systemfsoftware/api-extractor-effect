@@ -1,34 +1,35 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Effect, Schema } from 'effect'
-import { canonicalJson } from './canonical-json.ts'
+import { Effect } from 'effect'
+import { canonicalJson } from './canonical-json.schema.ts'
 import { judgeSurfaces } from './judge-surfaces.workflow.ts'
-import type { ApiModel } from './model/api-model.ts'
-import { CorpusAmbiguities } from './verdict.schema.ts'
-import { defaultCorpus, type RuleCorpus } from './rules/corpus.ts'
-
-/** A surface or corpus that does not decode against its schema. */
-export class SurfaceRejected extends Schema.TaggedError<SurfaceRejected>()('SurfaceRejected', {
-  issue: Schema.String,
-}) {}
-
-/** A corpus whose rules cannot pick one rule per change. */
-export class RuleCorpusRejected extends Schema.TaggedError<RuleCorpusRejected>()('RuleCorpusRejected', CorpusAmbiguities) {}
+import type { ApiModel } from './model/api-model.schema.ts'
+import type { RuleCorpus } from './rules/corpus.schema.ts'
+import { defaultCorpus } from './rules/default-corpus.ts'
+import { RuleCorpusRejected, SurfaceRejected } from './verdict.schema.ts'
+import { ENGINE } from './version.ts'
 
 /** Two encoded surfaces of one package, and the corpus to judge them by (the shipped one when absent). */
-export interface VerdictInput {
+export type VerdictInput = {
   readonly before: ApiModel
   readonly after: ApiModel
   readonly corpus?: RuleCorpus
 }
 
 /**
- * Judges two surfaces and answers the verdict document as canonical JSON bytes.
- * Both surfaces and the corpus are decoded before the decision sees them.
+ * Judges two surfaces and answers the verdict document as canonical JSON bytes,
+ * stamped with this engine. Both surfaces and the corpus are decoded before the
+ * decision sees them.
  */
 export const verdictCell = Sandwich.named('api_extractor.verdict')((input: VerdictInput) =>
   // The encoded command, not `new CompareSurfaces(...)`: the constructor validates and would throw
   // on an undecodable surface, where the cell must answer `SurfaceRejected`.
-  Effect.succeed({ _tag: 'CompareSurfaces' as const, before: input.before, after: input.after, corpus: input.corpus ?? defaultCorpus })
+  Effect.succeed({
+    _tag: 'CompareSurfaces' as const,
+    engine: ENGINE,
+    before: input.before,
+    after: input.after,
+    corpus: input.corpus ?? defaultCorpus,
+  })
 )
   .decide(judgeSurfaces)
   .write({

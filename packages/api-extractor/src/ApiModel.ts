@@ -15,10 +15,10 @@ export {
   type InterfaceItem,
   type NamespaceItem,
   type Producer,
+  sortModel as sort,
   TypeAliasItem,
   type VariableItem,
-} from './model/api-model.ts'
-export { normaliseType, sortModel as sort, typeKey } from './model/normalise.ts'
+} from './model/api-model.schema.ts'
 export { serialiseApiModel as serialise } from './model/serialise.ts'
 export {
   type ArrayType,
@@ -30,6 +30,7 @@ export {
   type LiteralType,
   Member,
   type MethodMember,
+  normaliseType,
   type ObjectType,
   Parameter,
   type PropertyMember,
@@ -38,6 +39,7 @@ export {
   type TextType,
   type TupleType,
   TypeExpr,
+  typeKey,
   TypeParameter,
   type UnionType,
-} from './model/type-expr.ts'
+} from './model/type-expr.schema.ts'

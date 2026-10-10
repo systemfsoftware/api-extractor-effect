@@ -1,16 +1,34 @@
-import { describe } from '@systemfsoftware/vitest'
-import { Result } from 'effect'
-import { ApiModel, Verdict } from '../src/mod.ts'
-import { effect, fn, functionItem, never, parameter, ref, rooted, signature, TARGET, union, voidType, withExport } from './__fixtures__/surfaces.ts'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
+import { Effect, Layer, Result } from 'effect'
+import {
+  decodeVerdict,
+  effect,
+  empty,
+  fn,
+  functionItem,
+  never,
+  parameter,
+  ref,
+  signature,
+  TARGET,
+  union,
+  voidType,
+  withEntryPoints,
+  withExport,
+} from './__fixtures__/surfaces.ts'
 
-const empty: ApiModel.ApiModel = rooted({
-  schemaVersion: ApiModel.SCHEMA_VERSION,
-  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: [],
-})
+type Model = ApiModel.ApiModel
+type Item = ApiModel.ApiItem
+type Member = ApiModel.Member
+type Parameter = ApiModel.Parameter
+type Signature = ApiModel.Signature
+type TypeExpr = ApiModel.TypeExpr
+type Bump = Extract<Verdict.Bump, 'major' | 'minor'>
 
-const classItem = (overrides: Partial<ApiModel.ApiItem & { kind: 'class' }> = {}): ApiModel.ApiItem => ({
+const Feature = makeFeature({ it })
+
+const classItem = (overrides: Partial<ApiModel.ClassItem> = {}): Item => ({
   kind: 'class',
   name: TARGET,
   abstract: false,
@@ -20,58 +38,69 @@ const classItem = (overrides: Partial<ApiModel.ApiItem & { kind: 'class' }> = {}
   members: [],
   ...overrides,
 })
-const property = (name: string, type: ApiModel.TypeExpr, { optional = false, readonly = false } = {}): ApiModel.Member => ({
+const property = (name: string, type: TypeExpr, { optional = false, readonly = false } = {}): Member => ({
   kind: 'property',
   name,
   optional,
   readonly,
   type,
 })
-const method = (name: string, returns: ApiModel.TypeExpr): ApiModel.Member => ({ kind: 'method', name, optional: false, signatures: [signature([], returns)] })
-const object = (...members: ReadonlyArray<ApiModel.Member>): ApiModel.TypeExpr => ({ kind: 'object', members })
-const enumItem = (...members: ReadonlyArray<string>): ApiModel.ApiItem => ({ kind: 'enum', name: TARGET, const: false, members: members.map((name) => ({ name })) })
-const valuedEnum = (value: string, isConst = false): ApiModel.ApiItem => ({ kind: 'enum', name: TARGET, const: isConst, members: [{ name: 'A', value }] })
-const variable = (constant: boolean, type: ApiModel.TypeExpr): ApiModel.ApiItem => ({ kind: 'variable', name: TARGET, constant, type })
-const returning = (type: ApiModel.TypeExpr) => functionItem(signature([], type))
-const taking = (type: ApiModel.TypeExpr) => functionItem(signature([parameter('self', type)], voidType))
-const callback = (...parameters: ReadonlyArray<ApiModel.Parameter>) => taking(fn(signature(parameters, voidType)))
-const layer = (requirements: ApiModel.TypeExpr) => returning(ref('Layer', ref('S'), never, requirements))
-const restParameter = { ...parameter('rest', ref('Arr')), rest: true }
+const method = (name: string, returns: TypeExpr): Member => ({ kind: 'method', name, optional: false, signatures: [signature([], returns)] })
+const object = (...members: ReadonlyArray<Member>): TypeExpr => ({ kind: 'object', members })
+const enumItem = (...members: ReadonlyArray<string>): Item => ({ kind: 'enum', name: TARGET, const: false, members: members.map((name) => ({ name })) })
+const valuedEnum = (value: string, isConst = false): Item => ({ kind: 'enum', name: TARGET, const: isConst, members: [{ name: 'A', value }] })
+const variable = (constant: boolean, type: TypeExpr): Item => ({ kind: 'variable', name: TARGET, constant, type })
+const returning = (type: TypeExpr) => functionItem(signature([], type))
+const taking = (type: TypeExpr) => functionItem(signature([parameter('self', type)], voidType))
+const callback = (...parameters: ReadonlyArray<Parameter>) => taking(fn(signature(parameters, voidType)))
+const layer = (requirements: TypeExpr) => returning(ref('Layer', ref('S'), never, requirements))
+const restParameter: Parameter = { name: 'rest', type: ref('Arr'), optional: false, rest: true }
 const either = union([ref('A'), ref('B')])
 const channels = {
-  A: (slot: ApiModel.TypeExpr) => effect(slot, ref('Failure')),
-  E: (slot: ApiModel.TypeExpr) => effect(ref('Value'), slot),
-  R: (slot: ApiModel.TypeExpr) => effect(ref('Value'), ref('Failure'), slot),
+  A: (slot: TypeExpr) => effect(slot, ref('Failure')),
+  E: (slot: TypeExpr) => effect(ref('Value'), slot),
+  R: (slot: TypeExpr) => effect(ref('Value'), ref('Failure'), slot),
 }
 const channelRow = (
   channel: keyof typeof channels,
   position: 'out' | 'in',
   moved: 'widened' | 'narrowed',
-  bump: 'major' | 'minor',
+  bump: Bump,
   reason: string,
 ): Row => {
   const [from, to] = moved === 'widened' ? [ref('A'), either] : [either, ref('A')]
-  const surface = (slot: ApiModel.TypeExpr) => (position === 'out' ? returning : taking)(channels[channel](slot))
+  const surface = (slot: TypeExpr) => (position === 'out' ? returning : taking)(channels[channel](slot))
   return [`an Effect ${channel} channel ${moved} in ${position === 'out' ? 'a return' : 'a parameter'}`, surface(from), surface(to), bump, reason]
 }
-const dualForms = (() => {
+const dualForms: readonly [Signature, Signature] = (() => {
   const mapper = parameter('f', fn(signature([parameter('a', ref('A'))], ref('B'))))
   const self = parameter('self', effect(ref('A'), ref('Failure')))
   return [signature([mapper], fn(signature([self], effect(ref('B'), ref('Failure'))))), signature([self, mapper], effect(ref('B'), ref('Failure')))]
 })()
-const dual = (...forms: ReadonlyArray<ApiModel.Signature>): ApiModel.ApiItem => variable(true, object(...forms.map((sig): ApiModel.Member => ({ kind: 'call', signature: sig }))))
-const servicesLayer = (services: ApiModel.TypeExpr) => returning(ref('Layer', services, never, never))
-const withEntryPoint = { ...empty, entryPoints: [...empty.entryPoints, { path: './extra', items: [], locals: [] }] }
+const twoArgumentDualForms: readonly [Signature, Signature] = (() => {
+  const mapper = parameter('f', fn(signature([parameter('a', ref('A'))], ref('B'))))
+  const fallback = parameter('orElse', ref('B'))
+  const self = parameter('self', effect(ref('A'), ref('Failure')))
+  return [
+    signature([mapper, fallback], fn(signature([self], effect(ref('B'), ref('Failure'))))),
+    signature([self, mapper, fallback], effect(ref('B'), ref('Failure'))),
+  ]
+})()
+const dual = (...forms: ReadonlyArray<Signature>): Item => variable(true, object(...forms.map((sig): Member => ({ kind: 'call', signature: sig }))))
+const servicesLayer = (services: TypeExpr) => returning(ref('Layer', services, never, never))
+const withEntryPoint: Model = withEntryPoints(empty, [...empty.entryPoints, { path: './extra', items: [], locals: [] }])
 
-type Row = readonly [string, ApiModel.ApiItem | ApiModel.ApiModel, ApiModel.ApiItem | ApiModel.ApiModel, 'major' | 'minor', string]
+type Row = readonly [string, Item | Model, Item | Model, Bump, string]
 const rows: ReadonlyArray<Row> = [
   ['an entry point is removed', withEntryPoint, empty, 'major', 'ENTRY_POINT_REMOVED'],
   ['an entry point is added', empty, withEntryPoint, 'minor', 'ENTRY_POINT_ADDED'],
   ['an export is removed', withExport(empty, returning(ref('A'))), empty, 'major', 'EXPORT_REMOVED'],
   ['an export is added', empty, withExport(empty, returning(ref('A'))), 'minor', 'EXPORT_ADDED'],
   ['a function export becomes a variable', returning(ref('A')), variable(true, ref('A')), 'major', 'EXPORT_KIND_CHANGED'],
-  ['a dual loses its data-last form', dual(...dualForms), dual(dualForms[1]!), 'major', 'DUAL_FORM_REMOVED'],
-  ['a data-first function gains its data-last form', dual(dualForms[1]!), dual(...dualForms), 'minor', 'DUAL_FORM_ADDED'],
+  ['a dual loses its data-last form', dual(...dualForms), dual(dualForms[1]), 'major', 'DUAL_FORM_REMOVED'],
+  ['a data-first function gains its data-last form', dual(dualForms[1]), dual(...dualForms), 'minor', 'DUAL_FORM_ADDED'],
+  ['a two-argument dual loses its data-last form', dual(...twoArgumentDualForms), dual(twoArgumentDualForms[1]), 'major', 'DUAL_FORM_REMOVED'],
+  ['a two-argument data-first function gains its data-last form', dual(twoArgumentDualForms[1]), dual(...twoArgumentDualForms), 'minor', 'DUAL_FORM_ADDED'],
   ['a function gains a required parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'))], voidType)), 'major', 'REQUIRED_PARAMETER_ADDED'],
   ['a function gains an optional parameter', returning(voidType), functionItem(signature([parameter('x', ref('X'), true)], voidType)), 'minor', 'OPTIONAL_PARAMETER_ADDED'],
   ['a returned layer provides one service fewer', servicesLayer(either), servicesLayer(ref('A')), 'major', 'LAYER_SERVICE_REMOVED'],
@@ -129,13 +158,32 @@ const rows: ReadonlyArray<Row> = [
   channelRow('R', 'in', 'narrowed', 'major', 'R_NARROWED_IN_INPUT'),
 ]
 
-describe('verdict on each change kind', (it) => {
-  it.each(rows.map(([label, before, after, bump, reason]) => ({ label, before, after, bump, reason })))(
-    '$label is $bump $reason',
-    function* ({ before, after, bump, reason }, { expect }) {
-      const surface = (side: ApiModel.ApiItem | ApiModel.ApiModel) => ('entryPoints' in side ? side : withExport(empty, side))
-      const result = Verdict.judge(new Verdict.CompareSurfaces({ before: surface(before), after: surface(after), corpus: Verdict.defaultCorpus }))
-      yield* expect(Result.map(result, (verdict) => [verdict.bump, verdict.findings.map((finding) => finding.reason_code)])).toEqual(Result.succeed([bump, [reason]]))
-    },
-  )
-})
+type Case = { readonly label: string; readonly before: Model; readonly after: Model; readonly bump: Bump; readonly reason: string }
+const cases: ReadonlyArray<Case> = rows.map(([label, before, after, bump, reason]) => ({
+  label,
+  before: 'entryPoints' in before ? before : withExport(empty, before),
+  after: 'entryPoints' in after ? after : withExport(empty, after),
+  bump,
+  reason,
+}))
+
+Feature('The verdict judges every change kind the diff emits')
+  .withLayer(Layer.empty)
+  .body(({ scenarioOutline }) => {
+    scenarioOutline(
+      'the verdict for <label> is <bump> <reason>',
+      cases,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('the two surfaces of the fixture package')('row', () => Effect.sync(() => row)),
+          When('the verdict cell judges them against the shipped corpus')('verdict', (scope) =>
+            Effect.map(Verdict.cell.run({ before: scope.row.before, after: scope.row.after }), decodeVerdict),
+          ),
+          Then('the verdict reports the expected bump and reason')((scope, expect) =>
+            expect(Result.map(scope.verdict, (verdict) => [verdict.bump, verdict.findings.map((finding) => finding.reason_code)])).toEqual(
+              Result.succeed([scope.row.bump, [scope.row.reason]]),
+            ),
+          ),
+        ),
+    )
+  })

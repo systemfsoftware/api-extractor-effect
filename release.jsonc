@@ -1,0 +1,14 @@
+{
+  // Read by systemfsoftware/pnpm-release-management's release tools, which the
+  // reusable workflows in .github/workflows/ run. Each package is versioned
+  // through its change intents, tagged <pkg>@vX.Y.Z and released on GitHub;
+  // nothing is published to an npm registry.
+  "base": "main",
+  "branch": "changeset-release/main",
+  "versioning": {
+    "strategy": "changesets",
+  },
+  // A change under a package's directory needs an intent naming it. The turbo
+  // gate dry-runs turbo at the base, which a base without turbo.json refuses.
+  "gate": { "strategy": "paths" },
+}

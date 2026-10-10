@@ -11,10 +11,12 @@
     "types": [
       "node"
     ],
+    "customConditions": ["@systemfsoftware/source"],
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
   "include": [
-    "*.ts"
+    "*.ts",
+    "tests/**/*.ts"
   ]
 }

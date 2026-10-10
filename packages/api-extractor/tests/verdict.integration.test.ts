@@ -1,48 +1,88 @@
-import { describe } from '@systemfsoftware/vitest'
-import { Effect } from 'effect'
-import { ApiModel, Verdict } from '../src/mod.ts'
-import { effect, functionItem, ref, rooted, signature, union, withExport } from './__fixtures__/surfaces.ts'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
+import { Array as Arr, Effect, Layer, Option, Result } from 'effect'
+import { decodeVerdict, effect, empty, functionItem, ref, signature, union, withEntryPoints, withExport } from './__fixtures__/surfaces.ts'
 
-const empty: ApiModel.ApiModel = rooted({
-  schemaVersion: ApiModel.SCHEMA_VERSION,
-  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: [],
-})
+type Model = ApiModel.ApiModel
+type Item = ApiModel.ApiItem
+
+const Feature = makeFeature({ it })
+
 const before = withExport(empty, functionItem(signature([], effect(ref('User'), ref('NotFound')))))
 const after = withExport(empty, functionItem(signature([], effect(ref('User'), union([ref('NotFound'), ref('Timeout')])))))
-const [first] = Verdict.defaultCorpus.rules
-const ambiguous = { ...Verdict.defaultCorpus, rules: [...Verdict.defaultCorpus.rules, { ...first!, rule_id: 'copy' }] }
-const entry = { path: '.', items: [], locals: [] }
-const enumOf = (...names: ReadonlyArray<string>): ApiModel.ApiItem => ({ kind: 'enum', name: 'Mode', const: false, members: names.map((name) => ({ name })) })
-const repeatedKeys = [
-  { label: 'an entry-point path', surface: { ...empty, entryPoints: [entry, entry] } },
-  { label: 'an enum member name', surface: withExport(empty, enumOf('On', 'On')) },
+
+const entry: ApiModel.EntryPoint = { path: '.', items: [], locals: [] }
+const entryRepeated: Model = withEntryPoints(empty, [entry, entry])
+const enumOf = (...names: ReadonlyArray<string>): Item => ({ kind: 'enum', name: 'Mode', const: false, members: names.map((name) => ({ name })) })
+const enumRepeated = withExport(empty, enumOf('On', 'On'))
+const enumDistinct = withExport(empty, enumOf('On', 'Off'))
+
+const repeatedKeys: ReadonlyArray<{ readonly label: string; readonly repeated: Model; readonly distinct: Model }> = [
+  { label: 'an entry-point path', repeated: entryRepeated, distinct: empty },
+  { label: 'an enum member name', repeated: enumRepeated, distinct: enumDistinct },
 ]
 
-describe('verdict cell', (it) => {
-  it('answers the verdict document as canonical JSON', function* ({ expect }) {
-    const document = yield* Verdict.cell.run({ before, after })
-    yield* expect({ terminated: document.endsWith('}\n'), body: JSON.parse(document) }).toMatchObject({
-      terminated: true,
-      body: { _tag: 'Verdict', bump: 'major', findings: [{ reason_code: 'E_WIDENED', locations: ['.:target/signature[0]/returns/E'] }] },
-    })
-  })
+const first: Verdict.Rule = Option.getOrThrow(Arr.get(Verdict.defaultCorpus.rules, 0))
+const ambiguous: Verdict.RuleCorpus = {
+  ...Verdict.defaultCorpus,
+  rules: [...Verdict.defaultCorpus.rules, { ...first, rule_id: `${first.rule_id}-copy` }],
+}
+const sharedMatch = [first.match.kind, first.match.position ?? '*', first.match.channel ?? '*', first.match.direction ?? '*'].join('|')
 
-  it('refuses a surface that does not decode with SurfaceRejected', function* ({ expect }) {
-    const wrongVersion = { ...before, schemaVersion: ApiModel.SCHEMA_VERSION + 1 } as unknown as ApiModel.ApiModel
-    const refusal = yield* Effect.flip(Verdict.cell.run({ before: wrongVersion, after }))
-    yield* expect(refusal._tag).toBe('SurfaceRejected')
-  })
+Feature('The verdict cell judges two surfaces and refuses the ones it cannot')
+  .withLayer(Layer.empty)
+  .body(({ scenario, scenarioOutline }) => {
+    scenario(
+      'a widened error channel produces a canonical verdict document',
+      Gherkin.Do.pipe(
+        Given('two surfaces whose returned error channel gains a tag')('surfaces', () => Effect.sync(() => ({ before, after }))),
+        When('the verdict cell judges them')('document', (scope) => Verdict.cell.run(scope.surfaces)),
+        Then('the document is canonical JSON naming the widened error')((scope, expect) =>
+          expect({
+            terminated: scope.document.endsWith('}\n'),
+            body: Result.getOrThrow(decodeVerdict(scope.document)),
+          }).toMatchObject({
+            terminated: true,
+            body: {
+              _tag: 'Verdict',
+              bump: 'major',
+              findings: [{ reason_code: 'E_WIDENED', locations: ['.:target/signature[0]/returns/E'] }],
+            },
+          }),
+        ),
+      ),
+    )
 
-  it.each(repeatedKeys)('refuses a surface repeating $label with SurfaceRejected', function* ({ surface }, { expect }) {
-    const repeated = yield* Effect.flip(Verdict.cell.run({ before: surface, after }))
-    const distinct = yield* Verdict.cell.run({ before: withExport(empty, enumOf('On', 'Off')), after })
-    yield* expect({ repeated: repeated._tag, distinct: JSON.parse(distinct)._tag }).toEqual({ repeated: 'SurfaceRejected', distinct: 'Verdict' })
-  })
+    scenarioOutline(
+      'a surface repeating <label> is refused while the distinct one is judged',
+      repeatedKeys,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a surface repeating a key and one keeping it distinct')('row', () => Effect.sync(() => row)),
+          When('the verdict cell judges each in turn')('outcome', (scope) =>
+            Effect.flatMap(Effect.flip(Verdict.cell.run({ before: scope.row.repeated, after })), (repeated) =>
+              Effect.map(Verdict.cell.run({ before: scope.row.distinct, after }), (document) => ({
+                repeated,
+                distinct: Result.getOrThrow(decodeVerdict(document)),
+              })),
+            ),
+          ),
+          Then('the repeated surface is refused and the distinct one is judged')((scope, expect) =>
+            expect(scope.outcome).toMatchObject({ repeated: { _tag: 'SurfaceRejected' }, distinct: { _tag: 'Verdict' } }),
+          ),
+        ),
+    )
 
-  it('refuses an ambiguous corpus with RuleCorpusRejected naming the shared match', function* ({ expect }) {
-    const refusal = yield* Effect.flip(Verdict.cell.run({ before, after, corpus: ambiguous }))
-    yield* expect(refusal).toMatchObject({ _tag: 'RuleCorpusRejected', ambiguities: [`two rules match ${first!.match.kind}|*|*|*`] })
+    scenario(
+      'a corpus whose rules tie on one change is refused naming the shared match',
+      Gherkin.Do.pipe(
+        Given('a corpus carrying a second rule matching the first')('surfaces', () => Effect.sync(() => ({ before, after }))),
+        When('the verdict cell judges the surfaces against it')('refusal', (scope) =>
+          Effect.flip(Verdict.cell.run({ before: scope.surfaces.before, after: scope.surfaces.after, corpus: ambiguous })),
+        ),
+        Then('the corpus is refused naming the tie')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'RuleCorpusRejected', ambiguities: [`two rules match ${sharedMatch}`] }),
+        ),
+      ),
+    )
   })
-})
