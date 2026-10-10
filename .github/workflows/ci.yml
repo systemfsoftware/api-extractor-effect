@@ -32,6 +32,8 @@ jobs:
           name: sfs-deps
           path: .sfs-deps/
           retention-days: 1
+          include-hidden-files: true
+          if-no-files-found: error
 
   test:
     name: Product tests
