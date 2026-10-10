@@ -164,6 +164,9 @@ settings:
 
 catalogs:
   default:
+    '@effect/platform-node':
+      specifier: 4.0.2
+      version: 4.0.2
     '@effect/tsgo':
       specifier: 0.50.0
       version: 0.50.0
@@ -200,10 +203,13 @@ catalogs:
 
 overrides:
   '@systemfsoftware/effect-cell-types': file:.sfs-deps/effect-cell-types-12.0.0.tgz
+  '@systemfsoftware/effect-gherkin-spec': file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz
   '@systemfsoftware/effect-schema-discovery': file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
   '@systemfsoftware/effect-schema-law': file:.sfs-deps/effect-schema-law-5.0.1.tgz
   '@systemfsoftware/effect-schema-recursion-budget': file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz
   '@systemfsoftware/effect-schema-vite': file:.sfs-deps/effect-schema-vite-3.0.1.tgz
+  '@systemfsoftware/effect-sim-kernel': file:.sfs-deps/effect-sim-kernel-1.0.0.tgz
+  '@systemfsoftware/effect-spec-runtime': file:.sfs-deps/effect-spec-runtime-1.0.1.tgz
   '@systemfsoftware/oxlint-config-cell-architecture': file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz
   '@systemfsoftware/oxlint-config-dmmf': file:.sfs-deps/oxlint-config-dmmf-2.0.0.tgz
   '@systemfsoftware/oxlint-config-recommended': file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz
@@ -245,9 +251,15 @@ importers:
 
   apps/api-extractor-e2e:
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.2(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@systemfsoftware/api-extractor':
         specifier: workspace:*
         version: link:../../packages/api-extractor
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: file:../../.sfs-deps/effect-gherkin-spec-7.0.1.tgz
+        version: file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
       '@systemfsoftware/oxlint-config-recommended':
         specifier: file:../../.sfs-deps/oxlint-config-recommended-4.0.0.tgz
         version: file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz(effect@4.0.2)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)
@@ -294,6 +306,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@24.19.1)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: file:../../.sfs-deps/effect-gherkin-spec-7.0.1.tgz
+        version: file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
       '@systemfsoftware/effect-schema-law':
         specifier: file:../../.sfs-deps/effect-schema-law-5.0.1.tgz
         version: file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
@@ -1181,6 +1196,14 @@ packages:
     peerDependencies:
       effect: ^4
 
+  '@systemfsoftware/effect-gherkin-spec@file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz':
+    resolution: {integrity: sha512-RmyM6qdT88AzjcCdZVHXFP/32ky3zEy0pOABYocCIYKYhkr86EL07Mnxgwxm+UFhbgbgc65KfsA5alTuAlLR3w==, tarball: file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz}
+    version: 7.0.1
+    peerDependencies:
+      '@systemfsoftware/vitest': ^2.0.0
+      effect: ^4
+      vitest: ^5
+
   '@systemfsoftware/effect-schema-discovery@file:.sfs-deps/effect-schema-discovery-2.0.0.tgz':
     resolution: {integrity: sha512-Mlod6zaKFZ4FVRaRBSJ9++3tyYkBxEFCRml0lGgWe6xKFxEZ9x+MjFm8PMfU5qRV1+39A9wBs+V1TDGdVklmDA==, tarball: file:.sfs-deps/effect-schema-discovery-2.0.0.tgz}
     version: 2.0.0
@@ -1206,6 +1229,20 @@ packages:
       '@systemfsoftware/effect-schema-law': 5.0.1
       effect: ^4
       vite: '>5.0.0'
+      vitest: ^5
+
+  '@systemfsoftware/effect-sim-kernel@file:.sfs-deps/effect-sim-kernel-1.0.0.tgz':
+    resolution: {integrity: sha512-B4z4wxtI8EIpFIg3K3VIBqfhIELg8JNX1j21htt0c6H8KagiAE9nY90fgzrSK52Ot8nR3wfNHXLNVyk63j7F8g==, tarball: file:.sfs-deps/effect-sim-kernel-1.0.0.tgz}
+    version: 1.0.0
+    peerDependencies:
+      effect: ^4
+
+  '@systemfsoftware/effect-spec-runtime@file:.sfs-deps/effect-spec-runtime-1.0.1.tgz':
+    resolution: {integrity: sha512-nmywyfBDB340lyxd4cZjXmMwiWkloYbmYUDr+CuDAzU6G8cJqENKMzsapQ6cnxclW6fmKrcsYfvFLHrHExm6GA==, tarball: file:.sfs-deps/effect-spec-runtime-1.0.1.tgz}
+    version: 1.0.1
+    peerDependencies:
+      '@systemfsoftware/vitest': ^2.0.0
+      effect: ^4
       vitest: ^5
 
   '@systemfsoftware/oxlint-config-cell-architecture@file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz':
@@ -3039,6 +3076,13 @@ snapshots:
     dependencies:
       effect: 4.0.2
 
+  '@systemfsoftware/effect-gherkin-spec@file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))':
+    dependencies:
+      '@systemfsoftware/effect-spec-runtime': file:.sfs-deps/effect-spec-runtime-1.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
+      '@systemfsoftware/vitest': file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
+      effect: 4.0.2
+      vitest: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))
+
   '@systemfsoftware/effect-schema-discovery@file:.sfs-deps/effect-schema-discovery-2.0.0.tgz':
     dependencies:
       '@oxc-project/types': 0.150.0
@@ -3065,6 +3109,17 @@ snapshots:
       effect: 4.0.2
       oxc-parser: 0.150.0
       vite: 8.2.1(@types/node@24.19.1)(yaml@2.9.1)
+      vitest: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))
+
+  '@systemfsoftware/effect-sim-kernel@file:.sfs-deps/effect-sim-kernel-1.0.0.tgz(effect@4.0.2)':
+    dependencies:
+      effect: 4.0.2
+
+  '@systemfsoftware/effect-spec-runtime@file:.sfs-deps/effect-spec-runtime-1.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))':
+    dependencies:
+      '@systemfsoftware/effect-sim-kernel': file:.sfs-deps/effect-sim-kernel-1.0.0.tgz(effect@4.0.2)
+      '@systemfsoftware/vitest': file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1)))
+      effect: 4.0.2
       vitest: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(vite@8.2.1(@types/node@24.19.1)(yaml@2.9.1))
 
   '@systemfsoftware/oxlint-config-cell-architecture@file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz(effect@4.0.2)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)':

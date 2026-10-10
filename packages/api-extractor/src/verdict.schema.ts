@@ -1,32 +1,26 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Schema } from 'effect'
-import { ApiModel } from './model/api-model.ts'
-import { Bump, RuleCorpus } from './rules/corpus.ts'
+import { ApiModel } from './model/api-model.schema.ts'
+import { Bump, RuleCorpus } from './rules/corpus.schema.ts'
+import { Findings } from './rules/finding.schema.ts'
 
 /** The verdict document's wire version. */
-export const VERDICT_SCHEMA_VERSION = 1
+export const VerdictVersion = Schema.Literal(1)
+export type VerdictVersion = typeof VerdictVersion.Type
 
-/** One rule that fired, with every location it fired at. */
-export const Finding = Schema.Struct({
-  rule_id: Schema.String,
-  reason_code: Schema.String,
-  bump: Bump,
-  next_action: Schema.String,
-  locations: Schema.Array(Schema.String),
-})
-export type Finding = typeof Finding.Type
+export const VERDICT_SCHEMA_VERSION: VerdictVersion = 1
 
 /** The family brand every outcome of the verdict decision carries. */
 export const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/api-extractor/Verdict')
 
 /** The semver bump two surfaces of one package call for, with the findings behind it. */
 export class Verdict extends Schema.TaggedClass<Verdict>()('Verdict', {
-  schemaVersion: Schema.Literal(VERDICT_SCHEMA_VERSION),
+  schemaVersion: VerdictVersion,
   engine: Schema.String,
   corpusVersion: Schema.String,
   declarations: Schema.Struct({ before: Schema.String, after: Schema.String }),
   bump: Bump,
-  findings: Schema.Array(Finding),
+  findings: Findings,
 }) {
   readonly [VerdictTypeId] = VerdictTypeId
 }
@@ -38,10 +32,34 @@ export const CorpusAmbiguities = {
 }
 
 /** A corpus whose rules do not pick one rule per change: two rules share a match, or a rule id repeats. */
-export class AmbiguousRuleCorpus extends Schema.TaggedError<AmbiguousRuleCorpus>()('AmbiguousRuleCorpus', CorpusAmbiguities) {}
+export class AmbiguousRuleCorpus extends Schema.TaggedError<AmbiguousRuleCorpus>()('AmbiguousRuleCorpus', CorpusAmbiguities) {
+  override get message(): string {
+    return `rule corpus ${this.corpusVersion} cannot pick one rule per change: ${this.ambiguities.join('; ')}`
+  }
+}
 
-/** Judge the change from one surface of a package to the next against a rule corpus. */
+/** A surface or corpus that does not decode against its schema. */
+export class SurfaceRejected extends Schema.TaggedError<SurfaceRejected>()('SurfaceRejected', {
+  issue: Schema.String,
+}) {
+  override get message(): string {
+    return `a surface or the corpus does not decode: ${this.issue}`
+  }
+}
+
+/** A corpus whose rules cannot pick one rule per change, refused by the verdict cell. */
+export class RuleCorpusRejected extends Schema.TaggedError<RuleCorpusRejected>()('RuleCorpusRejected', CorpusAmbiguities) {
+  override get message(): string {
+    return `rule corpus ${this.corpusVersion} cannot pick one rule per change: ${this.ambiguities.join('; ')}`
+  }
+}
+
+/**
+ * Judge the change from one surface of a package to the next against a rule
+ * corpus. `engine` is the `<package>@<version>` the verdict is stamped with.
+ */
 export class CompareSurfaces extends Schema.TaggedClass<CompareSurfaces>()('CompareSurfaces', {
+  engine: Schema.String,
   before: ApiModel,
   after: ApiModel,
   corpus: RuleCorpus,

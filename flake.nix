@@ -35,10 +35,13 @@
       sfsPackages = {
         systemfsoftware = [
           "effect-cell-types"
+          "effect-gherkin-spec"
           "effect-schema-discovery"
           "effect-schema-law"
           "effect-schema-recursion-budget"
           "effect-schema-vite"
+          "effect-sim-kernel"
+          "effect-spec-runtime"
           "oxlint-config-cell-architecture"
           "oxlint-config-dmmf"
           "oxlint-config-recommended"

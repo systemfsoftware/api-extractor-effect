@@ -134,7 +134,7 @@ describe('verdict on each change kind', (it) => {
     '$label is $bump $reason',
     function* ({ before, after, bump, reason }, { expect }) {
       const surface = (side: ApiModel.ApiItem | ApiModel.ApiModel) => ('entryPoints' in side ? side : withExport(empty, side))
-      const result = Verdict.judge(new Verdict.CompareSurfaces({ before: surface(before), after: surface(after), corpus: Verdict.defaultCorpus }))
+      const result = Verdict.judge(new Verdict.CompareSurfaces({ engine: 'fixture@0.0.0', before: surface(before), after: surface(after), corpus: Verdict.defaultCorpus }))
       yield* expect(Result.map(result, (verdict) => [verdict.bump, verdict.findings.map((finding) => finding.reason_code)])).toEqual(Result.succeed([bump, [reason]]))
     },
   )

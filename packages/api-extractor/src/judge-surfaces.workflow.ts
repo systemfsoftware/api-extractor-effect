@@ -1,8 +1,8 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Result } from 'effect'
-import { diffModels } from './diff/diff.ts'
-import { ambiguitiesOf, bumpOf, findingsOf } from './findings.ts'
-import { ENGINE } from './version.ts'
+import { diffModels } from './diff/change.schema.ts'
+import { ambiguitiesOf } from './rules/corpus.schema.ts'
+import { bumpOf, findingsOf } from './rules/finding.schema.ts'
 import { AmbiguousRuleCorpus, CompareSurfaces, Verdict, VERDICT_SCHEMA_VERSION } from './verdict.schema.ts'
 
 /**
@@ -14,14 +14,14 @@ export const judgeSurfaces = Workflow.make({
   command: CompareSurfaces,
   decision: Verdict,
   error: AmbiguousRuleCorpus,
-  decide: ({ before, after, corpus }) =>
+  decide: ({ engine, before, after, corpus }) =>
     Arr.match(ambiguitiesOf(corpus), {
       onEmpty: () => {
         const findings = findingsOf(corpus, diffModels(before, after, corpus.channelTypes))
         return Result.succeed(
           new Verdict({
             schemaVersion: VERDICT_SCHEMA_VERSION,
-            engine: ENGINE,
+            engine,
             corpusVersion: corpus.corpusVersion,
             declarations: { before: before.producer.declarations, after: after.producer.declarations },
             bump: bumpOf(findings),

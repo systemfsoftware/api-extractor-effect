@@ -11,7 +11,9 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@systemfsoftware/api-extractor": "workspace:*",
+    "@systemfsoftware/effect-gherkin-spec": "^7.0.1",
     "@systemfsoftware/oxlint-config-recommended": "^4.0.0",
     "@systemfsoftware/tsconfig": "^2.0.1",
     "@systemfsoftware/vitest": "^2.0.0",

@@ -1,6 +1,10 @@
-import type { TypeExpr } from '../model/type-expr.ts'
-import { canonicalKey } from '../canonical-json.ts'
-import type { Direction } from './change.ts'
+import { Function, Schema } from 'effect'
+import { canonicalKey } from '../canonical-json.schema.ts'
+import type { TypeExpr } from '../model/type-expr.schema.ts'
+
+/** How a type moved: it admits more values, fewer, or neither. */
+export const Direction = Schema.Literals(['widened', 'narrowed', 'changed'])
+export type Direction = typeof Direction.Type
 
 const literalKeyword = (text: string): string | undefined => {
   if (text === 'true' || text === 'false') return 'boolean'
@@ -38,7 +42,10 @@ const within = (left: ReadonlyArray<Keyed>, right: ReadonlyArray<Keyed>): boolea
  * more values, `narrowed` when fewer, `changed` otherwise, and `undefined`
  * when the two are equivalent on the lattice.
  */
-export const direction = (before: TypeExpr, after: TypeExpr): Direction | undefined => {
+export const direction: {
+  (after: TypeExpr): (before: TypeExpr) => Direction | undefined
+  (before: TypeExpr, after: TypeExpr): Direction | undefined
+} = Function.dual(2, (before: TypeExpr, after: TypeExpr): Direction | undefined => {
   const beforeMembers = membersOf(before)
   const afterMembers = membersOf(after)
   const grew = within(beforeMembers, afterMembers)
@@ -47,4 +54,4 @@ export const direction = (before: TypeExpr, after: TypeExpr): Direction | undefi
   if (grew) return 'widened'
   if (shrank) return 'narrowed'
   return 'changed'
-}
+})

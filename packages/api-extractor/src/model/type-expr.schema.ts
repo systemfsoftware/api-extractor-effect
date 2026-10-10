@@ -1,4 +1,5 @@
-import { Schema } from 'effect'
+import { Order, Schema } from 'effect'
+import { canonicalKey, type Json } from '../canonical-json.schema.ts'
 
 /** TypeScript keyword types the model names directly. */
 export const KeywordName = Schema.Literals([
@@ -17,59 +18,59 @@ export const KeywordName = Schema.Literals([
 ])
 export type KeywordName = typeof KeywordName.Type
 
-export interface KeywordType {
+export type KeywordType = {
   readonly kind: 'keyword'
   readonly name: KeywordName
 }
 
 /** A literal type; `text` is its source spelling (`"a"`, `1`, `true`). */
-export interface LiteralType {
+export type LiteralType = {
   readonly kind: 'literal'
   readonly text: string
 }
 
 /** A named type. `module` is set for references into another package. */
-export interface ReferenceType {
+export type ReferenceType = {
   readonly kind: 'reference'
   readonly name: string
   readonly module?: string
   readonly args: ReadonlyArray<TypeExpr>
 }
 
-export interface UnionType {
+export type UnionType = {
   readonly kind: 'union'
   readonly members: ReadonlyArray<TypeExpr>
 }
 
-export interface IntersectionType {
+export type IntersectionType = {
   readonly kind: 'intersection'
   readonly members: ReadonlyArray<TypeExpr>
 }
 
-export interface ArrayType {
+export type ArrayType = {
   readonly kind: 'array'
   readonly readonly: boolean
   readonly element: TypeExpr
 }
 
-export interface TupleType {
+export type TupleType = {
   readonly kind: 'tuple'
   readonly readonly: boolean
   readonly elements: ReadonlyArray<TypeExpr>
 }
 
-export interface FunctionType {
+export type FunctionType = {
   readonly kind: 'function'
   readonly signature: Signature
 }
 
-export interface ObjectType {
+export type ObjectType = {
   readonly kind: 'object'
   readonly members: ReadonlyArray<Member>
 }
 
 /** Any type the structural model does not decompose, kept as its source text. */
-export interface TextType {
+export type TextType = {
   readonly kind: 'text'
   readonly text: string
 }
@@ -86,26 +87,26 @@ export type TypeExpr =
   | ObjectType
   | TextType
 
-export interface TypeParameter {
+export type TypeParameter = {
   readonly name: string
   readonly constraint?: TypeExpr
   readonly default?: TypeExpr
 }
 
-export interface Parameter {
+export type Parameter = {
   readonly name: string
   readonly type: TypeExpr
   readonly optional: boolean
   readonly rest: boolean
 }
 
-export interface Signature {
+export type Signature = {
   readonly typeParameters: ReadonlyArray<TypeParameter>
   readonly parameters: ReadonlyArray<Parameter>
   readonly returns: TypeExpr
 }
 
-export interface PropertyMember {
+export type PropertyMember = {
   readonly kind: 'property'
   readonly name: string
   readonly optional: boolean
@@ -113,7 +114,7 @@ export interface PropertyMember {
   readonly type: TypeExpr
 }
 
-export interface MethodMember {
+export type MethodMember = {
   readonly kind: 'method'
   readonly name: string
   readonly optional: boolean
@@ -121,7 +122,7 @@ export interface MethodMember {
 }
 
 /** A call signature of an object type; an Effect dual API is a set of these. */
-export interface CallMember {
+export type CallMember = {
   readonly kind: 'call'
   readonly signature: Signature
 }
@@ -186,3 +187,74 @@ export const TypeExpr: Schema.Codec<TypeExpr> = Schema.suspend((): Schema.Codec<
   Schema.Struct({ kind: Schema.Literal('object'), members: Schema.Array(Member) }),
   Schema.Struct({ kind: Schema.Literal('text'), text: Schema.String }),
 ])).annotate({ recursionBudget: { maxDepth: 4, depthSize: 'small' } })
+
+const never: TypeExpr = { kind: 'keyword', name: 'never' }
+const unknown: TypeExpr = { kind: 'keyword', name: 'unknown' }
+
+const byKey = <A extends Json>(values: ReadonlyArray<A>): ReadonlyArray<A> => {
+  const keyed = values.map((value) => [canonicalKey(value), value] as const)
+  const unique = new Map(keyed)
+  return [...unique.keys()].sort(Order.String).map((key) => unique.get(key) as A)
+}
+
+const flatten = (kind: 'union' | 'intersection', members: ReadonlyArray<TypeExpr>): ReadonlyArray<TypeExpr> =>
+  members.flatMap((member) => (member.kind === kind ? member.members : [member]))
+
+const setType = (kind: 'union' | 'intersection', members: ReadonlyArray<TypeExpr>): TypeExpr => {
+  const normalised = byKey(flatten(kind, members.map(normaliseType)))
+  if (normalised.length === 1) return normalised[0] as TypeExpr
+  if (normalised.length === 0) return kind === 'union' ? never : unknown
+  return { kind, members: normalised }
+}
+
+const normaliseTypeParameter = (parameter: TypeParameter): TypeParameter => ({
+  name: parameter.name,
+  ...(parameter.constraint === undefined ? {} : { constraint: normaliseType(parameter.constraint) }),
+  ...(parameter.default === undefined ? {} : { default: normaliseType(parameter.default) }),
+})
+
+export const normaliseSignature = (signature: Signature): Signature => ({
+  typeParameters: signature.typeParameters.map(normaliseTypeParameter),
+  parameters: signature.parameters.map((parameter) => ({ ...parameter, type: normaliseType(parameter.type) })),
+  returns: normaliseType(signature.returns),
+})
+
+const normaliseMember = (member: Member): Member => {
+  switch (member.kind) {
+    case 'property':
+      return { ...member, type: normaliseType(member.type) }
+    case 'method':
+      return { ...member, signatures: member.signatures.map(normaliseSignature) }
+    case 'call':
+      return { kind: 'call', signature: normaliseSignature(member.signature) }
+  }
+}
+
+/**
+ * Puts a type in its canonical form: unions and intersections flattened,
+ * de-duplicated and ordered by structural key, so `A | B` and `B | A` are one type.
+ */
+export const normaliseType = (type: TypeExpr): TypeExpr => {
+  switch (type.kind) {
+    case 'union':
+    case 'intersection':
+      return setType(type.kind, type.members)
+    case 'reference':
+      return { ...type, args: type.args.map(normaliseType) }
+    case 'array':
+      return { ...type, element: normaliseType(type.element) }
+    case 'tuple':
+      return { ...type, elements: type.elements.map(normaliseType) }
+    case 'function':
+      return { kind: 'function', signature: normaliseSignature(type.signature) }
+    case 'object':
+      return { kind: 'object', members: type.members.map(normaliseMember) }
+    case 'keyword':
+    case 'literal':
+    case 'text':
+      return type
+  }
+}
+
+/** The structural identity of a type: equal keys mean the same type. */
+export const typeKey = (type: TypeExpr): string => canonicalKey(normaliseType(type))

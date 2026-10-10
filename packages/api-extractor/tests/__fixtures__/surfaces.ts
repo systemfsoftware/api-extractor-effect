@@ -1,5 +1,5 @@
-import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../../src/model/api-model.ts'
-import type { Parameter, Signature, TypeExpr } from '../../src/model/type-expr.ts'
+import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../../src/model/api-model.schema.ts'
+import type { Parameter, Signature, TypeExpr } from '../../src/model/type-expr.schema.ts'
 
 export const ref = (name: string, ...args: ReadonlyArray<TypeExpr>): TypeExpr => ({ kind: 'reference', name, args })
 export const never: TypeExpr = { kind: 'keyword', name: 'never' }

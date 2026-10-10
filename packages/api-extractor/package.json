@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "^7.0.1",
     "@systemfsoftware/effect-schema-law": "^5.0.1",
     "@systemfsoftware/effect-schema-vite": "^3.0.1",
     "@systemfsoftware/oxlint-config-recommended": "^4.0.0",

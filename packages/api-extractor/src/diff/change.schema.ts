@@ -1,10 +1,59 @@
-import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../model/api-model.ts'
-import { normaliseType, typeKey } from '../model/normalise.ts'
-import type { Member, Parameter, Signature, TypeExpr, TypeParameter } from '../model/type-expr.ts'
-import { canonicalKey, compareCodeUnits } from '../canonical-json.ts'
-import type { ChannelType } from '../rules/corpus.ts'
-import { type Change, type ChangeKind, compose, flip, type Position } from './change.ts'
-import { direction } from './lattice.ts'
+import { Function, Order, Schema } from 'effect'
+import { canonicalKey } from '../canonical-json.schema.ts'
+import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../model/api-model.schema.ts'
+import { type Member, normaliseType, type Parameter, type Signature, type TypeExpr, type TypeParameter, typeKey } from '../model/type-expr.schema.ts'
+import { type Direction, direction } from './direction.schema.ts'
+import { type ChannelType, compose, flip, type Position } from './position.schema.ts'
+
+export const ChangeKind = Schema.Literals([
+  'entry-point-added',
+  'entry-point-removed',
+  'export-added',
+  'export-removed',
+  'export-kind-changed',
+  'overload-added',
+  'overload-removed',
+  'dual-form-added',
+  'dual-form-removed',
+  'required-parameter-added',
+  'optional-parameter-added',
+  'parameter-removed',
+  'parameter-became-optional',
+  'parameter-became-required',
+  'parameter-rest-changed',
+  'required-member-added',
+  'optional-member-added',
+  'member-removed',
+  'member-kind-changed',
+  'member-became-optional',
+  'member-became-required',
+  'member-became-readonly',
+  'member-became-mutable',
+  'type-parameters-changed',
+  'heritage-changed',
+  'variable-mutability-changed',
+  'class-became-abstract',
+  'class-became-concrete',
+  'enum-member-added',
+  'enum-member-removed',
+  'enum-member-value-changed',
+  'enum-const-changed',
+  'type-changed',
+])
+export type ChangeKind = typeof ChangeKind.Type
+
+/** One difference between two models, before any rule judges it. */
+export type Change = {
+  readonly kind: ChangeKind
+  readonly location: string
+  readonly position: Position
+  /** The Effect-family channel (`A`, `E`, `R`, ...) the change sits under, if any. */
+  readonly channel?: string
+  readonly direction?: Direction
+}
+
+/** Every difference between two models. */
+export type Changes = ReadonlyArray<Change>
 
 type Aliases = ReadonlyMap<string, TypeAliasItem>
 
@@ -357,7 +406,7 @@ const compareMembers = (
   return [...callChanges, ...removed, ...added, ...changed]
 }
 
-const heritageKey = (types: ReadonlyArray<TypeExpr>): string => canonicalKey([...types.map(typeKey)].sort(compareCodeUnits))
+const heritageKey = (types: ReadonlyArray<TypeExpr>): string => canonicalKey([...types.map(typeKey)].sort(Order.String))
 
 const compareItem = (context: Context, before: ApiItem, after: ApiItem, at: At): ReadonlyArray<Change> => {
   switch (before.kind) {
@@ -447,7 +496,7 @@ const unmatched = (from: ReadonlyArray<ApiItem>, to: ReadonlyArray<ApiItem>): Re
 }
 
 const inCanonicalOrder = (items: ReadonlyArray<ApiItem>): ReadonlyArray<ApiItem> =>
-  [...items].sort((left, right) => compareCodeUnits(canonicalKey(left), canonicalKey(right)))
+  [...items].sort((left, right) => Order.String(canonicalKey(left), canonicalKey(right)))
 
 const compareNamed = (context: Context, before: ReadonlyArray<ApiItem>, after: ReadonlyArray<ApiItem>, at: At): ReadonlyArray<Change> => {
   const kinds = new Set([...before, ...after].map((item) => item.kind))
@@ -484,7 +533,10 @@ const expandedItems = (entryPoint: EntryPoint): ReadonlyArray<ApiItem> => {
  * Every difference between two models of the same package. Locations read
  * `<entry point>:<export>/<path>`, e.g. `.:getUser/signature[0]/returns/E`.
  */
-export const diffModels = (before: ApiModel, after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): ReadonlyArray<Change> => {
+export const diffModels: {
+  (after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): (before: ApiModel) => Changes
+  (before: ApiModel, after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): Changes
+} = Function.dual(3, (before: ApiModel, after: ApiModel, channelTypes: ReadonlyArray<ChannelType>): Changes => {
   const context: Context = { channelTypes }
   const afterByPath = new Map(after.entryPoints.map((entryPoint) => [entryPoint.path, entryPoint] as const))
   const beforePaths = new Set(before.entryPoints.map((entryPoint) => entryPoint.path))
@@ -499,4 +551,4 @@ export const diffModels = (before: ApiModel, after: ApiModel, channelTypes: Read
       .filter((entryPoint) => !beforePaths.has(entryPoint.path))
       .map((entryPoint) => change('entry-point-added', { position: 'out', location: entryPoint.path })),
   ]
-}
+})

@@ -1,9 +1,8 @@
 import { describe } from '@systemfsoftware/vitest'
-import { canonicalJson } from '../canonical-json.ts'
-import { ApiModel, decodeApiModel } from './api-model.ts'
-import { sortModel } from './normalise.ts'
+import { canonicalJson } from '../canonical-json.schema.ts'
+import { ApiModel, decodeApiModel, sortModel } from './api-model.schema.ts'
 import { serialiseApiModel } from './serialise.ts'
-import { TypeExpr } from './type-expr.ts'
+import { TypeExpr } from './type-expr.schema.ts'
 
 describe('ApiModel wire document', (it) => {
   it.prop('decodes its own canonical bytes back to the same model', { of: [ApiModel], subject: serialiseApiModel }, (serialise, [model]) => {

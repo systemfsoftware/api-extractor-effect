@@ -1,11 +1,12 @@
 import { describe } from '@systemfsoftware/vitest'
-import { Result, Schema } from 'effect'
-import { canonicalJson, compareCodeUnits } from './canonical-json.ts'
-import { bumpOf, maxBump, UNCLASSIFIED } from './findings.ts'
+import { Order, Result, Schema } from 'effect'
+import { canonicalJson, type Json } from './canonical-json.schema.ts'
 import { judgeSurfaces } from './judge-surfaces.workflow.ts'
-import { ApiItem, ApiModel, type TypeAliasItem } from './model/api-model.ts'
-import { type Signature, TypeExpr } from './model/type-expr.ts'
-import { type Bump, type Rule, type RuleCorpus, defaultCorpus } from './rules/corpus.ts'
+import { ApiItem, ApiModel, type TypeAliasItem } from './model/api-model.schema.ts'
+import { type Signature, TypeExpr } from './model/type-expr.schema.ts'
+import { type Bump, maxBump, type Rule, type RuleCorpus, UNCLASSIFIED } from './rules/corpus.schema.ts'
+import { defaultCorpus } from './rules/default-corpus.ts'
+import { bumpOf } from './rules/finding.schema.ts'
 import { type AmbiguousRuleCorpus, CompareSurfaces, type Verdict } from './verdict.schema.ts'
 import {
   alias,
@@ -26,7 +27,7 @@ import {
 
 type Judged = Result.Result<Verdict, AmbiguousRuleCorpus>
 const judge = (before: ApiModel, after: ApiModel, corpus: RuleCorpus = defaultCorpus): Judged =>
-  judgeSurfaces(new CompareSurfaces({ before, after, corpus }))
+  judgeSurfaces(new CompareSurfaces({ engine: 'fixture@0.0.0', before, after, corpus }))
 
 const located = (result: Judged) =>
   Result.isSuccess(result)
@@ -36,7 +37,7 @@ const reasons = (result: Judged) =>
   Result.isSuccess(result)
     ? { bump: result.success.bump, reasons: result.success.findings.map((finding) => finding.reason_code) }
     : { refused: result.failure.ambiguities }
-const same = (left: unknown, right: unknown): boolean => canonicalJson(left) === canonicalJson(right)
+const same = (left: Json, right: Json): boolean => canonicalJson(left) === canonicalJson(right)
 const verdict = (bump: Bump, ...findings: ReadonlyArray<readonly [string, ReadonlyArray<string>]>) => ({ bump, findings })
 const refused = (...ambiguities: ReadonlyArray<string>) => ({ refused: ambiguities })
 
@@ -74,7 +75,7 @@ describe('verdict on Effect channels', (it) => {
         rootedWith(surrounding, names.map((name) => ({ ...returning(effect(value, failure)), name })))
       return same(
         located(judge(exportsOf(smaller), exportsOf(larger))),
-        verdict('major', ['E_WIDENED', names.map((name) => `.:${name}/signature[0]/returns/E`).sort(compareCodeUnits)]),
+        verdict('major', ['E_WIDENED', names.map((name) => `.:${name}/signature[0]/returns/E`).sort(Order.String)]),
       )
     },
   )
