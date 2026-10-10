@@ -31,11 +31,14 @@ export class Verdict extends Schema.TaggedClass<Verdict>()('Verdict', {
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-/** A corpus whose rules do not pick one rule per change: two rules share a match, or a rule id repeats. */
-export class AmbiguousRuleCorpus extends Schema.TaggedError<AmbiguousRuleCorpus>()('AmbiguousRuleCorpus', {
+/** The corpus a refusal names, and each way its rules fail to pick one rule per change. */
+export const CorpusAmbiguities = {
   corpusVersion: Schema.String,
   ambiguities: Schema.Array(Schema.String),
-}) {}
+}
+
+/** A corpus whose rules do not pick one rule per change: two rules share a match, or a rule id repeats. */
+export class AmbiguousRuleCorpus extends Schema.TaggedError<AmbiguousRuleCorpus>()('AmbiguousRuleCorpus', CorpusAmbiguities) {}
 
 /** Judge the change from one surface of a package to the next against a rule corpus. */
 export class CompareSurfaces extends Schema.TaggedClass<CompareSurfaces>()('CompareSurfaces', {

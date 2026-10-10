@@ -1,6 +1,6 @@
 import fc from 'fast-check'
-import type { ApiItem, ApiModel, EntryPoint, TypeAliasItem } from '../../src/model/api-model.ts'
-import type { KeywordName, Member, Parameter, Signature, TypeExpr, TypeParameter } from '../../src/model/type-expr.ts'
+import { API_MODEL_SCHEMA_VERSION, type ApiItem, type ApiModel, type EntryPoint, type TypeAliasItem } from '../../src/model/api-model.ts'
+import { KeywordName, type Member, type Parameter, type Signature, type TypeExpr, type TypeParameter } from '../../src/model/type-expr.ts'
 
 /** Characters whose case mapping or collation differs across locales (Turkish i, German sharp s). */
 const unit = fc.constantFrom('a', 'b', 'i', 'I', 'ı', 'İ', 'ß', 'Z', 'é', '_', '$', 'ä', 'Ä')
@@ -8,15 +8,15 @@ const unit = fc.constantFrom('a', 'b', 'i', 'I', 'ı', 'İ', 'ß', 'Z', 'é', '_
 /** Identifiers drawn from locale-sensitive characters. */
 export const name: fc.Arbitrary<string> = fc.string({ unit, minLength: 1, maxLength: 5 })
 
-const keyword = fc.constantFrom<KeywordName>(
-  'any', 'bigint', 'boolean', 'never', 'null', 'number', 'object', 'string', 'symbol', 'undefined', 'unknown', 'void',
-)
+const keyword = fc.constantFrom<KeywordName>(...KeywordName.literals)
 
 const literal = fc.oneof(
   fc.string({ unit, maxLength: 4 }).map((text) => JSON.stringify(text)),
   fc.integer({ min: -9, max: 99 }).map(String),
   fc.constantFrom('true', 'false'),
 )
+
+const typeParameters = fc.array(fc.record({ name }) as fc.Arbitrary<TypeParameter>, { maxLength: 2 })
 
 const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; member: Member }>((tie) => ({
   typeExpr: fc.oneof(
@@ -35,7 +35,7 @@ const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; membe
     fc.string({ unit, minLength: 1, maxLength: 6 }).map((text): TypeExpr => ({ kind: 'text', text })),
   ),
   signature: fc.record({
-    typeParameters: fc.array(fc.record({ name }, { requiredKeys: ['name'] }) as fc.Arbitrary<TypeParameter>, { maxLength: 2 }),
+    typeParameters,
     parameters: fc.array(
       fc.record({ name, type: tie('typeExpr'), optional: fc.boolean(), rest: fc.boolean() }) as fc.Arbitrary<Parameter>,
       { maxLength: 3 },
@@ -48,10 +48,6 @@ const { typeExpr } = fc.letrec<{ typeExpr: TypeExpr; signature: Signature; membe
     tie('signature').map((signature): Member => ({ kind: 'call', signature })),
   ),
 }))
-
-export { typeExpr }
-
-const typeParameters = fc.array(fc.record({ name }) as fc.Arbitrary<TypeParameter>, { maxLength: 2 })
 
 const typeAlias: fc.Arbitrary<TypeAliasItem> = fc.record({
   kind: fc.constant('typeAlias' as const),
@@ -84,7 +80,7 @@ const entryPoint: fc.Arbitrary<EntryPoint> = fc.record({
 
 /** Any well-formed model. */
 export const apiModel: fc.Arbitrary<ApiModel> = fc.record({
-  schemaVersion: fc.constant(1 as const),
+  schemaVersion: fc.constant(API_MODEL_SCHEMA_VERSION),
   producer: fc.record({ engine: fc.constant('test@0.0.0'), declarations: fc.constantFrom('tsc@7.0.2', 'isolated') }),
   package: fc.record({ name, version: fc.constant('1.0.0') }),
   entryPoints: fc.uniqueArray(entryPoint, { selector: (entry) => entry.path, minLength: 1, maxLength: 2 }),

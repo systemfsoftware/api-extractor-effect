@@ -1,5 +1,5 @@
 import type { TypeExpr } from '../model/type-expr.ts'
-import { typeKey } from '../model/normalise.ts'
+import { canonicalKey } from '../canonical-json.ts'
 import type { Direction } from './change.ts'
 
 const literalKeyword = (text: string): string | undefined => {
@@ -10,18 +10,27 @@ const literalKeyword = (text: string): string | undefined => {
   return undefined
 }
 
+/** A normalised union member with its structural key, computed once. */
+interface Keyed {
+  readonly type: TypeExpr
+  readonly key: string
+}
+
 /** `left` is assignable to `right` on the small lattice the verdict decides on. */
-const below = (left: TypeExpr, right: TypeExpr): boolean => {
-  if (typeKey(left) === typeKey(right)) return true
+const below = ({ type: left, key: leftKey }: Keyed, { type: right, key: rightKey }: Keyed): boolean => {
+  if (leftKey === rightKey) return true
   if (right.kind === 'keyword' && (right.name === 'unknown' || right.name === 'any')) return true
   if (left.kind === 'keyword' && left.name === 'never') return true
   return left.kind === 'literal' && right.kind === 'keyword' && literalKeyword(left.text) === right.name
 }
 
-const membersOf = (type: TypeExpr): ReadonlyArray<TypeExpr> =>
-  type.kind === 'union' ? type.members : type.kind === 'keyword' && type.name === 'never' ? [] : [type]
+const membersOf = (type: TypeExpr): ReadonlyArray<Keyed> =>
+  (type.kind === 'union' ? type.members : type.kind === 'keyword' && type.name === 'never' ? [] : [type]).map((member) => ({
+    type: member,
+    key: canonicalKey(member),
+  }))
 
-const within = (left: ReadonlyArray<TypeExpr>, right: ReadonlyArray<TypeExpr>): boolean =>
+const within = (left: ReadonlyArray<Keyed>, right: ReadonlyArray<Keyed>): boolean =>
   left.every((member) => right.some((candidate) => below(member, candidate)))
 
 /**

@@ -142,21 +142,21 @@ const channelTypeOf = (context: Context, type: TypeExpr & { readonly kind: 'refe
 const compareType = (context: Context, before: TypeExpr, after: TypeExpr, at: At): ReadonlyArray<Change> => {
   const b = normaliseType(before)
   const a = normaliseType(after)
-  if (typeKey(b) === typeKey(a)) return []
-  const recurse = (x: TypeExpr, y: TypeExpr, next: At): ReadonlyArray<Change> => compareType(context, x, y, next)
+  // Both sides are normalised, so their canonical keys are their structural identity.
+  if (canonicalKey(b) === canonicalKey(a)) return []
 
   if (b.kind === 'reference' && a.kind === 'reference' && b.name === a.name && b.module === a.module && b.args.length === a.args.length) {
     const channelType = channelTypeOf(context, b)
     if (channelType !== undefined) {
       return channelType.channels.flatMap((slot, index) =>
-        recurse(b.args[index] as TypeExpr, a.args[index] as TypeExpr, {
+        compareType(context, b.args[index] as TypeExpr, a.args[index] as TypeExpr, {
           position: compose(at.position, slot.variance),
           location: `${at.location}/${slot.name}`,
           channel: slot.name,
         }),
       )
     }
-    return b.args.flatMap((arg, index) => recurse(arg, a.args[index] as TypeExpr, step(at, `arg[${index}]`, 'both')))
+    return b.args.flatMap((arg, index) => compareType(context, arg, a.args[index] as TypeExpr, step(at, `arg[${index}]`, 'both')))
   }
   if (b.kind === 'function' && a.kind === 'function') {
     return compareSignature(context, b.signature, a.signature, at)
@@ -165,10 +165,10 @@ const compareType = (context: Context, before: TypeExpr, after: TypeExpr, at: At
     return compareMembers(context, b.members, a.members, at)
   }
   if (b.kind === 'array' && a.kind === 'array' && b.readonly === a.readonly) {
-    return recurse(b.element, a.element, step(at, 'element'))
+    return compareType(context, b.element, a.element, step(at, 'element'))
   }
   if (b.kind === 'tuple' && a.kind === 'tuple' && b.readonly === a.readonly && b.elements.length === a.elements.length) {
-    return b.elements.flatMap((element, index) => recurse(element, a.elements[index] as TypeExpr, step(at, `element[${index}]`)))
+    return b.elements.flatMap((element, index) => compareType(context, element, a.elements[index] as TypeExpr, step(at, `element[${index}]`)))
   }
   const moved = direction(b, a)
   return moved === undefined ? [] : [change('type-changed', at, { direction: moved })]
@@ -254,14 +254,14 @@ const compareSignatureSets = (
 ): ReadonlyArray<Change> => {
   const beforeForms = formsOf(before)
   const afterForms = formsOf(after)
-  const afterKeys = new Set(after.map(signatureKey))
-  const beforeKeys = new Set(before.map(signatureKey))
-  const unmatched = (signatures: ReadonlyArray<Signature>, forms: ReadonlyArray<Form>, others: ReadonlySet<string>) =>
+  const beforeKeys = before.map(signatureKey)
+  const afterKeys = after.map(signatureKey)
+  const unmatched = (signatures: ReadonlyArray<Signature>, keys: ReadonlyArray<string>, forms: ReadonlyArray<Form>, others: ReadonlySet<string>) =>
     signatures
       .map((signature, index) => ({ signature, index, form: forms[index] as Form }))
-      .filter((entry) => !others.has(signatureKey(entry.signature)))
-  const left = unmatched(before, beforeForms, afterKeys)
-  const right = unmatched(after, afterForms, beforeKeys)
+      .filter((entry) => !others.has(keys[entry.index] as string))
+  const left = unmatched(before, beforeKeys, beforeForms, new Set(afterKeys))
+  const right = unmatched(after, afterKeys, afterForms, new Set(beforeKeys))
   const forms: ReadonlyArray<Form> = ['data-first', 'data-last', 'plain']
   return forms.flatMap((form) => {
     const l = left.filter((entry) => entry.form === form)

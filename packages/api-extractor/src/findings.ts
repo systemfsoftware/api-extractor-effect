@@ -1,10 +1,11 @@
 import { Array as Arr } from 'effect'
 import { compareCodeUnits } from './canonical-json.ts'
 import type { Change } from './diff/change.ts'
-import type { Bump, Rule, RuleCorpus, RuleMatch } from './rules/corpus.ts'
+import { Bump, type Rule, type RuleCorpus, type RuleMatch } from './rules/corpus.ts'
 import type { Finding } from './verdict.schema.ts'
 
-const BUMP_ORDER: ReadonlyArray<Bump> = ['none', 'patch', 'minor', 'major']
+/** Semver order, least first: the order `Bump` declares its literals in. */
+const BUMP_ORDER: ReadonlyArray<Bump> = Bump.literals
 
 /** The larger of two bumps. */
 export const maxBump = (left: Bump, right: Bump): Bump =>
@@ -38,13 +39,10 @@ export const classify = (corpus: RuleCorpus, change: Change): Rule =>
 /** One finding per rule that fired, ordered by rule id, each with its distinct locations in code-unit order. */
 export const findingsOf = (corpus: RuleCorpus, changes: ReadonlyArray<Change>): ReadonlyArray<Finding> =>
   Object.values(Arr.groupBy(changes.map((change) => ({ rule: classify(corpus, change), location: change.location })), ({ rule }) => rule.rule_id))
-    .map((group): Finding => ({
-      rule_id: group[0].rule.rule_id,
-      reason_code: group[0].rule.reason_code,
-      bump: group[0].rule.bump,
-      next_action: group[0].rule.next_action,
-      locations: Arr.dedupe(group.map(({ location }) => location)).sort(compareCodeUnits),
-    }))
+    .map((group): Finding => {
+      const { rule_id, reason_code, bump, next_action } = group[0].rule
+      return { rule_id, reason_code, bump, next_action, locations: Arr.dedupe(group.map(({ location }) => location)).sort(compareCodeUnits) }
+    })
     .sort((left, right) => compareCodeUnits(left.rule_id, right.rule_id))
 
 /** The highest bump among the findings; `none` when there are none. */

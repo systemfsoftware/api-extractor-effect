@@ -5,15 +5,9 @@
  * between each consecutive pair.
  */
 import { text } from 'node:stream/consumers'
-import { Effect } from 'effect'
 import { decodeApiModel } from '../../src/model/api-model.ts'
-import { serialiseApiModel } from '../../src/model/serialise.ts'
-import { verdictCell } from '../../src/verdict.cell.ts'
+import { outputsOf } from './outputs.ts'
 
 const models = (JSON.parse(await text(process.stdin)) as ReadonlyArray<unknown>).map(decodeApiModel)
 const options = new Intl.DateTimeFormat().resolvedOptions()
-const outputs = [
-  ...models.map((model) => serialiseApiModel(model)),
-  ...models.slice(1).map((after, index) => Effect.runSync(verdictCell.run({ before: models[index]!, after }))),
-]
-process.stdout.write(JSON.stringify({ locale: options.locale, timeZone: options.timeZone, cwd: process.cwd(), outputs }))
+process.stdout.write(JSON.stringify({ locale: options.locale, timeZone: options.timeZone, cwd: process.cwd(), outputs: outputsOf(models) }))
