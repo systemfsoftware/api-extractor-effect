@@ -5,7 +5,7 @@ date: 2026-10-10
 topic: effect-api-extractor
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
-supersedes: docs/plans/2026-10-10-1111-feat-effect-api-extractor-plan.md
+supersedes: docs/plans/2026-10-10-1131-feat-effect-api-extractor-plan.md
 execution: code
 ---
 
@@ -241,7 +241,7 @@ Each requirement names the Done item it serves.
   Every action a PR2 workflow or the `checks-lane` action calls is pinned by commit SHA with its tag in a trailing comment, as `reusable-checks.yml` pins its own.
 
   This repository supplies what the workflows require:
-  - `release.jsonc`: `base: main`, `branch: changeset-release/main`, `versioning.strategy: changesets`, `gate: { strategy: turbo, task: build }`.
+  - `release.jsonc`: `base: main`, `branch: changeset-release/main`, `versioning.strategy: changesets`, `gate: { strategy: paths }`, as the standalone family repos stryker-js-effect and are-the-types-wrong-effect set it. The `turbo` gate dry-runs turbo in a checkout of the base (pnpm-release-management `b9b4a1d` `packages/process-adapter/src/turbo-evidence.ts:210-216`), and this PR's base has no `turbo.json`, so that gate refuses every check here. `paths` reads every workspace manifest as a member, so the private e2e app carries `version: 0.0.0`.
   - `.changeset/` with a README, and `versioning.changelog.storage: repository` in `pnpm-workspace.yaml`.
   - Flake `packages.workspace-tarballs`: `mkPnpmWorkspacePackages` with the same `files`.
   - Flake `packages.pnpm-store`: the KTD15 store.
@@ -418,7 +418,7 @@ PR1 and PR2 units are implementation-ready; PR3-PR6 are scoped here and refined 
 
 - **Goal:** changesets and GitHub Releases through pnpm-release-management, with no npm publish.
 - **Requirements:** R3, R21 (the release half); KTD19.
-- **Files:** `.github/workflows/release.yml`, `.github/workflows/changeset-check.yml`, `release.jsonc`, `.changeset/README.md`, `.changeset/<intent>.md`, `pnpm-workspace.yaml` (`versioning.changelog.storage: repository`), root `package.json` (`bootstrap`).
+- **Files:** `.github/workflows/release.yml`, `.github/workflows/changeset-check.yml`, `release.jsonc`, `.changeset/README.md`, `.changeset/<intent>.md`, `pnpm-workspace.yaml` (`versioning.changelog.storage: repository`), root `package.json` (`bootstrap`), `apps/api-extractor-e2e/package.json` (`version`).
 - **Approach:** KTD19. PR2's intent declares `@systemfsoftware/api-extractor: none` (Outstanding Questions).
 - **Test expectation:** none - workflow wiring and data.
 - **Verification:** the changeset check is green on the PR head, and its job time is in the U15 table. `release.yml` runs only on push to `main`, so the PR body says its first run is observed after merge. `nix develop --command version-management --help` and `github-release-management --help` resolve from the dev shell.

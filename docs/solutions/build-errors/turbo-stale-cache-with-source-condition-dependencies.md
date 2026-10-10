@@ -79,5 +79,5 @@ In turbo, this holds only if a `dependsOn` path runs from T to some task in D. S
 
 ## Related Issues
 
-- Plan: `docs/plans/2026-10-10-1131-feat-effect-api-extractor-plan.md`, U13 approach (tests, typecheck and lint resolve source through `@systemfsoftware/source`, so none needs a build).
+- Plan: `docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md`, U13 approach (tests, typecheck and lint resolve source through `@systemfsoftware/source`, so none needs a build).
 - Turbo's transit-node pattern: [Configuring tasks](https://turborepo.dev/docs/crafting-your-repository/configuring-tasks), and "Transit Nodes for Parallel Tasks" in vercel/turborepo's skill reference `tasks.md`.

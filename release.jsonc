@@ -8,5 +8,7 @@
   "versioning": {
     "strategy": "changesets",
   },
-  "gate": { "strategy": "turbo", "task": "build" },
+  // A change under a package's directory needs an intent naming it. The turbo
+  // gate dry-runs turbo at the base, which a base without turbo.json refuses.
+  "gate": { "strategy": "paths" },
 }
