@@ -5,6 +5,7 @@ verdict. Requirements and decisions: `docs/plans/2026-10-10-0517-feat-effect-api
 
 ## Rules
 
+- Read `docs/solutions/` before planning or changing code here.
 - Every output goes through `canonicalJson` (`packages/api-extractor/src/canonical-json.ts`).
   Order strings with `compareCodeUnits`; never `localeCompare`, `toLocale*` or `Intl` in `src`.
 - A change to the model schema bumps `API_MODEL_SCHEMA_VERSION`.
