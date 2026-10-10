@@ -1,0 +1,36 @@
+{
+  "name": "@systemfsoftware/api-extractor",
+  "version": "0.0.0",
+  "description": "Effect-aware public-API model, diff and semver verdict for TypeScript packages",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/api-extractor-effect.git",
+    "directory": "packages/api-extractor"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/mod.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "^12.0.0",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@systemfsoftware/effect-schema-law": "^5.0.1",
+    "@systemfsoftware/effect-schema-vite": "^3.0.1",
+    "@systemfsoftware/tsconfig": "^2.0.1",
+    "@systemfsoftware/vitest": "^2.0.0",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

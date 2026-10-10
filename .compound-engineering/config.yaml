@@ -1,0 +1,5 @@
+packs:
+  - source: https://github.com/systemfsoftware/systemfsoftware.git
+    ref: df908ddfe497e53c1c03b92519a96c913c441a58
+    path: compound-packs
+    pack: [cell-architecture, boundary-testing, schema-laws, package-topology]
