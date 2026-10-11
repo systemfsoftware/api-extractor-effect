@@ -308,3 +308,11 @@ The root ruled on the report-only `ce-doc-review` of this plan at `d8c5cb1`. Fiv
 | F1 | P3 | U1's "no workflow mentions `reusable-mutation`" check read as applying to the final head | Accepted: scoped to U1's commit |
 
 KTD4 is a root overrule outside these rows. Every job fits in 10 minutes: `target-seconds` is at most 480, `max-jobs` stays at 20, and `timeout-minutes` keeps its default only as a backstop. The proof run's per-job times go in the PR body. If the shared inputs cannot hold jobs to 10 minutes, the work stops and the gap is reported as a question.
+
+## Timeout ruling (2026-10-11)
+
+Standing rule (Ryan): a timeout is a backstop for a stuck job, never a budget enforced by cancelling. Every job and step timeout in this repository is a uniform, explicit 60 minutes. Budgets stay measured: each job's wall time is reported in the PR body.
+
+- Applied to `.github/workflows/ci.yml` (the `sfs-deps`, `host-bytes` and `host-compare` jobs, plus the three lanes' `timeout-minutes`, `timeout-minutes` and `plan-timeout-minutes` passed to `reusable-checks.yml`) and to `release.yml`'s `noop` job. `.github/actions/checks-lane` has no timeout.
+- `reusable-checks.yml` at the pinned `732f66a0` takes each of these as a `type: number` input with no upper bound. The lane value goes straight into `timeout-minutes` (`:212`), `timeout-minutes` into the test job (`:55-59`, `:239`), and `plan-timeout-minutes` into the plan and timings jobs (`:60-64`, `:139`, `:316`). `max-seconds: 600` is a planner budget, not a timeout, and stays.
+- This amends KTD4: U2's caller passes `timeout-minutes: 60` and `report-timeout-minutes: 60` explicitly, rather than keeping the shared defaults. The 10-minute figure stays as a measured budget whose per-job times are reported, not a limit enforced by cancelling.

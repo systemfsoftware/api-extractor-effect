@@ -28,7 +28,7 @@ jobs:
     name: no release off main, so the run concludes success, not skipped
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 60
     permissions: {}
     steps:
       - run: echo "Release writes only from refs/heads/main; $GITHUB_REF runs nothing."
