@@ -2,7 +2,7 @@ name: Mutation
 
 on:
   push:
-    branches: [main, feat/mutation]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,6 @@ permissions:
 
 jobs:
   mutation:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     permissions:
       contents: read
       actions: write
