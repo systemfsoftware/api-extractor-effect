@@ -341,3 +341,22 @@ Standing rule (Ryan): a timeout is a backstop for a stuck job, never a budget en
 - **Shared-tooling open items** (not this repository):
   - `mutation-job.ts:102-105` runs Stryker under `timeout --kill-after=60 <2 x target-seconds>`, which is 960 s at 480: a kill cap inside the shared tooling.
   - `stryker-config@0.1.0` declares peer `@systemfsoftware/stryker-js: ^17.0.0`, which neither 18 nor 19 satisfies.
+
+## Proof run 2 ruling (2026-10-11)
+
+- **Result:** run [38120830653](https://github.com/systemfsoftware/api-extractor-effect/actions/runs/38120830653), dispatched on `feat/mutation` at `1ebd34e`, concluded `failure`.
+  - The dry run passed: 158 tests, 07:24:17.2 to 07:35:18.9, which is 661 s wall and 337.5 s of runner test time.
+  - Stryker planned 1354 mutants and completed 63.
+  - At 07:40:14, 960 s after it started, Stryker got SIGTERM from the `timeout --kill-after=60 <2 x target-seconds>` wrapper (`mutation-job.ts:102-105`) and exited 130 `RunInterrupted`.
+  - The planner found no recorded timings and planned one unsharded job (default about 8m00s).
+  - Jobs: mutation 994 s, `sfs-deps` 401 s.
+- **Cause of the dry-run cost:** this is shared tooling, routed by the root to unit S2. In systemfsoftware, effect-sim-kernel `Profile.ts:34-39` runs 250 seeded replays per gherkin scenario and ignores the fibers/steps budget. This repository's scenarios are single-fiber, and 50 seeds gave 1 path. A serial host run of the suite took 69.9 s at 250 seeds and 9.5 s at 25.
+- **Ruling (root):** no workaround in this repository:
+  - no `target-seconds` or `max-seconds` change;
+  - no local `mutation-job.ts`;
+  - no `CONFORMANCE_PROFILE` flag;
+  - no test change.
+- **Blocked on:**
+  - O1's fix PR, which removes the `mutation-job.ts` timeout wrapper and widens the `stryker-config` peer range;
+  - S2's effect-sim-kernel seed-budget release.
+- **Re-proof required:** every job at or under 600 s, with a graded row for `packages/api-extractor`.
