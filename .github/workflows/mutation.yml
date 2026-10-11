@@ -1,0 +1,25 @@
+name: Mutation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    permissions:
+      contents: read
+      actions: write
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-mutation.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77
+    with:
+      target-seconds: 480
+      max-jobs: 20
+      timeout-minutes: 60
+      report-timeout-minutes: 60

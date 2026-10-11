@@ -112,7 +112,7 @@ Mutation is the gate on `src/**/*.workflow.ts` and `src/**/*.schema.ts` (break t
 
 - **Red signal (D2), ruled.** O1 (#735) does not make a below-break score fail the run, and #733 does.
   - If #733 merges first, pin the O1 rev at or after #733's merge commit.
-  - If O1 merges first, pin O1's rev, keep R4's graded-summary read, and re-pin after #733 merges in a follow-up.
+  - If O1 merges first, pin O1's rev, keep R4's graded-summary read, and re-pin after #733 merges in a follow-up. **Taken (2026-10-11):** O1 merged first as `02bf9653b1ca2b0a2951baf2743bb3f70d19fc77`, and #733 is still open. The caller pins `02bf965`; the re-pin past #733 is a later PR.
 
   R4 holds either way: no merge without a passing graded score.
 - **Upstream (D8).** The SHA pin does not cover the shared workflow's tag-pinned actions: `actions/cache@v6` (`feb68840` `reusable-mutation.yml:158,271,283`) and `denoland/setup-deno@v2` (`.github/actions/sfs-tools/action.yml:34`). Should systemfsoftware pin them by SHA?
@@ -316,3 +316,13 @@ Standing rule (Ryan): a timeout is a backstop for a stuck job, never a budget en
 - Applied to `.github/workflows/ci.yml` (the `sfs-deps`, `host-bytes` and `host-compare` jobs, plus the three lanes' `timeout-minutes`, `timeout-minutes` and `plan-timeout-minutes` passed to `reusable-checks.yml`) and to `release.yml`'s `noop` job. `.github/actions/checks-lane` has no timeout.
 - `reusable-checks.yml` at the pinned `732f66a0` takes each of these as a `type: number` input with no upper bound. The lane value goes straight into `timeout-minutes` (`:212`), `timeout-minutes` into the test job (`:55-59`, `:239`), and `plan-timeout-minutes` into the plan and timings jobs (`:60-64`, `:139`, `:316`). `max-seconds: 600` is a planner budget, not a timeout, and stays.
 - This amends KTD4: U2's caller passes `timeout-minutes: 60` and `report-timeout-minutes: 60` explicitly, rather than keeping the shared defaults. The 10-minute figure stays as a measured budget whose per-job times are reported, not a limit enforced by cancelling.
+
+## U2 rulings (2026-10-11)
+
+- **Pin:** `02bf9653b1ca2b0a2951baf2743bb3f70d19fc77` (#735), taken only once every systemfsoftware run on it had concluded success. Nothing past #733 is pinned.
+- **Concurrency (amends KTD3):** the group is `mutation-${{ github.sha }}` with `cancel-in-progress: false`, so no merge's run cancels or replaces another merge's run.
+- **Inputs (amends KTD4):** `target-seconds: 480`, `max-jobs: 20`, `timeout-minutes: 60` and `report-timeout-minutes: 60`, each passed explicitly. `sfs-deps-installable` keeps its default `.#sfs-deps`, which evaluates on x86_64-linux and aarch64-linux.
+- **Full corpus (ruling (a)):**
+  - Push and dispatch runs are both incremental through the reusable's cache: an unconditional restore with the `stryker-incremental-<dir>-` prefix (`reusable-mutation.yml:198-205`), and the report job's restore and save (`:312-328`).
+  - Full-corpus never runs per push, which meets the root rule. The first run on a cold cache covers the whole corpus.
+  - A full-corpus dispatch input belongs to the shared-tooling unit and is an open item. There is no local workaround, no cache-busting input and no copy of the reusable.
