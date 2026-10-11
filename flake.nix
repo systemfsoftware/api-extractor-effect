@@ -11,7 +11,8 @@
     nixpkgs.follows = "systemfsoftware/nixpkgs";
     # stryker-js-effect at the release commit of `@systemfsoftware/stryker-js@v19.0.0`
     # and `@systemfsoftware/stryker-ignorer-effect-schema-declarations@v0.3.0`.
-    # Every stryker package comes from this one commit. Nothing follows: its own
+    # Every stryker-js-effect package comes from this one commit; stryker-config
+    # comes from the systemfsoftware input. Nothing follows: its own
     # lock reproduces the released tarballs byte for byte, the integrity each
     # release tag records.
     stryker-published.url = "github:systemfsoftware/stryker-js-effect/9e81669b84711a9635eaa97b17dd13efea9f0c8c";
