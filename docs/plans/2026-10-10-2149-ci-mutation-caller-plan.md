@@ -326,3 +326,18 @@ Standing rule (Ryan): a timeout is a backstop for a stuck job, never a budget en
   - Push and dispatch runs are both incremental through the reusable's cache: an unconditional restore with the `stryker-incremental-<dir>-` prefix (`reusable-mutation.yml:198-205`), and the report job's restore and save (`:312-328`).
   - Full-corpus never runs per push, which meets the root rule. The first run on a cold cache covers the whole corpus.
   - A full-corpus dispatch input belongs to the shared-tooling unit and is an open item. There is no local workaround, no cache-busting input and no copy of the reusable.
+
+## Proof run 1 ruling (2026-10-11)
+
+- **Result:** run [38117312976](https://github.com/systemfsoftware/api-extractor-effect/actions/runs/38117312976), dispatched on `feat/mutation` at `7cd02ba` on a cold cache, concluded `failure`. Stryker's dry run failed 1 of 104 tests: `src/schema-laws.test.ts` reported `recursionBudget is declared on ApiItem but nothing materialized it — Budget_RequiresTransform`. Nothing was mutated, and the summary row reads `packages/api-extractor | no report | [WARN]`. The mutation job ran 682 s, 642 s of it in the dry run. That figure is re-measured on the next run.
+- **Cause:**
+  - `effect-schema-recursion-budget@2.0.0` injects the arbitrary hook only when the first argument of `.annotate(...)` on a `Schema.suspend(...)` is an object literal (`dist/index.mjs`, `injectionOf`). Stryker's ObjectLiteral mutant wraps that object in a conditional, so nothing is injected.
+  - `stryker-ignorer-effect-schema-declarations@0.2.1` does not ignore that object. Its generation keys apply only to the second argument of `makeFilter`, `makeFilterGroup` and `declare`. It ignores the first argument of `annotate` only when every key in it is a documentation key.
+- **Ruling (root):**
+  - The fix is upstream and already released. Ignorer 0.3.0 ignores an `annotate`/`annotations` first argument that holds `recursionBudget`, whatever its other keys. It is released at stryker-js-effect `9e81669b84711a9635eaa97b17dd13efea9f0c8c` with the rest of the stryker family (stryker-js 19.0.0).
+  - The `stryker-published` flake input moves to that commit, and every stryker tarball comes from it. `.sfs-deps`, the overrides in `pnpm-workspace.yaml` and `pnpm-lock.yaml` are regenerated from it.
+  - This is toolchain only. No `// Stryker disable` comment and no package source edit, so R6 holds.
+  - The next proof run is dispatched by the root. No temporary trigger is re-added, because the workflow is already registered.
+- **Shared-tooling open items** (not this repository):
+  - `mutation-job.ts:102-105` runs Stryker under `timeout --kill-after=60 <2 x target-seconds>`, which is 960 s at 480: a kill cap inside the shared tooling.
+  - `stryker-config@0.1.0` declares peer `@systemfsoftware/stryker-js: ^17.0.0`, which neither 18 nor 19 satisfies.
