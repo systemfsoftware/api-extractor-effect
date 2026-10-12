@@ -305,6 +305,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.2(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@systemfsoftware/api-extractor':
+        specifier: workspace:*
+        version: link:../../packages/api-extractor
       '@systemfsoftware/oxlint-config-recommended':
         specifier: file:../../.sfs-deps/oxlint-config-recommended-4.0.0.tgz
         version: file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz(effect@4.0.2)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)
@@ -354,6 +357,9 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.2(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@24.19.1)

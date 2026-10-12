@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, FileSystem, Layer, Match, Option, Order, Path, Ref } from 'effect'
+import { Array as Arr, Effect, FileSystem, Layer, Match, Option, Order, Path, Ref, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
@@ -65,9 +65,9 @@ const firstSource = (
         })),
   })
 
-const refusedOrDeclared = (found: ReadonlyArray<Diagnostic>, declarations: Declarations): Effect.Effect<Declarations, NotIsolated> =>
+const refusedOrClosed = <A, E>(found: ReadonlyArray<Diagnostic>, closed: Result.Result<A, E>): Effect.Effect<A, NotIsolated | E> =>
   Arr.match(found, {
-    onEmpty: () => Effect.succeed(declarations),
+    onEmpty: () => Result.match(closed, { onSuccess: Effect.succeed, onFailure: Effect.fail }),
     onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
   })
 
@@ -75,17 +75,19 @@ const emit = (source: PackageSource) =>
   Effect.gen(function* () {
     const emission: Emission = { source, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
     const entryPoints = source.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
-    const files = yield* closeDeclarations({
+    const closed = yield* Effect.result(closeDeclarations({
       entryDeclarations: entryPoints.map((entry) => entry.declarationFile),
       load: (declarationFile) => firstSource(emission, sourceCandidatesOf(declarationFile)),
-    })
+    }))
     const found = Arr.sort(yield* Ref.get(emission.diagnostics), diagnosticOrder)
-    return yield* refusedOrDeclared(found, {
+    const files = yield* refusedOrClosed(found, closed)
+    const declarations: Declarations = {
       producer: OXC_TRANSFORM_PRODUCER,
       package: { name: source.name, version: source.version },
       entryPoints,
       files,
-    })
+    }
+    return declarations
   })
 
 export const layer: Layer.Layer<IsolatedEmitterId, never, FileSystem.FileSystem | Path.Path> = Layer.effect(

@@ -330,6 +330,19 @@ const grouped = <A>(entries: ReadonlyArray<readonly [string, A]>): HashMap.HashM
   Arr.reduce(entries, HashMap.empty<string, ReadonlyArray<A>>(), (groups, [key, value]) =>
     HashMap.set(groups, key, [...Option.getOrElse(HashMap.get(groups, key), (): ReadonlyArray<A> => []), value]))
 
+const isEmptyExportList = (node: ExportNamedDeclaration): boolean => node.declaration === null && node.specifiers.length === 0
+
+const isExportBlocker = (statement: Directive | Statement): boolean =>
+  Match.value(statement).pipe(
+    Match.when({ type: 'ExportNamedDeclaration' }, isEmptyExportList),
+    Match.orElse(() => false),
+  )
+
+const implicitExports = (program: Program, parts: ReadonlyArray<ScopeParts>): ReadonlyArray<readonly [string, ExportBinding]> =>
+  program.body.some(isExportBlocker)
+    ? []
+    : parts.flatMap((part) => part.declarations.map(([name]) => [name, { kind: 'local', local: name }] as const))
+
 const scopeOf = (file: DeclarationFile): Effect.Effect<FileScope, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const { program, comments } = yield* parsed(file.path, file.text)
@@ -341,7 +354,7 @@ const scopeOf = (file: DeclarationFile): Effect.Effect<FileScope, UnsupportedDec
       comments,
       declarations: grouped(parts.flatMap((part) => part.declarations)),
       imports: HashMap.fromIterable(parts.flatMap((part) => part.imports)),
-      exports: HashMap.fromIterable(parts.flatMap((part) => part.exports)),
+      exports: HashMap.fromIterable([...implicitExports(program, parts), ...parts.flatMap((part) => part.exports)]),
       starExports: parts.flatMap((part) => part.starExports),
     }
   })
