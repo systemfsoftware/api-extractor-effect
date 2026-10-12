@@ -1,7 +1,6 @@
 import { Array as Arr, Effect, HashMap, Match, Option } from 'effect'
 import type {
   AccessorProperty,
-  BindingPattern,
   ClassElement,
   Expression,
   MethodDefinition,
@@ -41,7 +40,7 @@ import {
 } from './canonical-type-text.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
-const { canonicalTypeText, referenceTargetFor, refuse, withTypeParameters } = TypePrinting
+const { bindingName, canonicalTypeText, referenceTargetFor, refuse, withTypeParameters } = TypePrinting
 
 const unknownKeyword: TypeExpr = { kind: 'keyword', name: 'unknown' }
 
@@ -129,13 +128,6 @@ const typeParametersOf = (
       return Effect.forEach(present.params, (parameter) => typeParameterOf(inner, parameter))
     },
   })
-
-const bindingName = (pattern: BindingPattern): string =>
-  Match.value(pattern).pipe(
-    Match.when({ type: 'Identifier' }, (identifier) => identifier.name),
-    Match.when({ type: 'AssignmentPattern', left: { type: 'Identifier' } }, (assignment) => assignment.left.name),
-    Match.orElse(() => '_'),
-  )
 
 const parameterOf = (context: TypeContext, parameter: ParamPattern): Effect.Effect<Parameter, UnsupportedDeclaration> =>
   Match.value(parameter).pipe(

@@ -1,20 +1,14 @@
 import { Schema } from 'effect'
 
-export const AnalysisMessageId: Schema.Literals<
-  readonly [
-    'ae-forgotten-export',
-    'ae-incompatible-release-tags',
-    'ae-internal-missing-underscore',
-    'ae-internal-mixed-release-tag',
-    'ae-missing-release-tag',
-  ]
-> = Schema.Literals([
+const ANALYSIS_MESSAGE_IDS = [
   'ae-forgotten-export',
   'ae-incompatible-release-tags',
   'ae-internal-missing-underscore',
   'ae-internal-mixed-release-tag',
   'ae-missing-release-tag',
-])
+] as const
+
+export const AnalysisMessageId: Schema.Literals<typeof ANALYSIS_MESSAGE_IDS> = Schema.Literals(ANALYSIS_MESSAGE_IDS)
 export type AnalysisMessageId = typeof AnalysisMessageId.Type
 
 export type AnalysisMessage = {

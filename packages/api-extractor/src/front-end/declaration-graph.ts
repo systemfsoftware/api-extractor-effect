@@ -130,23 +130,40 @@ const firstLoaded = <E, R>(
 const followed = (file: string, program: Program): ReadonlyArray<ReadonlyArray<string>> =>
   specifiersOf(program).filter(isRelativeSpecifier).map((specifier) => declarationCandidates(file, specifier))
 
-const visitFound = <E, R>(file: string, text: string, rest: ReadonlyArray<ReadonlyArray<string>>, loaded: Loaded, load: Loader<E, R>) =>
+type WorkQueue = {
+  readonly push: (candidates: ReadonlyArray<string>) => void
+  readonly get: (index: number) => Option.Option<ReadonlyArray<string>>
+}
+
+const workQueue = (initial: ReadonlyArray<ReadonlyArray<string>>): WorkQueue => {
+  const pending: Array<ReadonlyArray<string>> = [...initial]
+  return {
+    push: (candidates) => void pending.push(candidates),
+    get: (index) => Arr.get(pending, index),
+  }
+}
+
+const visitFound = <E, R>(file: string, text: string, queue: WorkQueue, at: number, loaded: Loaded, load: Loader<E, R>) =>
   HashMap.has(loaded, file)
-    ? visit(rest, loaded, load)
-    : Effect.flatMap(parsed(file, text), ({ program }) => visit([...rest, ...followed(file, program)], HashMap.set(loaded, file, text), load))
+    ? visit(queue, at, loaded, load)
+    : Effect.flatMap(parsed(file, text), ({ program }) => {
+        Arr.forEach(followed(file, program), (candidates) => queue.push(candidates))
+        return visit(queue, at, HashMap.set(loaded, file, text), load)
+      })
 
 const visit = <E, R>(
-  pending: ReadonlyArray<ReadonlyArray<string>>,
+  queue: WorkQueue,
+  at: number,
   loaded: Loaded,
   load: Loader<E, R>,
 ): Effect.Effect<Loaded, E | UnsupportedDeclaration, R> =>
-  Arr.match(pending, {
-    onEmpty: () => Effect.succeed(loaded),
-    onNonEmpty: ([candidates, ...rest]) =>
+  Option.match(queue.get(at), {
+    onNone: () => Effect.succeed(loaded),
+    onSome: (candidates) =>
       Effect.flatMap(firstLoaded(candidates, loaded, load), (found) =>
         Option.match(found, {
-          onNone: () => visit(rest, loaded, load),
-          onSome: ([file, text]) => visitFound(file, text, rest, loaded, load),
+          onNone: () => visit(queue, at + 1, loaded, load),
+          onSome: ([file, text]) => visitFound(file, text, queue, at + 1, loaded, load),
         })),
   })
 
@@ -159,7 +176,7 @@ export type ClosureRequest<E, R> = {
 
 export const closeDeclarations = <E, R>(request: ClosureRequest<E, R>): Effect.Effect<ReadonlyArray<DeclarationFile>, E | UnsupportedDeclaration, R> =>
   Effect.map(
-    visit(request.entryDeclarations.map(Arr.of), HashMap.empty(), request.load),
+    Effect.suspend(() => visit(workQueue(request.entryDeclarations.map(Arr.of)), 0, HashMap.empty(), request.load)),
     (loaded) => Arr.sort(Arr.map(HashMap.toEntries(loaded), ([path, text]) => ({ path, text })), byPath),
   )
 

@@ -612,14 +612,23 @@ const buildEntry = (graph: DeclarationGraph, entry: EntryFile): Effect.Effect<En
     return { path: entry.exportPath, items: items.flat().map((item) => renameItem(item, rename)), locals }
   })
 
+export type ModelOfGraphRequest = {
+  readonly graph: DeclarationGraph
+  readonly producer: Declarations['producer']
+  readonly package: Declarations['package']
+}
+
+export const modelOfGraph = (request: ModelOfGraphRequest): Effect.Effect<ApiModel, UnsupportedDeclaration> =>
+  Effect.map(Effect.forEach(request.graph.entryPoints, (entry) => buildEntry(request.graph, entry)), (entryPoints) =>
+    sortModel({
+      schemaVersion: API_MODEL_SCHEMA_VERSION,
+      producer: { engine: ENGINE, declarations: request.producer },
+      package: request.package,
+      entryPoints,
+    }),
+  )
+
 export const buildModel = (declarations: Declarations): Effect.Effect<ApiModel, UnsupportedDeclaration> =>
   Effect.flatMap(declarationGraph(declarations), (graph) =>
-    Effect.map(Effect.forEach(graph.entryPoints, (entry) => buildEntry(graph, entry)), (entryPoints) =>
-      sortModel({
-        schemaVersion: API_MODEL_SCHEMA_VERSION,
-        producer: { engine: ENGINE, declarations: declarations.producer },
-        package: declarations.package,
-        entryPoints,
-      }),
-    ),
+    modelOfGraph({ graph, producer: declarations.producer, package: declarations.package }),
   )

@@ -232,6 +232,8 @@ const printOptional = (
     onSome: (type) => Effect.map(canonicalTypeText(context, type), decorate),
   })
 
+const annotationTypeOf = (annotation: TSTypeAnnotation | null | undefined): TSType | undefined => annotation?.typeAnnotation
+
 const printAnnotationOrDefault = (
   context: TypeContext,
   annotation: TSTypeAnnotation | null | undefined,
@@ -384,20 +386,10 @@ const printSpecialTupleElement = (
     Match.orElse((rest) => Effect.map(canonicalTypeText(context, rest.typeAnnotation), (type) => `...${type}`)),
   )
 
-const asPlainTupleType = (element: TSTupleElement): Option.Option<TSType> =>
-  Match.value(element).pipe(
-    Match.when({ type: Match.is('TSNamedTupleMember', 'TSOptionalType', 'TSRestType') }, () => Option.none()),
-    Match.orElse((type) => Option.some(type)),
-  )
-
 const printTupleElement = (context: TypeContext, element: TSTupleElement): Effect.Effect<string, UnsupportedDeclaration> =>
   Match.value(element).pipe(
     Match.when({ type: Match.is('TSNamedTupleMember', 'TSOptionalType', 'TSRestType') }, (special) => printSpecialTupleElement(context, special)),
-    Match.orElse((plain) =>
-      Option.match(asPlainTupleType(plain), {
-        onNone: () => refuse(context.file, 'a tuple element'),
-        onSome: (type) => canonicalTypeText(context, type),
-      })),
+    Match.orElse((plain) => canonicalTypeText(context, plain)),
   )
 
 const printTuple = (context: TypeContext, node: TSTupleType): Effect.Effect<string, UnsupportedDeclaration> =>
@@ -476,19 +468,9 @@ const printInfer = (context: TypeContext, node: TSInferType): Effect.Effect<stri
     return `infer ${node.typeParameter.name.name}${constraint}`
   })
 
-const printAnnotationDecorated = (
-  context: TypeContext,
-  annotation: TSTypeAnnotation | null | undefined,
-  decorate: (text: string) => string,
-): Effect.Effect<string, UnsupportedDeclaration> =>
-  Option.match(Option.fromNullishOr(annotation), {
-    onNone: () => Effect.succeed(''),
-    onSome: (present) => Effect.map(canonicalTypeText(context, present.typeAnnotation), decorate),
-  })
-
 const printPredicate = (context: TypeContext, node: TSTypePredicate): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const tail = yield* printAnnotationDecorated(context, node.typeAnnotation, (text) => ` is ${text}`)
+    const tail = yield* printOptional(context, annotationTypeOf(node.typeAnnotation), (text) => ` is ${text}`)
     const name = Match.value(node.parameterName).pipe(
       Match.when({ type: 'Identifier' }, (identifier) => identifier.name),
       Match.orElse(() => 'this'),
@@ -566,9 +548,11 @@ export const TypePrinting: {
   ) => Effect.Effect<ReferenceTarget>
   readonly withTypeParameters: (context: TypeContext, names: ReadonlyArray<string>) => TypeContext
   readonly refuse: (file: string, construct: string) => Effect.Effect<never, UnsupportedDeclaration>
+  readonly bindingName: (pattern: BindingPattern) => string
 } = {
   canonicalTypeText: canonicalTypeText,
   referenceTargetFor: referenceTargetFor,
   withTypeParameters: withTypeParameters,
   refuse: refuse,
+  bindingName: bindingName,
 }

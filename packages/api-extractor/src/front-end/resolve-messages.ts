@@ -299,7 +299,7 @@ const entryMessages = (resolution: Resolution, entry: EntryPoint): ReadonlyArray
 const messageKey = (message: AnalysisMessage): string => [message.messageId, message.entryPoint, message.item, message.symbol].join('\u0000')
 
 const deduped = (messages: ReadonlyArray<AnalysisMessage>): ReadonlyArray<AnalysisMessage> =>
-  Arr.fromIterable(HashMap.values(Arr.reduce(messages, HashMap.empty<string, AnalysisMessage>(), (known, message) => HashMap.set(known, messageKey(message), message))))
+  Arr.dedupeWith(messages, (left, right) => messageKey(left) === messageKey(right))
 
 const analysisMessageOrder: Order.Order<AnalysisMessage> = Order.combineAll([
   Order.mapInput(Order.String, (message: AnalysisMessage) => message.messageId),
@@ -312,6 +312,9 @@ const messagesFor = (graph: DeclarationGraph): ReadonlyArray<AnalysisMessage> =>
   const resolution = resolutionOf(graph)
   return Arr.sort(deduped(Arr.flatMap(graph.entryPoints, (entry) => entryMessages(resolution, entry))), analysisMessageOrder)
 }
+
+export const messagesOfGraph = (graph: DeclarationGraph): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration> =>
+  Effect.succeed(messagesFor(graph))
 
 export const resolveMessages = (declarations: Declarations): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration> =>
   Effect.map(declarationGraph(declarations), messagesFor)

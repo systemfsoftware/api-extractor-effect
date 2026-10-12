@@ -110,6 +110,12 @@ export const FiledDiagnosticLine: Schema.Codec<FiledDiagnosticFields, string> = 
   }),
 )
 
+const decodeEmittedFileLine: (line: string) => Option.Option<EmittedFileFields> = Schema.decodeOption(EmittedFileLine)
+
+const decodeSourcelessDiagnosticLine: (line: string) => Option.Option<SourcelessDiagnosticFields> = Schema.decodeOption(SourcelessDiagnosticLine)
+
+const decodeFiledDiagnosticLine: (line: string) => Option.Option<FiledDiagnosticFields> = Schema.decodeOption(FiledDiagnosticLine)
+
 type ParsedLine =
   | { readonly kind: 'emittedFile'; readonly file: string }
   | { readonly kind: 'diagnostic'; readonly diagnostic: Diagnostic }
@@ -135,16 +141,16 @@ const packageRelativeFile = (packageRoot: string, file: string): string => {
 }
 
 const emittedFileOfLine = (line: string): Option.Option<ParsedLine> =>
-  Option.map(Schema.decodeOption(EmittedFileLine)(line), (fields) => ({ kind: 'emittedFile', file: fields.file }))
+  Option.map(decodeEmittedFileLine(line), (fields) => ({ kind: 'emittedFile', file: fields.file }))
 
 const sourcelessDiagnosticOfLine = (line: string): Option.Option<ParsedLine> =>
-  Option.map(Schema.decodeOption(SourcelessDiagnosticLine)(line), (fields) => ({
+  Option.map(decodeSourcelessDiagnosticLine(line), (fields) => ({
     kind: 'diagnostic',
     diagnostic: { file: '', code: fields.code, message: fields.message },
   }))
 
 const filedDiagnosticOfLine = (packageRoot: string) => (line: string): Option.Option<ParsedLine> =>
-  Option.map(Schema.decodeOption(FiledDiagnosticLine)(line), (fields): ParsedLine => ({
+  Option.map(decodeFiledDiagnosticLine(line), (fields): ParsedLine => ({
     kind: 'diagnostic',
     diagnostic: { file: packageRelativeFile(packageRoot, fields.file), code: fields.code, message: fields.message },
   }))

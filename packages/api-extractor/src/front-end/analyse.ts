@@ -2,11 +2,12 @@ import { Effect } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ApiModel } from '../model/api-model.schema.ts'
 import type { AnalysisMessage } from './analysis-message.schema.ts'
-import { buildModel } from './build-model.ts'
+import { modelOfGraph } from './build-model.ts'
 import { CompilerEmitter, type CompilerEmitterId, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
+import { declarationGraph } from './declaration-graph.ts'
 import type { Declarations, PackageSource } from './declarations.schema.ts'
 import type { CompilerRejected, NotIsolated, UnsupportedDeclaration } from './front-end-error.schema.ts'
-import { resolveMessages } from './resolve-messages.ts'
+import { messagesOfGraph } from './resolve-messages.ts'
 import type { Route } from './route.schema.ts'
 
 export type Analysis = {
@@ -39,10 +40,11 @@ export const analyse = (
 ): Effect.Effect<Analysis, CompilerRejected | PlatformError | UnsupportedDeclaration, IsolatedEmitterId | CompilerEmitterId> =>
   Effect.gen(function* () {
     const { route, declarations } = yield* routed(source)
+    const graph = yield* declarationGraph(declarations)
     const analysis: Analysis = {
       route,
-      model: yield* buildModel(declarations),
-      messages: yield* resolveMessages(declarations),
+      model: yield* modelOfGraph({ graph, producer: declarations.producer, package: declarations.package }),
+      messages: yield* messagesOfGraph(graph),
     }
     return analysis
   })
