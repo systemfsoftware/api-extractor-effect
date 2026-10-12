@@ -58,9 +58,10 @@ present. Without the flag the compiled model lacks `hidden`, and the journey fai
 ## Architectural invariant
 
 **Single emit policy.** The fast path's options are the declaration-emit policy. The
-fallback adapter restates on the command line every option in that policy that affects
-declaration text, so that $\text{text}_{\text{fallback}}$ depends on the package only
-through source and module resolution:
+fallback adapter restates every option in that policy on the command line, so a package's
+tsconfig cannot make the routes disagree on those options. Other tsconfig options still
+reach the fallback, because `-p` loads the whole file. An option outside the policy that
+changes declaration text must be added to both adapters, together with an equality case:
 
 ```
 fallbackArgs = ['-p', tsconfig, ...emitPolicyAsFlags(FAST_PATH_OPTIONS), ...outputLocation]
