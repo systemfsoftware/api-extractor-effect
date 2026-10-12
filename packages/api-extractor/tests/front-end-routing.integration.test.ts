@@ -9,23 +9,34 @@ const emitters = Layer.mergeAll(FrontEnd.isolatedEmitterLayer, FrontEnd.compiler
 
 const packageRoot = Effect.flatMap(Path.Path, (path) => Effect.map(path.fromFileUrl(new URL('..', import.meta.url)), (root) => path.resolve(root)))
 
-const packageOf = (manifest: object, source: string) =>
+const packageOf = (manifest: object, sources: Record<string, string>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-end-package-' })
     yield* fileSystem.makeDirectory(path.join(root, 'src'))
     yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify(manifest))
-    yield* fileSystem.writeFileString(path.join(root, 'src', 'mod.ts'), source)
+    yield* Effect.forEach(Object.entries(sources), ([file, text]) => fileSystem.writeFileString(path.join(root, 'src', file), text), { discard: true })
     return root
   })
 
-const builtOnlyPackage = packageOf({ name: 'no-source', version: '1.0.0', exports: { '.': { types: './dist/mod.d.ts', default: './dist/mod.js' } } }, '')
+const sourceManifest = (name: string, entry: string) => ({ name, version: '1.0.0', exports: { '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: entry } } })
 
-const destructuredExportPackage = packageOf(
-  { name: 'destructured', version: '1.0.0', exports: { '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: './src/mod.ts' } } },
-  'const pair = { a: 1, b: 2 }\nexport const { a, b } = pair\n',
-)
+const builtOnlyPackage = packageOf({ name: 'no-source', version: '1.0.0', exports: { '.': { types: './dist/mod.d.ts', default: './dist/mod.js' } } }, {})
+
+const destructuredExportPackage = packageOf(sourceManifest('destructured', './src/mod.ts'), {
+  'mod.ts': 'const pair = { a: 1, b: 2 }\nexport const { a, b } = pair\n',
+})
+
+const missingEntrySourcePackage = packageOf(sourceManifest('missing-entry', './src/mod.ts'), {})
+
+const tsxEntryBesideTsPackage = packageOf(sourceManifest('tsx-entry', './src/mod.tsx'), {
+  'mod.tsx': 'export const fromTsx: number = 1\n',
+  'mod.ts': 'export const fromTs: number = 2\n',
+})
+
+const emittedOnFastPath = (packageRoot: string) =>
+  Effect.flatMap(FrontEnd.readPackage({ packageRoot }), (source) => Effect.flatMap(FrontEnd.IsolatedEmitter, (emitter) => emitter.emit(source)))
 
 Feature('A package is routed to the front-end its declarations allow')
   .withLayer(emitters)
@@ -67,11 +78,34 @@ Feature('A package is routed to the front-end its declarations allow')
       'a destructured export, whose isolated declarations do not parse, is sent to the compiler fallback',
       Gherkin.Do.pipe(
         Given('a package exporting `const { a, b } = pair`')('packageRoot', () => destructuredExportPackage),
-        When('its declarations are emitted on the fast path')('refusal', (scope) =>
-          Effect.flip(Effect.flatMap(FrontEnd.readPackage({ packageRoot: scope.packageRoot }), (source) =>
-            Effect.flatMap(FrontEnd.IsolatedEmitter, (emitter) => emitter.emit(source))))),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
         Then('the fast path declines with TS9019 instead of refusing the package')((scope, expect) =>
           expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: 'src/mod.ts', code: 9019 }, { file: 'src/mod.ts', code: 9019 }] })
+        ),
+      ),
+    )
+
+    scenario(
+      'an entry point whose source file is missing is declined by the fast path instead of modelled as empty',
+      Gherkin.Do.pipe(
+        Given('a package whose export names `./src/mod.ts`, which does not exist')('packageRoot', () => missingEntrySourcePackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the missing declaration file')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: 'src/mod.d.ts', code: 0 }] })
+        ),
+      ),
+    )
+
+    scenario(
+      'a .tsx entry point is read from its own file, not from a sibling .ts of the same name',
+      Gherkin.Do.pipe(
+        Given('a package whose export names `./src/mod.tsx` beside a different `./src/mod.ts`')('packageRoot', () => tsxEntryBesideTsPackage),
+        When('the engine analyses it')('analysis', (scope) => Effect.flatMap(FrontEnd.readPackage({ packageRoot: scope.packageRoot }), FrontEnd.analyse)),
+        Then('the model holds the .tsx entry point\'s export')((scope, expect) =>
+          expect({
+            route: scope.analysis.route._tag,
+            exports: scope.analysis.model.entryPoints.flatMap((entry) => entry.items.map((item) => `${item.kind}:${item.name}`)),
+          }).toEqual({ route: 'FastPath', exports: ['variable:fromTsx'] })
         ),
       ),
     )

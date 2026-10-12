@@ -226,6 +226,17 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'an enum member whose declared value is computed is refused naming the member, not silently left without a value',
+      Gherkin.Do.pipe(
+        Given('a declaration file declaring `enum Flags { Read = 1, Write = 1 << 1 }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare enum Flags {\n  Read = 1,\n  Write = 1 << 1\n}\n']]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the member')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'enum member `Write` with a computed value' })),
+      ),
+    )
+
+    scenario(
       'a built model decodes as schema version two',
       Gherkin.Do.pipe(
         Given('an entry with literals, an enum and a namespace')('declarations', () =>

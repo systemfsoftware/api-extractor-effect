@@ -12,7 +12,7 @@ const STANDALONE_TSCONFIG = {
   include: ['src'],
 }
 
-const packageWith = (name: string, source: string) =>
+const packageWith = (name: string, source: string, compilerOptions: object = {}) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
@@ -22,10 +22,19 @@ const packageWith = (name: string, source: string) =>
       path.join(root, 'package.json'),
       JSON.stringify({ name, version: '1.0.0', type: 'module', exports: { '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: './src/mod.ts' } } }),
     )
-    yield* fileSystem.writeFileString(path.join(root, 'tsconfig.json'), JSON.stringify(STANDALONE_TSCONFIG))
+    yield* fileSystem.writeFileString(
+      path.join(root, 'tsconfig.json'),
+      JSON.stringify({ ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, ...compilerOptions } }),
+    )
     yield* fileSystem.writeFileString(path.join(root, 'src', 'mod.ts'), source)
     return yield* FrontEnd.readPackage({ packageRoot: root })
   })
+
+const internalExportPackage = packageWith(
+  'internal-export',
+  'export const shown: number = 1\n/** @internal */\nexport const hidden: number = 2\n',
+  { stripInternal: true },
+)
 
 const thisPackage = Effect.gen(function* () {
   const path = yield* Path.Path
@@ -36,11 +45,19 @@ const thisPackage = Effect.gen(function* () {
 const analysedThrough = <E, Id>(emitter: Effect.Effect<FrontEnd.DeclarationEmitter<E>, never, Id>, source: FrontEnd.PackageSource) =>
   Effect.gen(function* () {
     const declarations = yield* (yield* emitter).emit(source)
+    const model = yield* FrontEnd.buildModel({ ...declarations, producer: 'one producer' })
     return {
-      bytes: ApiModel.serialise(yield* FrontEnd.buildModel({ ...declarations, producer: 'one producer' })),
+      bytes: ApiModel.serialise(model),
+      exports: model.entryPoints.flatMap((entry) => entry.items.map((item) => item.name)),
       messages: yield* FrontEnd.resolveMessages(declarations),
       files: declarations.files.map((file) => file.path),
     }
+  })
+
+const throughBothRoutes = (source: FrontEnd.PackageSource) =>
+  Effect.all({
+    isolated: analysedThrough(FrontEnd.IsolatedEmitter, source),
+    compiled: analysedThrough(FrontEnd.CompilerEmitter, source),
   })
 
 Feature('Both front-ends reduce a package to one model')
@@ -48,17 +65,23 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give this package the same model and messages',
+      'the fast path and the compiler fallback give the same model and messages, @internal exports included',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
-        When('it is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
-          Effect.all({
-            isolated: analysedThrough(FrontEnd.IsolatedEmitter, scope.source),
-            compiled: analysedThrough(FrontEnd.CompilerEmitter, scope.source),
-          })
+        Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
+        When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
+          Effect.all({ ownPackage: throughBothRoutes(scope.source), internalExport: throughBothRoutes(scope.internal) })
         ),
-        Then('the two serialise to the same bytes once the producer is set equal')((scope, expect) =>
-          expect(scope.analyses.compiled).toEqual(scope.analyses.isolated)
+        Then('each pair serialises to the same bytes once the producer is set equal, keeping the @internal constant')((scope, expect) =>
+          expect({
+            ownPackage: scope.analyses.ownPackage.compiled,
+            internalExport: scope.analyses.internalExport.compiled,
+            internalExports: scope.analyses.internalExport.isolated.exports,
+          }).toEqual({
+            ownPackage: scope.analyses.ownPackage.isolated,
+            internalExport: scope.analyses.internalExport.isolated,
+            internalExports: ['hidden', 'shown'],
+          })
         ),
       ),
     )

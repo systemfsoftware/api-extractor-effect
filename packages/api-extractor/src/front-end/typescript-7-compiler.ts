@@ -36,6 +36,8 @@ const compilerArguments = (source: PackageSource, outDir: string): ReadonlyArray
   'false',
   '--sourceMap',
   'false',
+  '--stripInternal',
+  'false',
   '--incremental',
   'false',
   '--composite',

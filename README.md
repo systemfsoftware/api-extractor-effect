@@ -77,6 +77,22 @@ resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and
 `ae-internal-mixed-release-tag`, so both routes give the same model and messages.
 
+The builder refuses a package with `UnsupportedDeclaration`, naming the file and the
+construct, when its declarations contain one of these constructs, which model schema
+version 2 cannot hold:
+
+- an entry point that re-exports a name from another package (`export { it } from 'vitest'`).
+  The whole package is refused, not just that export.
+- `declare global` and module augmentation (`declare module 'vitest'`)
+- `export =`
+- an enum member whose declared value is computed rather than a literal, for example a
+  hand-written `.d.ts` with `Write = 1 << 1`. Both emitters write constant members as
+  literals, so this happens only with declaration text written by hand.
+
+One construct is not refused: `export * from 'effect'`, or `export *` from any other
+package, adds no items to the model. The names it re-exports are missing from the model,
+and a verdict does not see them change.
+
 The fast-path emitter was chosen from a per-phase profile on systemfsoftware's public
 packages, [`docs/profiles/2026-10-12-front-end-phases.md`](docs/profiles/2026-10-12-front-end-phases.md).
 To reproduce it, check out systemfsoftware at the commit the profile names, install it

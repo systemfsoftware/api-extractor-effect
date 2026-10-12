@@ -401,14 +401,19 @@ const enumMemberNameOf = (context: TypeContext, id: TSEnumMemberName): Effect.Ef
     Match.orElse(() => refuse(context.file, `a ${id.type} enum member name`)),
   )
 
-const memberValue = (initializer: Expression | null): Pick<EnumMember, 'value'> =>
+const memberValue = (context: TypeContext, name: string, initializer: Expression | null): Effect.Effect<Pick<EnumMember, 'value'>, UnsupportedDeclaration> =>
   Option.match(Option.fromNullishOr(initializer), {
-    onNone: () => ({}),
-    onSome: (expression) => Option.match(literalTextOf(expression), { onNone: () => ({}), onSome: (value) => ({ value }) }),
+    onNone: () => Effect.succeed({}),
+    onSome: (expression) =>
+      Option.match(literalTextOf(expression), {
+        onNone: () => refuse(context.file, `enum member \`${name}\` with a computed value`),
+        onSome: (value) => Effect.succeed({ value }),
+      }),
   })
 
 const enumMemberOf = (context: TypeContext, member: TSEnumMember): Effect.Effect<EnumMember, UnsupportedDeclaration> =>
-  Effect.map(enumMemberNameOf(context, member.id), (name): EnumMember => ({ name, ...memberValue(member.initializer) }))
+  Effect.flatMap(enumMemberNameOf(context, member.id), (name) =>
+    Effect.map(memberValue(context, name, member.initializer), (value): EnumMember => ({ name, ...value })))
 
 const enumItemOf = (
   context: TypeContext,

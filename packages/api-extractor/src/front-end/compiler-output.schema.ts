@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Array as Arr, Match, Option, Schema, SchemaGetter } from 'effect'
 import type { Diagnostic } from './declarations.schema.ts'
 
@@ -6,7 +7,9 @@ const ERROR_PREFIX = 'error TS'
 const CODE_SEPARATOR = ': '
 const TAIL_HEAD = '): error TS'
 const EMITTED_PREFIX_LENGTH = EMITTED_PREFIX.length
-const FILED_LINE = /^([\s\S]*)\(([0-9]{1,9}),([0-9]{1,9})\): error TS([0-9]{1,9}): ([\s\S]*)$/
+const POSITION_DIGITS = '(?:0|[1-9][0-9]{0,8})'
+const POSITION_LIMIT = 1_000_000_000
+const FILED_LINE = new RegExp(`^([\\s\\S]*)\\((${POSITION_DIGITS}),(${POSITION_DIGITS})\\): error TS(${POSITION_DIGITS}): ([\\s\\S]*)$`)
 
 type EmittedFileFields = { readonly file: string }
 
@@ -20,7 +23,7 @@ type FiledDiagnosticFields = {
   readonly message: string
 }
 
-const Digits: Schema.String = Schema.String.check(Schema.isPattern(/^[0-9]{1,9}$/))
+const Digits: Schema.String = Schema.String.check(Schema.isPattern(new RegExp(`^${POSITION_DIGITS}$`)))
 
 const FileText: Schema.String = Schema.String.check(Schema.isPattern(/^[^\n\r\u2028\u2029]+$/))
 
@@ -28,7 +31,7 @@ const MessageText: Schema.String = Schema.String.check(
   Schema.isPattern(/^(?![\s\S]*\(\d{1,9},\d{1,9}\): error TS\d{1,9}: )[\s\S]*$/),
 )
 
-const Position: Schema.Int = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const Position: Schema.Int = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThan(POSITION_LIMIT))
 
 const EmittedFileFields: Schema.Struct<{ readonly file: typeof FileText }> = Schema.Struct({ file: FileText })
 
@@ -176,4 +179,42 @@ const linesOf = (stdout: string): ReadonlyArray<string> => stdout.split('\n').ma
 export const parseCompilerOutput: (request: CompilerOutputRequest) => CompilerOutput = (request) => {
   const parsed = Arr.getSomes(linesOf(request.stdout).map(parsedLineOf(request.packageRoot)))
   return { emittedFiles: Arr.getSomes(parsed.map(emittedFileIn)), diagnostics: Arr.getSomes(parsed.map(diagnosticIn)) }
+}
+
+const NINE_DIGIT_SEEDS: ReadonlyArray<number> = [-1, 0, 999_999_999, 1_000_000_000, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.5]
+
+const SPELLING_SEEDS: ReadonlyArray<string> = ['', '0', '00', '007', '7', '999999999', '1000000000', '0999999999', '-1']
+
+const nonNegativeSafeInteger = (value: number): boolean => Number.isSafeInteger(value) && value >= 0
+
+const printableByTsc = (value: number): boolean => nonNegativeSafeInteger(value) && String(value).length <= 9
+
+const spellsItsValue = (text: string): boolean => String(Number(text)) === text
+
+const canonicalSpelling = (text: string): boolean => spellsItsValue(text) && printableByTsc(Number(text))
+
+const isSourcelessDiagnostic: (input: unknown) => input is SourcelessDiagnosticFields = Schema.is(SourcelessDiagnosticFields)
+
+const codeAccepted = (code: number): boolean => isSourcelessDiagnostic({ code, message: 'm' })
+
+const codeTextDecodes = (text: string): boolean => Option.isSome(decodeSourcelessDiagnosticLine(`${ERROR_PREFIX}${text}${CODE_SEPARATOR}m`))
+
+const paddedSpelling = (padding: number, value: number): string => `${'0'.repeat(Math.abs(padding) % 3)}${value}`
+
+if (import.meta.vitest !== void 0) {
+  // The test runner only exists under vitest; tsdown defines import.meta.vitest as undefined and drops this block.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  it.prop(
+    '∀n_SourcelessDiagnosticFieldsPositionRefusal_≡PrintableByTsc',
+    { of: [Schema.Finite], subject: codeAccepted },
+    (subject, [value]) => Arr.every(Arr.append(NINE_DIGIT_SEEDS, value), (code) => subject(code) === printableByTsc(code)),
+  )
+
+  it.prop(
+    '∀s_SourcelessDiagnosticLineDigitsRefusal_≡CanonicalSpelling',
+    { of: [Schema.Int, Schema.Int], subject: codeTextDecodes },
+    (subject, [padding, value]) =>
+      Arr.every(Arr.append(SPELLING_SEEDS, paddedSpelling(padding, value)), (text) => subject(text) === canonicalSpelling(text)),
+  )
 }

@@ -1,10 +1,10 @@
-import { Array as Arr, Effect, FileSystem, Layer, Match, Option, Order, Path, Ref, Result } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Option, Order, Path, Ref, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
 import { closeDeclarations, declarationPathOf, sourceCandidatesOf } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
-import type { Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
+import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
 import { NotIsolated } from './front-end-error.schema.ts'
 
 export const OXC_TRANSFORM_PRODUCER: string = `oxc-transform@${oxcTransformManifest.version}`
@@ -71,16 +71,38 @@ const refusedOrClosed = <A, E>(found: ReadonlyArray<Diagnostic>, closed: Result.
     onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
   })
 
+const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
+  file: declarationFile,
+  code: 0,
+  message: 'no source file could be read for this entry point',
+})
+
+const missingEntries = (files: ReadonlyArray<DeclarationFile>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<Diagnostic> => {
+  const emitted = HashSet.fromIterable(files.map((file) => file.path))
+  return entryDeclarations.filter((declarationFile) => !HashSet.has(emitted, declarationFile)).map(missingEntryDiagnostic)
+}
+
+const everyEntryEmitted = (files: ReadonlyArray<DeclarationFile>, entryDeclarations: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<DeclarationFile>, NotIsolated> =>
+  Arr.match(missingEntries(files, entryDeclarations), {
+    onEmpty: () => Effect.succeed(files),
+    onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
+  })
+
+const recordedSourceFirst = (recorded: HashMap.HashMap<string, string>) => (declarationFile: string): ReadonlyArray<string> =>
+  Arr.dedupe([...Option.toArray(HashMap.get(recorded, declarationFile)), ...sourceCandidatesOf(declarationFile)])
+
 const emit = (source: PackageSource) =>
   Effect.gen(function* () {
     const emission: Emission = { source, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
     const entryPoints = source.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
+    const entryDeclarations = entryPoints.map((entry) => entry.declarationFile)
+    const candidatesOf = recordedSourceFirst(HashMap.fromIterable(source.entryPoints.map((entry) => [declarationPathOf(entry.sourceFile), entry.sourceFile] as const)))
     const closed = yield* Effect.result(closeDeclarations({
-      entryDeclarations: entryPoints.map((entry) => entry.declarationFile),
-      load: (declarationFile) => firstSource(emission, sourceCandidatesOf(declarationFile)),
+      entryDeclarations,
+      load: (declarationFile) => firstSource(emission, candidatesOf(declarationFile)),
     }))
     const found = Arr.sort(yield* Ref.get(emission.diagnostics), diagnosticOrder)
-    const files = yield* refusedOrClosed(found, closed)
+    const files = yield* everyEntryEmitted(yield* refusedOrClosed(found, closed), entryDeclarations)
     const declarations: Declarations = {
       producer: OXC_TRANSFORM_PRODUCER,
       package: { name: source.name, version: source.version },
