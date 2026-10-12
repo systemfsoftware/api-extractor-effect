@@ -37,7 +37,7 @@ The mutation-caller PR adds the mutation caller for this repository. The caller 
 
 ### Problem Frame
 
-Mutation is the gate on `src/**/*.workflow.ts` and `src/**/*.schema.ts` (break threshold 100 in `packages/api-extractor/stryker.config.ts`), and it has never run on this package. PR2 shipped everything the package side needs and left the workflow blocked on O1 (1146 plan, KTD20). #710 has since landed the shared workflow, so the README row that waits on #710 is stale. The remaining gap is the tarball install, and the root ruled that it is fixed upstream, not here.
+Mutation is the gate on `src/**/*.workflow.ts` (break threshold 100 in `packages/api-extractor/stryker.config.ts`; schema files left the mutate set by the mutate-set ruling below), and it has never run on this package. PR2 shipped everything the package side needs and left the workflow blocked on O1 (1146 plan, KTD20). #710 has since landed the shared workflow, so the README row that waits on #710 is stale. The remaining gap is the tarball install, and the root ruled that it is fixed upstream, not here.
 
 ### Key Decisions
 
@@ -68,7 +68,7 @@ Mutation is the gate on `src/**/*.workflow.ts` and `src/**/*.schema.ts` (break t
 **Docs**
 
 - R5. While R3 holds, the README roadmap row for mutation and the PR body name O1 (systemfsoftware #735) and its `.sfs-deps` input as the blocker. Once R2 lands, they name the pinned rev.
-- R6. This PR's own commits leave `packages/api-extractor/stryker.config.ts`, the package's `mutation` script and its stryker devDependencies as PR2 shipped them. Survivor fixes reach this branch only by merging `origin/main`.
+- R6. This PR's own commits leave `packages/api-extractor/stryker.config.ts`, the package's `mutation` script and its stryker devDependencies as PR2 shipped them. Survivor fixes reach this branch only by merging `origin/main`. (amended by the mutate-set ruling: `stryker.config.ts`'s `mutate` narrows to `src/**/*.workflow.ts`; the script and devDependencies stay as PR2 shipped them.)
 
 ### Acceptance Examples
 
@@ -137,7 +137,7 @@ Mutation is the gate on `src/**/*.workflow.ts` and `src/**/*.schema.ts` (break t
 - GitHub validates a called workflow's job permissions against the caller's grant at startup: microsoft/hve-core#2407 and github/gh-aw#21071.
 - In this repository: `README.md` roadmap table, `flake.nix` (`packages.<system>.sfs-deps`), `.github/workflows/ci.yml` (`checks-lane` hook), `packages/api-extractor/stryker.config.ts` and `packages/api-extractor/package.json`.
 - Compound Packs (`.compound-engineering/config.yaml`, systemfsoftware `df908ddf`):
-  - `package-topology/surface-changes-are-versioned` applies through R6. No package byte changes in this PR's commits, so it needs no changeset, and the Changeset Check passes on a PR that touches no publishable package.
+  - `package-topology/surface-changes-are-versioned` applies through R6. No byte of the package's tarball changes in this PR's commits: it ships only `dist` (`packages/api-extractor/package.json` `files`), and the mutate-set ruling's edit is to `stryker.config.ts`, which is not in it.
   - `boundary-testing/pin-dependency-semantics` covers the plan's reliance on the shared workflow's behaviour. This PR has no code path to hold a differential test, so the SHA pin (KTD1) and U3's graded proof take its place.
   - `cell-architecture` and `schema-laws` govern package source, which this PR does not touch.
 
@@ -360,3 +360,10 @@ Standing rule (Ryan): a timeout is a backstop for a stuck job, never a budget en
   - O1's fix PR, which removes the `mutation-job.ts` timeout wrapper and widens the `stryker-config` peer range;
   - S2's effect-sim-kernel seed-budget release.
 - **Re-proof required:** every job at or under 600 s, with a graded row for `packages/api-extractor`.
+
+## Mutate-set ruling (2026-10-12)
+
+- **Ruling (root):** the effective Stryker mutate set is exactly `src/**/*.workflow.ts`. `packages/api-extractor/stryker.config.ts:20` is `mutate: shardMutate(['src/**/*.workflow.ts'])`; `src/**/*.schema.ts` is no longer mutated.
+- **Effective set:** `shardMutate` returns its patterns unchanged when `STRYKER_SHARD` is unset, and keeps them plus negations of other shards' files when set (`@systemfsoftware/stryker-config` `lib/base.js:82-90`). The config's `mutate` overrides `sharedConfig`'s. Today the pattern matches one file, `src/judge-surfaces.workflow.ts`.
+- **Scope:** no other source or workflow change. R6 is amended for this one line.
+- **Re-proof:** still waits on O1's fix PR (systemfsoftware #737) and S2's effect-sim-kernel release.
