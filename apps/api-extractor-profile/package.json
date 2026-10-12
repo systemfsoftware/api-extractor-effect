@@ -1,0 +1,28 @@
+{
+  "name": "api-extractor-profile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Per-phase profile of the front-end candidates on a real package corpus",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "typecheck": "tsc --noEmit",
+    "profile": "node --conditions=@systemfsoftware/source profile.ts"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/oxlint-config-recommended": "^4.0.0",
+    "@systemfsoftware/tsconfig": "^2.0.1",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxc-parser": "catalog:",
+    "oxc-transform": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "typescript-5.9": "npm:typescript@5.9.3"
+  }
+}
