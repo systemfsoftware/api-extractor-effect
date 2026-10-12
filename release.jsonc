@@ -8,7 +8,7 @@
   "versioning": {
     "strategy": "changesets",
   },
-  // A change under a package's directory needs an intent naming it. The turbo
-  // gate dry-runs turbo at the base, which a base without turbo.json refuses.
-  "gate": { "strategy": "paths" },
+  // A pull request whose head moves a publishable package's turbo `build` hash
+  // away from the base ships an intent naming that package.
+  "gate": { "strategy": "turbo", "task": "build" },
 }
