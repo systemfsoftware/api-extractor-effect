@@ -2,8 +2,16 @@ import { Array as Arr, Function, Order, Schema } from 'effect'
 import type { Changes } from '../diff/change.schema.ts'
 import { Bump, classify, maxBump, type RuleCorpus } from './corpus.schema.ts'
 
+type FindingFields = {
+  readonly rule_id: Schema.String
+  readonly reason_code: Schema.String
+  readonly bump: typeof Bump
+  readonly next_action: Schema.String
+  readonly locations: Schema.$Array<Schema.String>
+}
+
 /** One rule that fired, with every location it fired at. */
-export const Finding = Schema.Struct({
+export const Finding: Schema.Struct<FindingFields> = Schema.Struct({
   rule_id: Schema.String,
   reason_code: Schema.String,
   bump: Bump,
@@ -13,7 +21,7 @@ export const Finding = Schema.Struct({
 export type Finding = typeof Finding.Type
 
 /** Every rule that fired, ordered by rule id. */
-export const Findings = Schema.Array(Finding)
+export const Findings: Schema.$Array<typeof Finding> = Schema.Array(Finding)
 export type Findings = typeof Findings.Type
 
 /** One finding per rule that fired, ordered by rule id, each with its distinct locations in code-unit order. */

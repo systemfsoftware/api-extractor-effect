@@ -6,7 +6,7 @@
 import { Match, Order, Predicate, Schema } from 'effect'
 
 /** A JSON value: what every output is serialised from. */
-export const Json = Schema.Json
+export const Json: typeof Schema.Json = Schema.Json
 export type Json = Schema.Json
 
 type Entry = readonly [string, Json]

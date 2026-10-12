@@ -4,7 +4,7 @@ import { type Change, ChangeKind } from '../diff/change.schema.ts'
 import { Direction } from '../diff/direction.schema.ts'
 import { ChannelType, Position } from '../diff/position.schema.ts'
 
-export const Bump = Schema.Literals(['none', 'patch', 'minor', 'major'])
+export const Bump: Schema.Literals<readonly ['none', 'patch', 'minor', 'major']> = Schema.Literals(['none', 'patch', 'minor', 'major'])
 export type Bump = typeof Bump.Type
 
 export type RuleMatch = {

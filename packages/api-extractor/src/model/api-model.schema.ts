@@ -3,7 +3,7 @@ import { canonicalKey, type Json } from '../canonical-json.schema.ts'
 import { Member, Signature, TypeExpr, TypeParameter } from './type-expr.schema.ts'
 
 /** The model's wire version. Any change to the model schema bumps it. */
-export const ModelVersion = Schema.Literal(2)
+export const ModelVersion: Schema.Literal<2> = Schema.Literal(2)
 export type ModelVersion = typeof ModelVersion.Type
 
 export const API_MODEL_SCHEMA_VERSION: ModelVersion = 2

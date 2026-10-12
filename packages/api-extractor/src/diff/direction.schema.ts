@@ -3,7 +3,7 @@ import { canonicalKey } from '../canonical-json.schema.ts'
 import type { KeywordName, TypeExpr } from '../model/type-expr.schema.ts'
 
 /** How a type moved: it admits more values, fewer, or neither. */
-export const Direction = Schema.Literals(['widened', 'narrowed', 'changed'])
+export const Direction: Schema.Literals<readonly ['widened', 'narrowed', 'changed']> = Schema.Literals(['widened', 'narrowed', 'changed'])
 export type Direction = typeof Direction.Type
 
 /** The keyword type each literal spelling belongs to, by the spelling's shape. */
