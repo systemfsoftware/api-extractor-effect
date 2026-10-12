@@ -1,5 +1,6 @@
 import { NodeRuntime, NodeServices } from '@effect/platform-node'
-import { Array as Arr, Duration, Effect, FileSystem, Option, Order, Path, Schema, Stream } from 'effect'
+import { type ApiModel, FrontEnd } from '@systemfsoftware/api-extractor'
+import { Array as Arr, Duration, Effect, FileSystem, Layer, Option, Order, Path, Result, Schema, Stream } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { createRequire } from 'node:module'
@@ -9,8 +10,9 @@ import { isolatedDeclarationSync } from 'oxc-transform'
 import ts59 from 'typescript-5.9'
 
 const WARM_RUNS = 5
-const SOURCE_CONDITION = '@systemfsoftware/source'
 const require = createRequire(import.meta.url)
+
+const TYPESCRIPT_SOURCE = /\.m?tsx?$/
 
 const ExportTarget = Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Json)])
 
@@ -60,7 +62,7 @@ const measure = <A, E, R>(effect: Effect.Effect<A, E, R>, runs: number = WARM_RU
 const sourceEntryOf = (target: typeof ExportTarget.Type): Option.Option<string> =>
   typeof target === 'string'
     ? Option.none()
-    : Option.fromNullishOr(target[SOURCE_CONDITION]).pipe(Option.filter((value): value is string => typeof value === 'string' && /\.m?tsx?$/.test(value)))
+    : Option.fromNullishOr(target[FrontEnd.FAMILY_SOURCE_CONDITION]).pipe(Option.filter((value): value is string => typeof value === 'string' && TYPESCRIPT_SOURCE.test(value)))
 
 const entrySources = (manifest: Manifest): ReadonlyArray<string> =>
   Arr.getSomes(Object.entries(manifest.exports ?? {}).filter(([key]) => key !== './package.json').map(([, target]) => sourceEntryOf(target)))
@@ -80,8 +82,6 @@ const specifiersOf = (file: string, text: string): ReadonlyArray<string> => {
   return [...module.staticImports.map((entry) => entry.moduleRequest.value), ...module.staticExports.flatMap((entry) => entry.entries.flatMap((item) => (item.moduleRequest === null ? [] : [item.moduleRequest.value])))]
     .filter((specifier) => RELATIVE.test(specifier))
 }
-
-const TYPESCRIPT_SOURCE = /\.m?tsx?$/
 
 const candidatesFor = (base: string): ReadonlyArray<string> =>
   TYPESCRIPT_SOURCE.test(base) ? [base] : ['.ts', '.tsx', '.mts', '/index.ts'].map((extension) => base + extension)
@@ -190,7 +190,17 @@ const isolatedErrorsIn = (run: CompileRun, subject: Subject, sources: ReadonlyMa
 const differing = (left: ReadonlyMap<string, string>, right: ReadonlyMap<string, string>): number =>
   [...left].filter(([file, text]) => right.get(file) !== text).length
 
-const PHASES = ['discover', 'emit:oxc-transform', 'emit:transpileDeclaration', 'emit:tsc7', 'emit:tsc5.9.3', 'parse:oxc-parser', 'parse:createSourceFile'] as const
+const PHASES = [
+  'discover',
+  'emit:oxc-transform',
+  'emit:transpileDeclaration',
+  'emit:tsc7',
+  'emit:tsc5.9.3',
+  'parse:oxc-parser',
+  'parse:createSourceFile',
+  'build:model',
+  'resolve:messages',
+] as const
 type Phase = (typeof PHASES)[number]
 
 interface Cleanliness {
@@ -210,12 +220,61 @@ interface PackageProfile {
   readonly clean: Readonly<Record<'oxc-transform' | 'transpileDeclaration' | 'tsc --isolatedDeclarations', Cleanliness>>
   readonly fallback: { readonly exitCode: number; readonly diagnostics: number }
   readonly divergence: { readonly compared: number; readonly differing: number; readonly typescript59ExitCode: number }
+  readonly frontEnd: FrontEndOutcome
   readonly phases: Readonly<Record<Phase, Timing>>
 }
 
+interface FrontEndOutcome {
+  readonly route: 'FastPath' | 'Fallback' | 'refused'
+  readonly outcome: string
+  readonly items: number
+  readonly locals: number
+  readonly messages: number
+}
+
+type Emitters = FrontEnd.IsolatedEmitterId | FrontEnd.CompilerEmitterId
+
+const routedDeclarations = (source: FrontEnd.PackageSource) =>
+  Effect.gen(function* () {
+    const isolated = yield* FrontEnd.IsolatedEmitter
+    const compiler = yield* FrontEnd.CompilerEmitter
+    return yield* isolated.emit(source).pipe(
+      Effect.map((declarations) => ({ route: 'FastPath' as const, declarations })),
+      Effect.catchTag('NotIsolated', () => Effect.map(compiler.emit(source), (declarations) => ({ route: 'Fallback' as const, declarations }))),
+    )
+  })
+
+const itemCount = (model: ApiModel.ApiModel): number => model.entryPoints.reduce((sum, entry) => sum + entry.items.length, 0)
+const localCount = (model: ApiModel.ApiModel): number => model.entryPoints.reduce((sum, entry) => sum + entry.locals.length, 0)
+
+const refusalOf = (error: { readonly _tag: string; readonly message: string }): string => `${error._tag}: ${error.message.split('\n')[0] ?? ''}`
+
+const notRun: Timing = { coldMs: 0, warmMedianMs: 0 }
+
+const frontEndProfile = (subject: Subject) =>
+  Effect.gen(function* () {
+    const routed = yield* Effect.result(Effect.flatMap(FrontEnd.readPackage({ packageRoot: subject.root }), routedDeclarations))
+    if (Result.isFailure(routed)) {
+      const outcome: FrontEndOutcome = { route: 'refused', outcome: refusalOf(routed.failure), items: 0, locals: 0, messages: 0 }
+      return { outcome, build: notRun, resolve: notRun }
+    }
+    const { route, declarations } = routed.success
+    const built = yield* measure(Effect.result(FrontEnd.buildModel(declarations)))
+    const resolved = yield* measure(Effect.result(FrontEnd.resolveMessages(declarations)))
+    const model = Result.getOrUndefined(built.result)
+    const outcome: FrontEndOutcome = {
+      route,
+      outcome: Result.isSuccess(built.result) ? 'model' : refusalOf(built.result.failure),
+      items: model === undefined ? 0 : itemCount(model),
+      locals: model === undefined ? 0 : localCount(model),
+      messages: Result.isSuccess(resolved.result) ? resolved.result.success.length : 0,
+    }
+    return { outcome, build: built.timing, resolve: resolved.timing }
+  })
+
 const tscBin = (packageName: string, path: Path.Path): string => path.join(path.dirname(require.resolve(`${packageName}/package.json`)), 'bin', 'tsc')
 
-const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, ProfileError, FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner> =>
+const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, ProfileError, FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Emitters> =>
   Effect.scoped(Effect.gen(function* () {
     const path = yield* Path.Path
     const discovery = yield* measure(discover(subject))
@@ -230,6 +289,7 @@ const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, Profile
     const parsedOxc = yield* measure(Effect.sync(() => parseOxc(outputs7)))
     const parsedTypeScript = yield* measure(Effect.sync(() => parseTypeScript(outputs7)))
     const refereeErrors = isolatedErrorsIn(isolatedReferee, subject, sources, path)
+    const frontEnd = yield* frontEndProfile(subject)
     return {
       name: manifest.name,
       version: manifest.version,
@@ -246,6 +306,7 @@ const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, Profile
       },
       fallback: { exitCode: tsc7.result.exitCode, diagnostics: tsc7.result.diagnostics.length },
       divergence: { compared: outputs7.size, differing: differing(outputs7, outputs59), typescript59ExitCode: tsc59.result.exitCode },
+      frontEnd: frontEnd.outcome,
       phases: {
         discover: discovery.timing,
         'emit:oxc-transform': oxc.timing,
@@ -254,6 +315,8 @@ const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, Profile
         'emit:tsc5.9.3': tsc59.timing,
         'parse:oxc-parser': parsedOxc.timing,
         'parse:createSourceFile': parsedTypeScript.timing,
+        'build:model': frontEnd.build,
+        'resolve:messages': frontEnd.resolve,
       },
     }
   }))
@@ -300,12 +363,12 @@ const total = (packages: ReadonlyArray<PackageProfile>, phase: Phase, key: keyof
   round(packages.reduce((sum, item) => sum + item.phases[phase][key], 0))
 
 const markdownOf = (report: Report): string => {
-  const header = `| Package | Origin | Sources | oxc clean | tD clean | tsc ID clean | ${PHASES.join(' | ')} | TS7≠5.9.3 |`
-  const rule = `|${'---|'.repeat(PHASES.length + 7)}`
+  const header = `| Package | Origin | Sources | oxc clean | tD clean | tsc ID clean | ${PHASES.join(' | ')} | TS7≠5.9.3 | route | model |`
+  const rule = `|${'---|'.repeat(PHASES.length + 9)}`
   const rows = report.packages.map((item) =>
-    `| ${item.name} | ${item.origin} | ${item.sourceFiles} | ${item.clean['oxc-transform'].diagnostics} | ${item.clean.transpileDeclaration.diagnostics} | ${item.clean['tsc --isolatedDeclarations'].diagnostics} | ${PHASES.map((phase) => item.phases[phase].warmMedianMs).join(' | ')} | ${item.divergence.differing}/${item.divergence.compared} |`
+    `| ${item.name} | ${item.origin} | ${item.sourceFiles} | ${item.clean['oxc-transform'].diagnostics} | ${item.clean.transpileDeclaration.diagnostics} | ${item.clean['tsc --isolatedDeclarations'].diagnostics} | ${PHASES.map((phase) => item.phases[phase].warmMedianMs).join(' | ')} | ${item.divergence.differing}/${item.divergence.compared} | ${item.frontEnd.route} | ${item.frontEnd.outcome} |`
   )
-  const totals = `| **total** | | ${report.packages.reduce((sum, item) => sum + item.sourceFiles, 0)} | | | | ${PHASES.map((phase) => total(report.packages, phase, 'warmMedianMs')).join(' | ')} | ${report.packages.reduce((sum, item) => sum + item.divergence.differing, 0)}/${report.packages.reduce((sum, item) => sum + item.divergence.compared, 0)} |`
+  const totals = `| **total** | | ${report.packages.reduce((sum, item) => sum + item.sourceFiles, 0)} | | | | ${PHASES.map((phase) => report.totals[phase]).join(' | ')} | ${report.packages.reduce((sum, item) => sum + item.divergence.differing, 0)}/${report.packages.reduce((sum, item) => sum + item.divergence.compared, 0)} | | |`
   return [
     '# Front-end phase profile',
     '',
@@ -350,4 +413,6 @@ const program = Effect.gen(function* () {
   yield* fileSystem.writeFileString(`${outputArgument}.md`, markdownOf(report))
 })
 
-NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+const emitters = Layer.mergeAll(FrontEnd.isolatedEmitterLayer, FrontEnd.compilerEmitterLayer).pipe(Layer.provideMerge(NodeServices.layer))
+
+NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(emitters)))

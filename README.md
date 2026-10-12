@@ -13,7 +13,7 @@ The design and its requirements live in
 | Part | State |
 |---|---|
 | Versioned model, canonical serialiser, diff, rule corpus and verdict | in this repository |
-| Front-ends (isolated-declarations fast path, compiler fallback) | next |
+| Front-ends (isolated-declarations fast path, TypeScript 7 compiler fallback, model builder, analysis messages) | in this repository |
 | `.api.md` report with a differential test against `@microsoft/api-extractor` 7.59.1 | planned |
 | Benchmark, CLI, changeset-bump check | planned |
 | systemfsoftware and stryker-js-effect packages from the flake (`.sfs-deps`) | in this repository |
@@ -47,6 +47,44 @@ For example, a function returning `Effect<User, NotFound>` that now returns
 `Effect<User, NotFound | Timeout>` is major `E_WIDENED`; the same change to a parameter
 is minor `E_WIDENED_IN_INPUT`. Removing a tagged error from a returned error channel is
 major `E_TAG_REMOVED`, because a caller's `catchTag` for that tag stops compiling.
+
+## Front-ends
+
+```ts
+import { NodeServices } from '@effect/platform-node'
+import { Effect, Layer } from 'effect'
+import { ApiModel, FrontEnd } from '@systemfsoftware/api-extractor'
+
+const emitters = Layer.mergeAll(FrontEnd.isolatedEmitterLayer, FrontEnd.compilerEmitterLayer).pipe(
+  Layer.provideMerge(NodeServices.layer),
+)
+
+const analysis = await Effect.runPromise(
+  FrontEnd.readPackage({ packageRoot: 'packages/my-lib' }).pipe(Effect.flatMap(FrontEnd.analyse), Effect.provide(emitters)),
+)
+process.stdout.write(ApiModel.serialise(analysis.model))
+```
+
+`readPackage` takes each export whose `@systemfsoftware/source` condition names a
+TypeScript file as an entry point; a package with none is refused with `NoSourceEntry`.
+`analyse` first emits declarations with `oxc-transform`'s isolated-declarations emitter,
+which never type-checks. If any source an entry point reaches needs the checker (an
+unannotated export, TS9xxx), the package takes the fallback: this package's own
+TypeScript 7 `tsc` runs as a process, and `route` is `Fallback` with the diagnostics that
+sent it there. A `tsc` that reports an error refuses the package with `CompilerRejected`.
+Both routes meet at declaration text: one syntactic builder makes the model and one
+resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
+`ae-internal-missing-underscore`, `ae-incompatible-release-tags` and
+`ae-internal-mixed-release-tag`, so both routes give the same model and messages.
+
+The fast-path emitter was chosen from a per-phase profile on systemfsoftware's public
+packages, [`docs/profiles/2026-10-12-front-end-phases.md`](docs/profiles/2026-10-12-front-end-phases.md).
+To reproduce it, check out systemfsoftware at the commit the profile names, install it
+with `pnpm install --frozen-lockfile --ignore-scripts`, and run:
+
+```sh
+nix develop --command pnpm --filter api-extractor-profile profile <systemfsoftware checkout> ../../docs/profiles/<date>-front-end-phases
+```
 
 ## Development
 
