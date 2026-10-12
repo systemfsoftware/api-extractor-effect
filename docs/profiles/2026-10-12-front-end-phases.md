@@ -85,3 +85,13 @@ the clean columns count isolated-declaration diagnostics over the files the entr
 | @systemfsoftware/trace-spec | systemfsoftware | 31 | 94 | 93 | 235 | 9.46 | 1.42 | 56.01 | 314.17 | 2637.96 | 4.14 | 3.31 | 1/31 |
 | @systemfsoftware/trace-taxonomy | systemfsoftware | 3 | 0 | 0 | 0 | 0.66 | 0.06 | 5.8 | 184.18 | 1569.8 | 0.21 | 0.23 | 0/3 |
 | **total** | | 569 | | | | 181.9 | 24.85 | 892.7 | 9257.41 | 64652.24 | 52.94 | 54.33 | 124/569 |
+
+## Decision
+
+The fast-path emitter is `oxc-transform` 0.150.0 `isolatedDeclarationSync`, and declarations are parsed with `oxc-parser` 0.150.0. The rule is the one the plan registered before this profile ran (KTD2):
+
+1. **The clean-or-not verdict matches `tsc --isolatedDeclarations` on every corpus package.** Both candidates pass. Of the 40 packages, 11 are clean under all three referees and 29 are not clean under any of them. The diagnostic counts differ on four packages (effect-microsandbox, effect-gherkin-spec, storybook-gherkin, trace-spec), but no package changes side.
+2. **The lower corpus total of median warm emit plus parse time wins.** `oxc-transform` plus `oxc-parser` takes 24.85 + 52.94 = 77.79 ms. `transpileDeclaration` plus `createSourceFile` takes 892.7 + 54.33 = 947.03 ms. oxc is about 12 times faster.
+3. Rule 3 (within 10%, the smaller runtime dependency) is not reached.
+
+The TypeScript 7 fallback takes 9257.41 ms over the same 40 packages. That is about 119 times the chosen fast path's emit and parse time, and it bounds the cost of routing a package to the fallback. TypeScript 7 and 5.9.3 print 124 of the 569 declaration files differently, so the builder must not depend on one compiler version's printing.

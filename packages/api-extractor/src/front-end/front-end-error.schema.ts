@@ -1,0 +1,47 @@
+import { type Cause, Schema } from 'effect'
+import { Diagnostic } from './declarations.schema.ts'
+
+type DiagnosticsFields = { readonly diagnostics: Schema.$Array<typeof Diagnostic> }
+
+const diagnosticsFields: DiagnosticsFields = { diagnostics: Schema.Array(Diagnostic) }
+
+const listed = (diagnostics: ReadonlyArray<Diagnostic>): string =>
+  diagnostics.map(({ file, code, message }) => `${file === '' ? '' : `${file}: `}TS${code} ${message}`).join('\n')
+
+const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', { readonly packageRoot: Schema.String }>, Cause.YieldableError> =
+  Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', { packageRoot: Schema.String })
+
+export class NoSourceEntry extends NoSourceEntryBase {
+  override get message(): string {
+    return `${this.packageRoot}: no export resolves to a TypeScript source through its source condition`
+  }
+}
+
+const NotIsolatedBase: Schema.Class<NotIsolated, Schema.TaggedStruct<'NotIsolated', DiagnosticsFields>, Cause.YieldableError> =
+  Schema.TaggedError<NotIsolated>()('NotIsolated', diagnosticsFields)
+
+export class NotIsolated extends NotIsolatedBase {
+  override get message(): string {
+    return `declarations need the type checker:\n${listed(this.diagnostics)}`
+  }
+}
+
+const CompilerRejectedBase: Schema.Class<CompilerRejected, Schema.TaggedStruct<'CompilerRejected', DiagnosticsFields>, Cause.YieldableError> =
+  Schema.TaggedError<CompilerRejected>()('CompilerRejected', diagnosticsFields)
+
+export class CompilerRejected extends CompilerRejectedBase {
+  override get message(): string {
+    return `the compiler refused the package:\n${listed(this.diagnostics)}`
+  }
+}
+
+type UnsupportedDeclarationFields = { readonly file: Schema.String; readonly construct: Schema.String }
+
+const UnsupportedDeclarationBase: Schema.Class<UnsupportedDeclaration, Schema.TaggedStruct<'UnsupportedDeclaration', UnsupportedDeclarationFields>, Cause.YieldableError> =
+  Schema.TaggedError<UnsupportedDeclaration>()('UnsupportedDeclaration', { file: Schema.String, construct: Schema.String })
+
+export class UnsupportedDeclaration extends UnsupportedDeclarationBase {
+  override get message(): string {
+    return `${this.file}: ${this.construct} is not supported`
+  }
+}

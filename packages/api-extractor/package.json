@@ -33,7 +33,10 @@
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "^12.0.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "oxc-parser": "catalog:",
+    "oxc-transform": "catalog:",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -55,7 +58,6 @@
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },

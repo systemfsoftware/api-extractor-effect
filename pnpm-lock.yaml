@@ -344,6 +344,15 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.2
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.150.0
+      oxc-transform:
+        specifier: 'catalog:'
+        version: 0.150.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -402,9 +411,6 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.23.0(typescript@7.0.2)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
       vite:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.19.1)(yaml@2.9.1)
