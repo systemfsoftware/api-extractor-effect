@@ -30,6 +30,17 @@ const packageOf = (exports: object, sources: Record<string, string>) =>
 const entryPointsOf = (packageRoot: string) =>
   Effect.map(FrontEnd.readPackage({ packageRoot }), (source) => source.entryPoints)
 
+const rawPackageOf = (manifest: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'package-reader-' })
+    yield* fileSystem.writeFileString(path.join(root, 'package.json'), manifest)
+    return root
+  })
+
+const refusalOfReading = (packageRoot: string) => Effect.flip(FrontEnd.readPackage({ packageRoot }))
+
 const commonJsEntryPackage = packageOf(
   { '.': { [condition]: './src/mod.ts' }, './legacy': { [condition]: './src/legacy.cts' } },
   { 'src/mod.ts': 'export const mod: number = 1\n', 'src/legacy.cts': 'export const legacy: number = 1\n' },
@@ -157,6 +168,25 @@ Feature("A package's exports name its entry points")
             rootPattern: [{ exportPath: './mod', sourceFile: 'mod.ts' }],
             suffixless: [{ exportPath: './mod.ts', sourceFile: 'src/mod.ts' }, { exportPath: './sub/x.ts', sourceFile: 'src/sub/x.ts' }],
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'a package whose manifest does not decode is refused, naming its package root',
+      Gherkin.Do.pipe(
+        Given('a package whose manifest file is not valid JSON')('invalidJson', () => rawPackageOf('{ not json')),
+        Given('a package whose manifest records an export target that is not a path, list or condition map')('refusedManifest', () =>
+          rawPackageOf(JSON.stringify({ name: 'fixture', version: '1.0.0', exports: 42 })),
+        ),
+        When('the package reader reads both')('refusals', (scope) =>
+          Effect.all({ invalidJson: refusalOfReading(scope.invalidJson), refusedManifest: refusalOfReading(scope.refusedManifest) }),
+        ),
+        Then('each is refused as a rejected manifest, naming its own package root')((scope, expect) =>
+          expect(scope.refusals).toMatchObject({
+            invalidJson: { _tag: 'ManifestRejected', packageRoot: scope.invalidJson },
+            refusedManifest: { _tag: 'ManifestRejected', packageRoot: scope.refusedManifest },
+          }),
         ),
       ),
     )

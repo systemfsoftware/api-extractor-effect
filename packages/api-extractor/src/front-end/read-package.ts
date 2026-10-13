@@ -2,8 +2,8 @@ import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Match, Option, Orde
 import type { PlatformError } from 'effect/PlatformError'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { relativeWithin } from './declaration-graph.ts'
-import { NoSourceEntry } from './front-end-error.schema.ts'
-import { ConditionMap, type ExportTarget, PackageManifest } from './package-source.schema.ts'
+import { ManifestRejected, NoSourceEntry } from './front-end-error.schema.ts'
+import { type ExportTarget, PackageManifest } from './package-source.schema.ts'
 
 export const FAMILY_SOURCE_CONDITION = '@systemfsoftware/source'
 
@@ -18,14 +18,19 @@ const TYPESCRIPT_SOURCE = /\.(?:ts|tsx|mts|cts)$/
 
 const isTypeScriptSource = (value: string): boolean => TYPESCRIPT_SOURCE.test(value)
 
-const isString = (value: unknown): value is string => typeof value === 'string'
-
 const stripRelativePrefix = (value: string): string => value.replace(/^\.\//, '')
 
-const isConditionMap = Schema.is(ConditionMap)
+const sourcePathOf = (target: ExportTarget): Option.Option<string> =>
+  Match.value(target).pipe(
+    Match.tag('Path', ({ path }) => Option.some(path)),
+    Match.orElse(() => Option.none()),
+  )
 
 const conditionValue = (target: ExportTarget, condition: string): Option.Option<string> =>
-  Option.flatMap(Option.liftPredicate(target, isConditionMap), (conditions) => Option.liftPredicate(conditions[condition], isString))
+  Match.value(target).pipe(
+    Match.tag('Conditions', ({ conditions }) => Option.flatMap(Option.fromNullishOr(conditions[condition]), sourcePathOf)),
+    Match.orElse(() => Option.none()),
+  )
 
 const entryPointOf = (condition: string) =>
   ([exportPath, target]: readonly [string, ExportTarget]): Option.Option<SourceEntryPoint> =>
@@ -37,7 +42,11 @@ const entryPointOf = (condition: string) =>
 const byExportPath: Order.Order<SourceEntryPoint> = Order.mapInput(Order.String, (entry: SourceEntryPoint) => entry.exportPath)
 
 const exportMapOf = (exports: PackageManifest['exports']): ReadonlyArray<readonly [string, ExportTarget]> =>
-  typeof exports === 'object' ? Object.entries(exports).filter(([exportPath]) => exportPath !== './package.json') : []
+  Match.value(exports).pipe(
+    Match.when(Match.string, () => []),
+    Match.when(Match.undefined, () => []),
+    Match.orElse((record) => Object.entries(record).filter(([exportPath]) => exportPath !== './package.json')),
+  )
 
 const isPatternKey = (exportPath: string): boolean => exportPath.includes('*')
 
@@ -179,12 +188,14 @@ const sourceOf = (root: string, manifest: PackageManifest, entryPoints: Arr.NonE
     return source
   })
 
-export const readPackage = (request: ReadPackageRequest): Effect.Effect<PackageSource, NoSourceEntry | PlatformError | Schema.SchemaError, Platform> =>
+export const readPackage = (request: ReadPackageRequest): Effect.Effect<PackageSource, NoSourceEntry | ManifestRejected | PlatformError, Platform> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const root = path.resolve(request.packageRoot)
-    const manifest = yield* decodeManifest(yield* fileSystem.readFileString(path.join(root, 'package.json')))
+    const manifest = yield* decodeManifest(yield* fileSystem.readFileString(path.join(root, 'package.json'))).pipe(
+      Effect.catchTag('SchemaError', (error) => Effect.fail(new ManifestRejected({ packageRoot: root, issue: error.message }))),
+    )
     const entryPoints = yield* entryPointsOf(root, manifest, request.sourceCondition ?? FAMILY_SOURCE_CONDITION)
     return yield* Arr.match(entryPoints, {
       onEmpty: () => Effect.fail(new NoSourceEntry({ packageRoot: root })),

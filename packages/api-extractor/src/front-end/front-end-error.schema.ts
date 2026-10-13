@@ -19,6 +19,17 @@ export class NoSourceEntry extends NoSourceEntryBase {
   }
 }
 
+type ManifestRejectedFields = { readonly packageRoot: Schema.String; readonly issue: Schema.String }
+
+const ManifestRejectedBase: Schema.Class<ManifestRejected, Schema.TaggedStruct<'ManifestRejected', ManifestRejectedFields>, Cause.YieldableError> =
+  Schema.TaggedError<ManifestRejected>()('ManifestRejected', { packageRoot: Schema.String, issue: Schema.String })
+
+export class ManifestRejected extends ManifestRejectedBase {
+  override get message(): string {
+    return `${this.packageRoot}: the package manifest could not be read: ${this.issue}`
+  }
+}
+
 const NotIsolatedBase: Schema.Class<NotIsolated, Schema.TaggedStruct<'NotIsolated', DiagnosticsFields>, Cause.YieldableError> =
   Schema.TaggedError<NotIsolated>()('NotIsolated', diagnosticsFields)
 
