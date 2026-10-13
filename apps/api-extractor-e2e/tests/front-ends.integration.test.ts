@@ -36,6 +36,11 @@ const internalExportPackage = packageWith(
   { stripInternal: true },
 )
 
+const declarationDirPackage = packageWith('declaration-dir', 'export const placed: number = 1\n', { declarationDir: 'types' })
+
+const writtenInto = (source: FrontEnd.PackageSource, directory: string) =>
+  Effect.flatMap(Path.Path, (path) => Effect.flatMap(FileSystem.FileSystem, (fileSystem) => fileSystem.exists(path.join(source.packageRoot, directory))))
+
 const thisPackage = Effect.gen(function* () {
   const path = yield* Path.Path
   const root = yield* path.fromFileUrl(new URL('../../../packages/api-extractor', import.meta.url))
@@ -65,22 +70,32 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, @internal exports included',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal or declarationDir',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
+        Given('a package whose tsconfig sends declarations to `declarationDir: "types"`')('declarationDir', () => declarationDirPackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
-          Effect.all({ ownPackage: throughBothRoutes(scope.source), internalExport: throughBothRoutes(scope.internal) })
+          Effect.all({
+            ownPackage: throughBothRoutes(scope.source),
+            internalExport: throughBothRoutes(scope.internal),
+            declarationDir: throughBothRoutes(scope.declarationDir),
+            wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
+          })
         ),
-        Then('each pair serialises to the same bytes once the producer is set equal, keeping the @internal constant')((scope, expect) =>
+        Then('each pair serialises to the same bytes once the producer is set equal, and the compiler writes nothing into the package')((scope, expect) =>
           expect({
             ownPackage: scope.analyses.ownPackage.compiled,
             internalExport: scope.analyses.internalExport.compiled,
             internalExports: scope.analyses.internalExport.isolated.exports,
+            declarationDir: scope.analyses.declarationDir.compiled,
+            wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
             ownPackage: scope.analyses.ownPackage.isolated,
             internalExport: scope.analyses.internalExport.isolated,
             internalExports: ['hidden', 'shown'],
+            declarationDir: scope.analyses.declarationDir.isolated,
+            wroteIntoPackage: false,
           })
         ),
       ),

@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, Function as Fn, HashMap, HashSet, Match, Option, Order } from 'effect'
+import { Array as Arr, Effect, Function as Fn, HashMap, HashSet, Match, Option, Order, type Path } from 'effect'
 import {
   type Class,
   type Comment,
@@ -29,6 +29,18 @@ const SCRIPT_EXTENSION = /\.(?:d\.)?([mc]?)[tj]sx?$/
 const DECLARATION_EXTENSION = /\.d\.([mc]?)ts$/
 
 export const isRelativeSpecifier = (specifier: string): boolean => RELATIVE_SPECIFIER.test(specifier)
+
+const isParentSegment = (path: Path.Path, relative: string): boolean => relative === '..' || relative.startsWith(`..${path.sep}`)
+
+const leavesRoot = (path: Path.Path, relative: string): boolean => isParentSegment(path, relative) || path.isAbsolute(relative)
+
+const isInsideRoot = (path: Path.Path) => (relative: string): boolean => relative !== '' && !leavesRoot(path, relative)
+
+export const relativeWithin: {
+  (root: string, target: string): (path: Path.Path) => Option.Option<string>
+  (path: Path.Path, root: string, target: string): Option.Option<string>
+} = Fn.dual(3, (path: Path.Path, root: string, target: string): Option.Option<string> =>
+  Option.liftPredicate(path.relative(root, target), isInsideRoot(path)))
 
 const directoryOf = (path: string): string => path.slice(0, Math.max(path.lastIndexOf('/'), 0))
 

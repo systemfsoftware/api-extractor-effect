@@ -2,7 +2,7 @@ import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Optio
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
-import { closeDeclarations, declarationPathOf, sourceCandidatesOf } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, relativeWithin, sourceCandidatesOf } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
 import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
 import { NotIsolated } from './front-end-error.schema.ts'
@@ -38,10 +38,14 @@ const readSource = (packageRoot: string, sourceFile: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    return yield* fileSystem.readFileString(path.join(packageRoot, sourceFile)).pipe(
-      Effect.asSome,
-      Effect.catchIf(isAbsent, () => Effect.succeedNone),
-    )
+    return yield* Option.match(relativeWithin(path, packageRoot, path.resolve(packageRoot, sourceFile)), {
+      onNone: () => Effect.succeedNone,
+      onSome: (inside) =>
+        fileSystem.readFileString(path.join(packageRoot, inside)).pipe(
+          Effect.asSome,
+          Effect.catchIf(isAbsent, () => Effect.succeedNone),
+        ),
+    })
   })
 
 const declare = (emission: Emission, sourceFile: string, text: string) =>
@@ -74,7 +78,7 @@ const refusedOrClosed = <A, E>(found: ReadonlyArray<Diagnostic>, closed: Result.
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
   file: declarationFile,
   code: 0,
-  message: 'no source file could be read for this entry point',
+  message: 'no source file inside the package could be read for this entry point',
 })
 
 const missingEntries = (files: ReadonlyArray<DeclarationFile>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<Diagnostic> => {

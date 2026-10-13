@@ -35,6 +35,18 @@ const tsxEntryBesideTsPackage = packageOf(sourceManifest('tsx-entry', './src/mod
   'mod.ts': 'export const fromTs: number = 2\n',
 })
 
+const entryOutsidePackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-end-escaping-entry-' })
+  const root = path.join(parent, 'package')
+  yield* fileSystem.makeDirectory(path.join(parent, 'shared'), { recursive: true })
+  yield* fileSystem.makeDirectory(root)
+  yield* fileSystem.writeFileString(path.join(parent, 'shared', 'mod.ts'), 'export const outside: number = 1\n')
+  yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify(sourceManifest('escaping-entry', '../shared/mod.ts')))
+  return root
+})
+
 const emittedOnFastPath = (packageRoot: string) =>
   Effect.flatMap(FrontEnd.readPackage({ packageRoot }), (source) => Effect.flatMap(FrontEnd.IsolatedEmitter, (emitter) => emitter.emit(source)))
 
@@ -106,6 +118,17 @@ Feature('A package is routed to the front-end its declarations allow')
             route: scope.analysis.route._tag,
             exports: scope.analysis.model.entryPoints.flatMap((entry) => entry.items.map((item) => `${item.kind}:${item.name}`)),
           }).toEqual({ route: 'FastPath', exports: ['variable:fromTsx'] })
+        ),
+      ),
+    )
+
+    scenario(
+      'an entry point whose source lies outside the package root is declined by the fast path, as the compiler fallback refuses it',
+      Gherkin.Do.pipe(
+        Given('a package whose export names `../shared/mod.ts`, a readable file beside the package')('packageRoot', () => entryOutsidePackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the entry declaration file instead of modelling a file outside the package')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: '../shared/mod.d.ts', code: 0 }] })
         ),
       ),
     )

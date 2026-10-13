@@ -55,6 +55,16 @@ package whose tsconfig sets `stripInternal: true` and which exports
 `/** @internal */ hidden`. It asserts byte equality between the routes and that `hidden` is
 present. Without the flag the compiled model lacks `hidden`, and the journey fails.
 
+The output location is part of the same policy. A tsconfig `declarationDir` overrides
+`--outDir` for `.d.ts` files (TSConfig reference, `declarationDir`:
+https://www.typescriptlang.org/tsconfig/#declarationDir; reproduced on TypeScript 7.0.2, where
+`tsc -p` with the adapter's flags printed a `TSFILE:` line under the package's own `types`
+directory). Before `compilerArguments` also passed `--declarationDir <outDir>`, the adapter
+therefore wrote the package's declarations into that `types` directory, found nothing under
+its temp `outDir`, and refused the package. The same journey now analyses a package whose
+tsconfig sets `declarationDir: "types"`. It asserts byte equality between the routes and that
+no `types` directory appears in the package.
+
 ## Architectural invariant
 
 **Single emit policy.** The fast path's options are the declaration-emit policy. The
@@ -74,6 +84,10 @@ fallbackArgs = ['-p', tsconfig, ...emitPolicyAsFlags(FAST_PATH_OPTIONS), ...outp
 - Give each pinned option an equality case built on a package that sets the opposite value
   and declares something the option acts on. A corpus that never trips the option makes the
   equality law vacuous.
+- Pin every option that moves an emitted file, not only those that change its text. Each
+  output-location flag (`--outDir`, `--declarationDir`) points at the adapter's scoped temp
+  directory. Gate: the `wroteIntoPackage: false` assertion of the journey "Both front-ends
+  reduce a package to one model" fails when a package is written to.
 - Code smell to grep for: a `compilerArguments` list that lacks a flag for an option the fast
   path passes explicitly.
 

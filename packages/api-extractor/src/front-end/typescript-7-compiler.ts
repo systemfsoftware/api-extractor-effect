@@ -3,7 +3,7 @@ import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import typescriptManifest from 'typescript/package.json' with { type: 'json' }
 import { type CompilerOutput, parseCompilerOutput } from './compiler-output.schema.ts'
-import { closeDeclarations, declarationPathOf } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, relativeWithin } from './declaration-graph.ts'
 import { CompilerEmitter, type CompilerEmitterId, type DeclarationEmitter } from './declaration-emitter.service.ts'
 import type { Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
 import { CompilerRejected } from './front-end-error.schema.ts'
@@ -48,6 +48,8 @@ const compilerArguments = (source: PackageSource, outDir: string): ReadonlyArray
   source.workspaceRoot,
   '--outDir',
   outDir,
+  '--declarationDir',
+  outDir,
   '--listEmittedFiles',
   '--pretty',
   'false',
@@ -80,10 +82,7 @@ const rejectionOf = (run: CompilerRun): Option.Option<ReadonlyArray<Diagnostic>>
     Option.map(Option.liftPredicate(run.exitCode, (code) => code !== 0), (code) => [exitDiagnostic(code, run.stderr)]))
 
 const packageDeclarationOf = (path: Path.Path, declaredRoot: string, emittedFile: string): Option.Option<EmittedDeclaration> =>
-  Option.map(
-    Option.liftPredicate(path.relative(declaredRoot, emittedFile), (relative) => relative !== '' && !relative.startsWith('..')),
-    (declared) => ({ declared, emittedFile }),
-  )
+  Option.map(relativeWithin(path, declaredRoot, emittedFile), (declared) => ({ declared, emittedFile }))
 
 const entryPointsOf = (source: PackageSource): ReadonlyArray<DeclarationEntryPoint> =>
   source.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
