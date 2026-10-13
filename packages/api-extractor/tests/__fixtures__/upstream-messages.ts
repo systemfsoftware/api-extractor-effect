@@ -27,17 +27,29 @@ const TSCONFIG = {
   },
 }
 
+const ENTRY_POINT_IN_TEXT = /\bentry point (\S+)/
+
 const firstQuoted = (text: string): string => {
   const match = /"([^"]*)"/.exec(text)
   return match === null ? '' : match[1] ?? ''
 }
 
-const subjectOf = (message: ExtractorMessage): ReadonlyArray<ReadonlyArray<string>> =>
-  FIVE_IDS.includes(message.messageId) ? [[message.messageId, firstQuoted(message.text)]] : []
+const firstMatched = (pattern: RegExp, text: string): string => {
+  const match = pattern.exec(text)
+  return match === null ? '' : match[1] ?? ''
+}
 
-const sortedPairs = (pairs: ReadonlyArray<ReadonlyArray<string>>): ReadonlyArray<readonly [string, string]> =>
+const entryPointOf = (message: ExtractorMessage): string =>
+  message.messageId === 'ae-forgotten-export' ? firstMatched(ENTRY_POINT_IN_TEXT, message.text) : ''
+
+export type UpstreamRow = readonly [string, string, string]
+
+const subjectOf = (message: ExtractorMessage): ReadonlyArray<ReadonlyArray<string>> =>
+  FIVE_IDS.includes(message.messageId) ? [[message.messageId, firstQuoted(message.text), entryPointOf(message)]] : []
+
+const sortedPairs = (pairs: ReadonlyArray<ReadonlyArray<string>>): ReadonlyArray<UpstreamRow> =>
   pairs
-    .map(([messageId, symbol]) => [messageId ?? '', symbol ?? ''] as const)
+    .map(([messageId, symbol, entryPoint]) => [messageId ?? '', symbol ?? '', entryPoint ?? ''] as const)
     .sort((left, right) => (left.join('\u0000') < right.join('\u0000') ? -1 : 1))
 
 const writtenFiles = (root: string, declarations: FrontEnd.Declarations): void => {
@@ -71,7 +83,7 @@ const runExtractor = (root: string, entry: string): ReadonlyArray<ReadonlyArray<
   return messages.flatMap(subjectOf)
 }
 
-export const upstreamPairs = (declarations: FrontEnd.Declarations): ReadonlyArray<readonly [string, string]> => {
+export const upstreamPairs = (declarations: FrontEnd.Declarations): ReadonlyArray<UpstreamRow> => {
   const root = mkdtempSync(join(tmpdir(), 'upstream-messages-'))
   try {
     symlinkSync(join(packageRoot, 'node_modules'), join(root, 'node_modules'), 'dir')

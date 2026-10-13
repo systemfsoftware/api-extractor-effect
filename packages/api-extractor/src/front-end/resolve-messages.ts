@@ -8,6 +8,7 @@ import {
   type TSImportType,
   type TSInterfaceHeritage,
   type TSTypeName,
+  type TSTypeParameterDeclaration,
   type TSTypeQuery,
   type TSTypeReference,
   Visitor,
@@ -62,25 +63,88 @@ type Reference = { readonly start: number; readonly name: string }
 
 type ReferenceScan = {
   readonly references: ReadonlyArray<Reference>
-  readonly typeParameters: HashSet.HashSet<string>
 }
 
-const EMPTY_SCAN: ReferenceScan = { references: [], typeParameters: HashSet.empty() }
+type TypeParameterScope = {
+  readonly start: number
+  readonly end: number
+  readonly names: ReadonlyArray<string>
+}
+
+type ScopeCarrier = {
+  readonly start: number
+  readonly end: number
+  readonly typeParameters?: TSTypeParameterDeclaration | null
+}
+
+const EMPTY_SCAN: ReferenceScan = { references: [] }
+
+const withinScope = (scope: TypeParameterScope, at: number): boolean => at >= scope.start && at < scope.end
+
+const matchesName = (scope: TypeParameterScope, name: string): boolean => Arr.some(scope.names, (candidate) => candidate === name)
+
+const shadowed = (scopes: ReadonlyArray<TypeParameterScope>, name: string, at: number): boolean =>
+  Arr.some(scopes, (scope) => withinScope(scope, at) && matchesName(scope, name))
+
+const typeParameterNamesOf = (declaration: TSTypeParameterDeclaration | null): ReadonlyArray<string> =>
+  declaration === null ? [] : declaration.params.map((parameter) => parameter.name.name)
+
+const addReference = (references: Array<Reference>, scopes: ReadonlyArray<TypeParameterScope>, name: string, at: number): void => {
+  if (!shadowed(scopes, name, at)) {
+    references.push({ start: at, name })
+  }
+}
+
+const openScope = (scopes: Array<TypeParameterScope>, node: ScopeCarrier): void =>
+  void scopes.push({ start: node.start, end: node.end, names: typeParameterNamesOf(node.typeParameters ?? null) })
+
+const closeScope = (scopes: Array<TypeParameterScope>): void => void scopes.pop()
 
 const scanOf = (program: Program): ReferenceScan => {
   const references: Array<Reference> = []
-  const typeParameters: Array<string> = []
+  const scopes: Array<TypeParameterScope> = []
   const record = (node: NameNode | null, start: number): void =>
-    Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => void references.push({ start, name }) })
+    Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => addReference(references, scopes, name, start) })
+  const enter = (node: ScopeCarrier): void => openScope(scopes, node)
+  const exit = (): void => closeScope(scopes)
   new Visitor({
     TSTypeReference: (node: TSTypeReference) => record(node.typeName, node.start),
     TSTypeQuery: (node: TSTypeQuery) => record(node.exprName, node.start),
     TSInterfaceHeritage: (node: TSInterfaceHeritage) => record(node.expression, node.start),
     TSClassImplements: (node: TSClassImplements) => record(node.expression, node.start),
-    ClassDeclaration: (node: Class) => record(node.superClass, node.start),
-    TSTypeParameter: (node) => void typeParameters.push(node.name.name),
+    ClassDeclaration: (node: Class) => {
+      record(node.superClass, node.start)
+      enter(node)
+    },
+    'ClassDeclaration:exit': exit,
+    ClassExpression: enter,
+    'ClassExpression:exit': exit,
+    FunctionDeclaration: enter,
+    'FunctionDeclaration:exit': exit,
+    FunctionExpression: enter,
+    'FunctionExpression:exit': exit,
+    ArrowFunctionExpression: enter,
+    'ArrowFunctionExpression:exit': exit,
+    TSDeclareFunction: enter,
+    'TSDeclareFunction:exit': exit,
+    TSEmptyBodyFunctionExpression: enter,
+    'TSEmptyBodyFunctionExpression:exit': exit,
+    TSInterfaceDeclaration: enter,
+    'TSInterfaceDeclaration:exit': exit,
+    TSTypeAliasDeclaration: enter,
+    'TSTypeAliasDeclaration:exit': exit,
+    TSMethodSignature: enter,
+    'TSMethodSignature:exit': exit,
+    TSCallSignatureDeclaration: enter,
+    'TSCallSignatureDeclaration:exit': exit,
+    TSConstructSignatureDeclaration: enter,
+    'TSConstructSignatureDeclaration:exit': exit,
+    TSFunctionType: enter,
+    'TSFunctionType:exit': exit,
+    TSConstructorType: enter,
+    'TSConstructorType:exit': exit,
   }).visit(program)
-  return { references, typeParameters: HashSet.fromIterable(typeParameters) }
+  return { references }
 }
 
 const scansOf = (graph: DeclarationGraph): HashMap.HashMap<string, ReferenceScan> =>
@@ -107,10 +171,7 @@ const referencesWithin = (scan: ReferenceScan, scope: FileScope, declaration: De
     reference.start >= declaration.statementStart && reference.start < statementEndOf(scope, declaration.statementStart))
 
 const referenceNames = (scan: ReferenceScan, scope: FileScope, declaration: Declaration): ReadonlyArray<string> =>
-  Arr.map(
-    Arr.filter(referencesWithin(scan, scope, declaration), (reference) => !HashSet.has(scan.typeParameters, reference.name)),
-    (reference) => reference.name,
-  )
+  Arr.map(referencesWithin(scan, scope, declaration), (reference) => reference.name)
 
 type EntryPoint = {
   readonly exportPath: string

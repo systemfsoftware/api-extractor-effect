@@ -10,22 +10,33 @@ const emitters = FrontEnd.isolatedEmitterLayer.pipe(Layer.provideMerge(NodeServi
 
 const packageRoot = Effect.flatMap(Path.Path, (path) => Effect.map(path.fromFileUrl(new URL('..', import.meta.url)), (root) => path.resolve(root)))
 
-type Pair = readonly [string, string]
+type Row = readonly [string, string, string]
 
-const asPairs = (messages: ReadonlyArray<FrontEnd.AnalysisMessage>): ReadonlyArray<Pair> =>
-  messages.map((message) => [message.messageId, message.symbol] as const)
+const rowKey = (row: Row): string => row.join('\u0000')
 
-const pairKey = (pair: Pair): string => `${pair[0]}\u0000${pair[1]}`
+const sorted = (rows: ReadonlyArray<Row>): ReadonlyArray<Row> =>
+  rows
+    .filter((row, index) => rows.findIndex((candidate) => rowKey(candidate) === rowKey(row)) === index)
+    .sort((left, right) => (rowKey(left) < rowKey(right) ? -1 : 1))
 
-const sorted = (pairs: ReadonlyArray<Pair>): ReadonlyArray<Pair> =>
-  pairs
-    .filter((pair, index) => pairs.findIndex((candidate) => pairKey(candidate) === pairKey(pair)) === index)
-    .sort((left, right) => (pairKey(left) < pairKey(right) ? -1 : 1))
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
+
+const entryFileOf = (declarations: FrontEnd.Declarations, exportPath: string): string => {
+  const entry = declarations.entryPoints.find((candidate) => candidate.exportPath === exportPath)
+  return entry === undefined ? '' : baseName(entry.declarationFile)
+}
+
+const entryPointOf = (declarations: FrontEnd.Declarations, message: FrontEnd.AnalysisMessage): string =>
+  message.messageId === 'ae-forgotten-export' ? entryFileOf(declarations, message.entryPoint) : ''
+
+const asRows = (declarations: FrontEnd.Declarations, messages: ReadonlyArray<FrontEnd.AnalysisMessage>): ReadonlyArray<Row> =>
+  messages.map((message) => [message.messageId, message.symbol, entryPointOf(declarations, message)] as const)
 
 const bothSides = (declarations: FrontEnd.Declarations) =>
-  Effect.map(FrontEnd.resolveMessages(declarations), (messages) => ({ messages, upstream: upstreamPairs(declarations) }))
+  Effect.map(FrontEnd.resolveMessages(declarations), (messages) => ({ declarations, messages, upstream: upstreamPairs(declarations) }))
 
-const reviewed = (messages: ReadonlyArray<FrontEnd.AnalysisMessage>): ReadonlyArray<Pair> => sorted(asPairs(messages))
+const reviewed = (declarations: FrontEnd.Declarations, messages: ReadonlyArray<FrontEnd.AnalysisMessage>): ReadonlyArray<Row> =>
+  sorted(asRows(declarations, messages))
 
 const forgottenAt = (messages: ReadonlyArray<FrontEnd.AnalysisMessage>): ReadonlyArray<FrontEnd.AnalysisMessage> =>
   messages.filter((message) => message.messageId === 'ae-forgotten-export')
@@ -60,7 +71,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
             }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
         Then('the forgotten export names the type at the function name and the external type draws no note')((scope, expect) =>
-          expect({ pairs: reviewed(scope.both.messages), forgotten: forgottenAt(scope.both.messages) }).toEqual({
+          expect({ pairs: reviewed(scope.both.declarations, scope.both.messages), forgotten: forgottenAt(scope.both.messages) }).toEqual({
             pairs: sorted(scope.both.upstream),
             forgotten: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'makeWidget', symbol: 'Widget' }],
           })),
@@ -73,7 +84,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
         Given('a package exporting a value with no release tag')('declarations', () =>
           Effect.sync(() => declarationsOf({ entry: 'index.d.ts', files: entry(['export declare const value: string']) }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
-        Then('both note the exported value as untagged')((scope, expect) => expect(reviewed(scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+        Then('both note the exported value as untagged')((scope, expect) => expect(reviewed(scope.both.declarations, scope.both.messages)).toEqual(sorted(scope.both.upstream))),
       ),
     )
 
@@ -83,7 +94,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
         Given('a package exporting an internal value whose name lacks an underscore')('declarations', () =>
           Effect.sync(() => declarationsOf({ entry: 'index.d.ts', files: entry(['/** @internal */', 'export declare const secret: string']) }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
-        Then('both note the value should carry an underscore')((scope, expect) => expect(reviewed(scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+        Then('both note the value should carry an underscore')((scope, expect) => expect(reviewed(scope.both.declarations, scope.both.messages)).toEqual(sorted(scope.both.upstream))),
       ),
     )
 
@@ -108,7 +119,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
         Then('both note the untagged values as untagged')((scope, expect) =>
           expect({
-            notes: reviewed(scope.both.messages),
+            notes: reviewed(scope.both.declarations, scope.both.messages),
             shownUntaggedUpstream: sorted(scope.both.upstream).some(([id, symbol]) => id === 'ae-missing-release-tag' && symbol === 'shown'),
           }).toEqual({ notes: sorted(scope.both.upstream), shownUntaggedUpstream: true })),
       ),
@@ -124,7 +135,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
               files: entry(['/** @beta */', 'export interface B { readonly x: string }', '/** @public */', 'export declare function f(): B']),
             }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
-        Then('both note the incompatible release tags')((scope, expect) => expect(reviewed(scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+        Then('both note the incompatible release tags')((scope, expect) => expect(reviewed(scope.both.declarations, scope.both.messages)).toEqual(sorted(scope.both.upstream))),
       ),
     )
 
@@ -138,7 +149,76 @@ Feature('Review notes for a package match the ones api-extractor derives')
               files: entry(['/** @public */', 'export declare class C { }', '/** @internal */', 'export declare namespace C { }']),
             }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
-        Then('both note the mixed release tags')((scope, expect) => expect(reviewed(scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+        Then('both note the mixed release tags')((scope, expect) => expect(reviewed(scope.both.declarations, scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+      ),
+    )
+
+    scenario(
+      'A generic declaration does not hide a forgotten export of the same name',
+      Gherkin.Do.pipe(
+        Given('a package where a generic function and an imported type share a name but only the function binds it')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { A } from './inner.ts'",
+                    'export declare function wrap<A>(a: A): A',
+                    'export declare function use(a: A): A',
+                    '',
+                  ].join('\n'),
+                ],
+                ['inner.d.ts', 'export interface A { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('both note the imported type as a forgotten export of the function that uses it')((scope, expect) =>
+          expect({
+            notes: reviewed(scope.both.declarations, scope.both.messages),
+            forgotten: forgottenAt(scope.both.messages),
+          }).toEqual({
+            notes: sorted(scope.both.upstream),
+            forgotten: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'use', symbol: 'A' }],
+          })),
+      ),
+    )
+
+    scenario(
+      'A package that repeats one note reports it once, in code-unit order',
+      Gherkin.Do.pipe(
+        Given('a package whose exported function names one non-exported type twice beside an internal export without an underscore')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { Missing } from './missing.ts'",
+                    '/** @internal */',
+                    'export declare const secret: string',
+                    'export declare function f(a: Missing, b: Missing): void',
+                    '',
+                  ].join('\n'),
+                ],
+                ['missing.d.ts', 'export interface Missing { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('the full list of notes is sorted and de-duplicated and matches upstream')((scope, expect) =>
+          expect({
+            notes: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            notes: [
+              { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'f', symbol: 'Missing' },
+              { messageId: 'ae-internal-missing-underscore', entryPoint: '.', item: 'secret', symbol: 'secret' },
+              { messageId: 'ae-missing-release-tag', entryPoint: '.', item: 'f', symbol: 'f' },
+            ],
+            pairs: sorted(scope.both.upstream),
+          })),
       ),
     )
 
@@ -151,7 +231,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
             const isolated = yield* FrontEnd.IsolatedEmitter
             return yield* bothSides(yield* isolated.emit(scope.source))
           })),
-        Then('every note matches')((scope, expect) => expect(reviewed(scope.both.messages)).toEqual(sorted(scope.both.upstream))),
+        Then('every note matches')((scope, expect) => expect(reviewed(scope.both.declarations, scope.both.messages)).toEqual(sorted(scope.both.upstream))),
       ),
     )
   })
