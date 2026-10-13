@@ -18,7 +18,7 @@ export {
   compilerEmitPolicy,
   type CompilerEmitPolicy,
   type CompilerEmitPolicyRequest,
-  derivedTsconfig,
+  writeDerivedTsconfig,
   type DerivedTsconfigRequest,
   layer as compilerEmitterLayer,
   TYPESCRIPT_PRODUCER,

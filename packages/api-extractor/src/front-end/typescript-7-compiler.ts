@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Order, Path, Stream } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Order, Path, type Scope, Stream } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { API, DiagnosticCategory, type Diagnostic as ApiDiagnostic, type Program } from 'typescript/unstable/async'
@@ -61,27 +61,33 @@ export const compilerEmitPolicy: (request: CompilerEmitPolicyRequest) => Compile
   declarationDir: outDir,
 })
 
-const defaultTypeRoots = (path: Path.Path, directory: string): ReadonlyArray<string> => {
+const ancestorsOf = (path: Path.Path, directory: string): ReadonlyArray<string> => {
   const parent = path.dirname(directory)
-  const typeRoot = path.join(directory, 'node_modules', '@types')
-  return parent === directory ? [typeRoot] : [typeRoot, ...defaultTypeRoots(path, parent)]
+  return parent === directory ? [directory] : [directory, ...ancestorsOf(path, parent)]
 }
 
-const isStringArray = (value: unknown): value is ReadonlyArray<string> => Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+const mirroredDirectory = (path: Path.Path, mirrorRoot: string, directory: string): string =>
+  path.join(mirrorRoot, path.relative(path.parse(directory).root, directory))
 
-type PackageConfig = { readonly typeRoots: Option.Option<ReadonlyArray<string>>; readonly fileNames: ReadonlyArray<string> }
+const mirrorNodeModules = (mirrorRoot: string, directory: string): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const mirrored = mirroredDirectory(path, mirrorRoot, directory)
+    const nodeModules = path.join(directory, 'node_modules')
+    yield* fileSystem.makeDirectory(mirrored, { recursive: true })
+    yield* Effect.when(fileSystem.symlink(nodeModules, path.join(mirrored, 'node_modules')), fileSystem.exists(nodeModules))
+  })
 
-const packageConfig = (packageRoot: string, tsconfigPath: string): Effect.Effect<Option.Option<PackageConfig>> =>
+const packageFileNames = (packageRoot: string, tsconfigPath: string): Effect.Effect<Option.Option<ReadonlyArray<string>>> =>
   Effect.acquireUseRelease(
     Effect.sync(() => new API({ cwd: packageRoot })),
-    (api) =>
-      Effect.map(Effect.promise(() => api.parseConfigFile(tsconfigPath)), (parsed) =>
-        Option.some({ typeRoots: Option.liftPredicate(parsed.options['typeRoots'], isStringArray), fileNames: parsed.fileNames })),
+    (api) => Effect.map(Effect.promise(() => api.parseConfigFile(tsconfigPath)), (parsed) => Option.some(parsed.fileNames)),
     (api) => Effect.ignoreCause(Effect.promise(() => api.close())),
   ).pipe(Effect.catchCause(() => Effect.succeedNone))
 
-const rootFilesField = (config: Option.Option<PackageConfig>): { readonly files?: ReadonlyArray<string> } =>
-  Option.match(config, { onNone: () => ({}), onSome: ({ fileNames }) => ({ files: fileNames }) })
+const rootFilesField = (fileNames: Option.Option<ReadonlyArray<string>>): { readonly files?: ReadonlyArray<string> } =>
+  Option.match(fileNames, { onNone: () => ({}), onSome: (files) => ({ files }) })
 
 export type DerivedTsconfigRequest = {
   readonly tsconfigPath: string
@@ -90,16 +96,24 @@ export type DerivedTsconfigRequest = {
   readonly outDir: string
 }
 
-export const derivedTsconfig = (request: DerivedTsconfigRequest): Effect.Effect<string, never, Path.Path> =>
+export const writeDerivedTsconfig = (request: DerivedTsconfigRequest): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path | Scope.Scope> =>
   Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const config = yield* packageConfig(request.packageRoot, request.tsconfigPath)
-    const typeRoots = Option.getOrElse(Option.flatMap(config, (found) => found.typeRoots), () => defaultTypeRoots(path, request.packageRoot))
-    return JSON.stringify({
-      extends: request.tsconfigPath,
-      compilerOptions: { ...compilerEmitPolicy({ workspaceRoot: request.workspaceRoot, outDir: request.outDir }), typeRoots },
-      ...rootFilesField(config),
-    })
+    const mirrorRoot = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'api-extractor-tsconfig-' })
+    const configDirectory = path.dirname(request.tsconfigPath)
+    yield* Effect.forEach(ancestorsOf(path, configDirectory), (directory) => mirrorNodeModules(mirrorRoot, directory), { discard: true })
+    const derived = path.join(mirroredDirectory(path, mirrorRoot, configDirectory), DERIVED_CONFIG_NAME)
+    const fileNames = yield* packageFileNames(request.packageRoot, request.tsconfigPath)
+    yield* fileSystem.writeFileString(
+      derived,
+      JSON.stringify({
+        extends: request.tsconfigPath,
+        compilerOptions: compilerEmitPolicy({ workspaceRoot: request.workspaceRoot, outDir: request.outDir }),
+        ...rootFilesField(fileNames),
+      }),
+    )
+    return derived
   })
 
 type EmittedDeclaration = { readonly declared: string; readonly emittedFile: string }
@@ -118,14 +132,9 @@ const drain = (stream: Stream.Stream<Uint8Array, PlatformError>): Effect.Effect<
 const runCompiler = (source: PackageSource, tsc: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const outDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'api-extractor-tsc-' })
-    const derived = path.join(outDir, DERIVED_CONFIG_NAME)
-    yield* fileSystem.writeFileString(
-      derived,
-      yield* derivedTsconfig({ tsconfigPath: source.tsconfigPath, packageRoot: source.packageRoot, workspaceRoot: source.workspaceRoot, outDir }),
-    )
+    const derived = yield* writeDerivedTsconfig({ tsconfigPath: source.tsconfigPath, packageRoot: source.packageRoot, workspaceRoot: source.workspaceRoot, outDir })
     const handle = yield* spawner.spawn(ChildProcess.make(process.execPath, [tsc, '-p', derived], { cwd: source.packageRoot }))
     const [stdout, stderr] = yield* Effect.all([drain(handle.stdout), drain(handle.stderr)], { concurrency: 2 })
     const exitCode = yield* handle.exitCode

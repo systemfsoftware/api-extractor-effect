@@ -12,9 +12,13 @@ import ts59 from 'typescript-5.9'
 const WARM_RUNS = 5
 const require = createRequire(import.meta.url)
 
-const TYPESCRIPT_SOURCE = /\.m?tsx?$/
+const TYPESCRIPT_SOURCE = /\.(?:ts|tsx|mts|cts)$/
 
-const ExportTarget = Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Json)])
+const ConditionMap = Schema.Record(Schema.String, Schema.Json)
+
+const isConditionMap = Schema.is(ConditionMap)
+
+const ExportTarget = Schema.Union([Schema.String, Schema.Null, Schema.Array(Schema.Json), ConditionMap])
 
 const Manifest = Schema.Struct({
   name: Schema.String,
@@ -66,9 +70,8 @@ const measure = <A, E, R>(effect: Effect.Effect<A, E, R>, runs: number = WARM_RU
   })
 
 const sourceEntryOf = (target: typeof ExportTarget.Type): Option.Option<string> =>
-  typeof target === 'string'
-    ? Option.none()
-    : Option.fromNullishOr(target[FrontEnd.FAMILY_SOURCE_CONDITION]).pipe(Option.filter((value): value is string => typeof value === 'string' && TYPESCRIPT_SOURCE.test(value)))
+  Option.flatMap(Option.liftPredicate(target, isConditionMap), (conditions) =>
+    Option.fromNullishOr(conditions[FrontEnd.FAMILY_SOURCE_CONDITION]).pipe(Option.filter((value): value is string => typeof value === 'string' && TYPESCRIPT_SOURCE.test(value))))
 
 const entrySources = (manifest: Manifest): ReadonlyArray<string> =>
   Arr.getSomes(Object.entries(manifest.exports ?? {}).filter(([key]) => key !== './package.json').map(([, target]) => sourceEntryOf(target)))
@@ -128,7 +131,7 @@ const discover = (subject: Subject) =>
   })
 
 const declarationPath = (root: string, file: string, path: Path.Path): string =>
-  path.relative(root, file).replace(/\.(m?)tsx?$/, (_, m: string) => `.d.${m}ts`)
+  path.relative(root, file).replace(/\.([mc]?)tsx?$/, (_, flavour: string) => `.d.${flavour}ts`)
 
 const emitOxc = (root: string, sources: ReadonlyMap<string, string>, path: Path.Path): Emit => {
   const results = [...sources].map(([file, text]) => [declarationPath(root, file, path), isolatedDeclarationSync(file, text, { stripInternal: false })] as const)
@@ -159,18 +162,13 @@ interface CompileRun {
 const compile = (tsc: string, subject: Subject, extra: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const outDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-end-profile-' })
     const tsconfig = yield* tsconfigOf(subject.root)
-    const derived = path.join(outDir, 'tsconfig.json')
-    yield* fileSystem.writeFileString(
-      derived,
-      yield* FrontEnd.derivedTsconfig({ tsconfigPath: tsconfig, packageRoot: subject.root, workspaceRoot: subject.workspaceRoot, outDir }),
-    )
+    const derived = yield* FrontEnd.writeDerivedTsconfig({ tsconfigPath: tsconfig, packageRoot: subject.root, workspaceRoot: subject.workspaceRoot, outDir })
     const args = [tsc, '-p', derived, '--pretty', 'false', ...extra]
     const handle = yield* spawner.spawn(ChildProcess.make(process.execPath, args, { cwd: subject.root }))
-    const stdout = yield* Stream.decodeText(handle.stdout).pipe(Stream.mkString)
+    const [stdout] = yield* Effect.all([Stream.decodeText(handle.stdout).pipe(Stream.mkString), Stream.decodeText(handle.stderr).pipe(Stream.mkString)], { concurrency: 2 })
     const exitCode = yield* handle.exitCode
     const run: CompileRun = { exitCode, diagnostics: stdout.split('\n').filter((line) => / error TS\d+/.test(line)), outDir }
     return run
@@ -199,8 +197,17 @@ const isolatedErrorsIn = (run: CompileRun, subject: Subject, sources: ReadonlyMa
   return run.diagnostics.filter((line) => / error TS9\d{3}:/.test(line) && files.some((file) => line.startsWith(file))).length
 }
 
-const differing = (left: ReadonlyMap<string, string>, right: ReadonlyMap<string, string>): number =>
-  [...left].filter(([file, text]) => right.get(file) !== text).length
+type Divergence = { readonly compared: number; readonly differing: number; readonly missing: number; readonly typescript59ExitCode: number }
+
+const divergenceOf = (left: ReadonlyMap<string, string>, right: ReadonlyMap<string, string>, typescript59ExitCode: number): Divergence => {
+  const shared = [...left].filter(([file]) => right.has(file))
+  return {
+    compared: shared.length,
+    differing: shared.filter(([file, text]) => right.get(file) !== text).length,
+    missing: left.size - shared.length,
+    typescript59ExitCode,
+  }
+}
 
 const PHASES = [
   'discover',
@@ -231,7 +238,7 @@ interface PackageProfile {
   readonly declarationStatements: number
   readonly clean: Readonly<Record<'oxc-transform' | 'transpileDeclaration' | 'tsc --isolatedDeclarations', Cleanliness>>
   readonly fallback: { readonly exitCode: number; readonly diagnostics: number }
-  readonly divergence: { readonly compared: number; readonly differing: number; readonly typescript59ExitCode: number }
+  readonly divergence: Divergence
   readonly frontEnd: FrontEndOutcome
   readonly phases: Readonly<Record<Phase, Timing>>
 }
@@ -317,7 +324,7 @@ const profilePackage = (subject: Subject): Effect.Effect<PackageProfile, Profile
         'tsc --isolatedDeclarations': { diagnostics: refereeErrors, clean: refereeErrors === 0 },
       },
       fallback: { exitCode: tsc7.result.exitCode, diagnostics: tsc7.result.diagnostics.length },
-      divergence: { compared: outputs7.size, differing: differing(outputs7, outputs59), typescript59ExitCode: tsc59.result.exitCode },
+      divergence: divergenceOf(outputs7, outputs59, tsc59.result.exitCode),
       frontEnd: frontEnd.outcome,
       phases: {
         discover: discovery.timing,
@@ -383,12 +390,12 @@ const total = (packages: ReadonlyArray<PackageProfile>, phase: Phase, key: keyof
   round(packages.reduce((sum, item) => sum + item.phases[phase][key], 0))
 
 const markdownOf = (report: Report): string => {
-  const header = `| Package | Origin | Sources | oxc clean | tD clean | tsc ID clean | ${PHASES.join(' | ')} | TS7≠5.9.3 | route | model |`
-  const rule = `|${'---|'.repeat(PHASES.length + 9)}`
+  const header = `| Package | Origin | Sources | oxc clean | tD clean | tsc ID clean | ${PHASES.join(' | ')} | TS7≠5.9.3 | no 5.9.3 emit | route | model |`
+  const rule = `|${'---|'.repeat(PHASES.length + 10)}`
   const rows = report.packages.map((item) =>
-    `| ${item.name} | ${item.origin} | ${item.sourceFiles} | ${item.clean['oxc-transform'].diagnostics} | ${item.clean.transpileDeclaration.diagnostics} | ${item.clean['tsc --isolatedDeclarations'].diagnostics} | ${PHASES.map((phase) => item.phases[phase].warmMedianMs).join(' | ')} | ${item.divergence.differing}/${item.divergence.compared} | ${item.frontEnd.route} | ${item.frontEnd.outcome} |`
+    `| ${item.name} | ${item.origin} | ${item.sourceFiles} | ${item.clean['oxc-transform'].diagnostics} | ${item.clean.transpileDeclaration.diagnostics} | ${item.clean['tsc --isolatedDeclarations'].diagnostics} | ${PHASES.map((phase) => item.phases[phase].warmMedianMs).join(' | ')} | ${item.divergence.differing}/${item.divergence.compared} | ${item.divergence.missing} | ${item.frontEnd.route} | ${item.frontEnd.outcome} |`
   )
-  const totals = `| **total** | | ${report.packages.reduce((sum, item) => sum + item.sourceFiles, 0)} | | | | ${PHASES.map((phase) => report.totals[phase]).join(' | ')} | ${report.packages.reduce((sum, item) => sum + item.divergence.differing, 0)}/${report.packages.reduce((sum, item) => sum + item.divergence.compared, 0)} | | |`
+  const totals = `| **total** | | ${report.packages.reduce((sum, item) => sum + item.sourceFiles, 0)} | | | | ${PHASES.map((phase) => report.totals[phase]).join(' | ')} | ${report.packages.reduce((sum, item) => sum + item.divergence.differing, 0)}/${report.packages.reduce((sum, item) => sum + item.divergence.compared, 0)} | ${report.packages.reduce((sum, item) => sum + item.divergence.missing, 0)} | | |`
   return [
     '# Front-end phase profile',
     '',
