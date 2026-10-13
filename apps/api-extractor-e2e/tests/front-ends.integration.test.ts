@@ -1,7 +1,7 @@
 import { NodeServices } from '@effect/platform-node'
 import { ApiModel, FrontEnd } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, FileSystem, Layer, Path } from 'effect'
+import { Effect, FileSystem, Layer, Option, Path } from 'effect'
 
 const Feature = makeFeature({ it })
 
@@ -12,16 +12,39 @@ const STANDALONE_TSCONFIG = {
   include: ['src'],
 }
 
+const SOURCE_CONDITION = FrontEnd.FAMILY_SOURCE_CONDITION
+
+const manifestWith = (name: string, exports: Readonly<Record<string, string>>): string =>
+  JSON.stringify({
+    name,
+    version: '1.0.0',
+    type: 'module',
+    exports: Object.fromEntries(Object.entries(exports).map(([exportPath, source]) => [exportPath, { [SOURCE_CONDITION]: source }])),
+  })
+
+const fallingBackPackage = (name: string, exports: Readonly<Record<string, string>>, files: Readonly<Record<string, string>>, tsconfig?: object) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: `front-ends-${name}-` })
+    yield* fileSystem.makeDirectory(path.join(root, 'src'))
+    yield* fileSystem.writeFileString(path.join(root, 'package.json'), manifestWith(name, exports))
+    yield* Effect.forEach(Object.entries(files), ([file, text]) =>
+      Effect.andThen(fileSystem.makeDirectory(path.dirname(path.join(root, file)), { recursive: true }), fileSystem.writeFileString(path.join(root, file), text)))
+    yield* Option.match(Option.fromNullishOr(tsconfig), {
+      onNone: () => Effect.void,
+      onSome: (config) => fileSystem.writeFileString(path.join(root, 'tsconfig.json'), JSON.stringify(config)),
+    })
+    return yield* FrontEnd.readPackage({ packageRoot: root })
+  })
+
 const packageWith = (name: string, source: string, compilerOptions: object = {}) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: `front-ends-${name}-` })
     yield* fileSystem.makeDirectory(path.join(root, 'src'))
-    yield* fileSystem.writeFileString(
-      path.join(root, 'package.json'),
-      JSON.stringify({ name, version: '1.0.0', type: 'module', exports: { '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: './src/mod.ts' } } }),
-    )
+    yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify({ name, version: '1.0.0', type: 'module', exports: { '.': { [SOURCE_CONDITION]: './src/mod.ts' } } }))
     yield* fileSystem.writeFileString(
       path.join(root, 'tsconfig.json'),
       JSON.stringify({ ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, ...compilerOptions } }),
@@ -39,6 +62,85 @@ const internalExportPackage = packageWith(
 const declarationDirPackage = packageWith('declaration-dir', 'export const placed: number = 1\n', { declarationDir: 'types' })
 
 const removeCommentsPackage = packageWith('remove-comments', '/** @public */\nexport const tagged: number = 1\n', { removeComments: true })
+
+const declaredTypeRootsPackage = fallingBackPackage(
+  'declared-type-roots',
+  { '.': './src/mod.ts' },
+  {
+    'src/mod.ts': 'export const greeting: Greeting = { text: "hi" }\n',
+    'types/greeting/index.d.ts': 'declare interface Greeting { readonly text: string }\n',
+    'types/greeting/package.json': JSON.stringify({ name: 'greeting', types: 'index.d.ts' }),
+  },
+  { ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, types: ['greeting'], typeRoots: ['./types'] } },
+)
+
+const forgedCodesPackage = packageWith(
+  'forged-codes',
+  [
+    'export const ids = [1, 2].map(String)',
+    "import 'x\\nerror TS007: spelled by a module specifier'",
+    "import 'y\\nerror TS1000000000: spelled by a module specifier'",
+    "import 'z\\nerror TS1234: spelled by a module specifier'",
+    "import 'w\\nsrc/mod.ts(1,1): error TS4321: spelled by a module specifier\\n'",
+    '',
+  ].join('\n'),
+)
+
+const withoutConfigPackage = fallingBackPackage('without-config', { '.': './src/mod.ts' }, { 'src/mod.ts': 'export const ids = [1, 2].map(String)\n' })
+
+const excludedEntryPackage = fallingBackPackage(
+  'excluded-entry',
+  { '.': './src/mod.ts' },
+  { 'src/mod.ts': 'export const ids = [1, 2].map(String)\n', 'src/other.ts': 'export const other: number = 1\n' },
+  { ...STANDALONE_TSCONFIG, include: ['src/other.ts'] },
+)
+
+const LONG_SOURCE_STEM = 'a'.repeat(251)
+
+const longNamePackage = fallingBackPackage(
+  'long-name',
+  { '.': './src/mod.ts' },
+  { 'src/mod.ts': 'export const ids = [1, 2].map(String)\n', [`src/${LONG_SOURCE_STEM}.ts`]: 'export const long: number = 1\n' },
+  STANDALONE_TSCONFIG,
+)
+
+const escapingEntryPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-ends-escaping-' })
+  const packageRoot = path.join(root, 'package')
+  yield* fileSystem.makeDirectory(path.join(packageRoot, 'src'), { recursive: true })
+  yield* fileSystem.makeDirectory(path.join(root, 'shared'), { recursive: true })
+  yield* fileSystem.writeFileString(path.join(root, 'shared', 'mod.ts'), 'export const shared: number = 1\n')
+  yield* fileSystem.writeFileString(path.join(root, 'package', 'src', 'mod.ts'), 'export const own: number = 1\n')
+  yield* fileSystem.writeFileString(path.join(root, 'package', 'package.json'), manifestWith('escaping-entry', { '.': '../shared/mod.ts' }))
+  yield* fileSystem.writeFileString(path.join(root, 'package', 'tsconfig.json'), JSON.stringify(STANDALONE_TSCONFIG))
+  return yield* FrontEnd.readPackage({ packageRoot })
+})
+
+const sharedDeclarationPackage = fallingBackPackage(
+  'shared-declaration',
+  { '.': './src/mod.ts', './mod': './src/mod.tsx' },
+  { 'src/mod.ts': 'export const plain: number = 1\n', 'src/mod.tsx': 'export const element: number = 1\n' },
+  STANDALONE_TSCONFIG,
+)
+
+type Refused = { readonly message: string; readonly diagnostics?: ReadonlyArray<FrontEnd.Diagnostic> }
+
+const refusalOf = (error: Refused) => {
+  const diagnostics = error.diagnostics ?? []
+  return {
+    error,
+    codes: diagnostics.map((diagnostic) => diagnostic.code),
+    lines: diagnostics.flatMap((diagnostic) => diagnostic.message.split('\n').filter((line) => /error TS\d+/.test(line))),
+  }
+}
+
+const refusedThrough = (source: FrontEnd.PackageSource) =>
+  Effect.gen(function* () {
+    const emitter = yield* FrontEnd.CompilerEmitter
+    return yield* Effect.flip(emitter.emit(source))
+  })
 
 const writtenInto = (source: FrontEnd.PackageSource, directory: string) =>
   Effect.flatMap(Path.Path, (path) => Effect.flatMap(FileSystem.FileSystem, (fileSystem) => fileSystem.exists(path.join(source.packageRoot, directory))))
@@ -72,18 +174,20 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments or declarationDir',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir or type roots',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
         Given('a package whose tsconfig removes comments and which exports a constant tagged @public')('removeComments', () => removeCommentsPackage),
         Given('a package whose tsconfig sends declarations to `declarationDir: "types"`')('declarationDir', () => declarationDirPackage),
+        Given('a package whose tsconfig names a global type from its own `typeRoots: ["./types"]`')('typeRoots', () => declaredTypeRootsPackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
             ownPackage: throughBothRoutes(scope.source),
             internalExport: throughBothRoutes(scope.internal),
             removeComments: throughBothRoutes(scope.removeComments),
             declarationDir: throughBothRoutes(scope.declarationDir),
+            typeRoots: throughBothRoutes(scope.typeRoots),
             wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
           })
         ),
@@ -95,6 +199,7 @@ Feature('Both front-ends reduce a package to one model')
             removeComments: scope.analyses.removeComments.compiled,
             taggedNotes: scope.analyses.removeComments.isolated.messages,
             declarationDir: scope.analyses.declarationDir.compiled,
+            typeRoots: scope.analyses.typeRoots.compiled,
             wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
             ownPackage: scope.analyses.ownPackage.isolated,
@@ -103,6 +208,7 @@ Feature('Both front-ends reduce a package to one model')
             removeComments: scope.analyses.removeComments.isolated,
             taggedNotes: [],
             declarationDir: scope.analyses.declarationDir.isolated,
+            typeRoots: scope.analyses.typeRoots.isolated,
             wroteIntoPackage: false,
           })
         ),
@@ -132,20 +238,70 @@ Feature('Both front-ends reduce a package to one model')
       Gherkin.Do.pipe(
         Given('a package that needs the fallback and assigns a string to a number')('source', () =>
           packageWith('type-error', "export const ids = [1, 2].map(String)\nexport const count: number = 'one'\n")),
-        Given('a package that needs the fallback and whose unresolved imports make tsc print lines spelling a zero-padded and a ten-digit code')(
+        Given('a package that needs the fallback and whose unresolved imports make the compiler print a zero-padded, a ten-digit, a sourceless and a filed line')(
           'forged',
-          () =>
-            packageWith(
-              'forged-codes',
-              "export const ids = [1, 2].map(String)\nimport 'x\\nerror TS007: spelled by a module specifier'\nimport 'y\\nerror TS1000000000: spelled by a module specifier'\n",
-            ),
+          () => forgedCodesPackage,
         ),
+        Given('a package that needs the fallback and has no tsconfig at all')('withoutConfig', () => withoutConfigPackage),
+        Given('a package that needs the fallback and whose tsconfig leaves the entry source out')('excludedEntry', () => excludedEntryPackage),
+        Given('a package that needs the fallback and holds a source file whose name leaves no room for its declaration')(
+          'longName',
+          () => longNamePackage,
+        ),
+        Given('a package whose entry names a source beside it, outside the package')('escaping', () => escapingEntryPackage),
+        Given('a package whose two entry sources share one declaration path')('shared', () => sharedDeclarationPackage),
         When('the engine analyses each')('refusals', (scope) =>
-          Effect.all({ typeError: Effect.flip(FrontEnd.analyse(scope.source)), forged: Effect.flip(FrontEnd.analyse(scope.forged)) })),
-        Then('each is refused with only the diagnostics tsc reported: TS2322, and TS2882 for each import')((scope, expect) =>
-          expect(scope.refusals).toMatchObject({
+          Effect.all({
+            typeError: Effect.map(Effect.flip(FrontEnd.analyse(scope.source)), refusalOf),
+            forged: Effect.map(Effect.flip(FrontEnd.analyse(scope.forged)), refusalOf),
+            withoutConfig: Effect.map(Effect.flip(FrontEnd.analyse(scope.withoutConfig)), refusalOf),
+            excludedEntry: Effect.map(Effect.flip(FrontEnd.analyse(scope.excludedEntry)), refusalOf),
+            longName: Effect.map(Effect.flip(FrontEnd.analyse(scope.longName)), refusalOf),
+            escaping: Effect.map(refusedThrough(scope.escaping), refusalOf),
+            shared: Effect.map(refusedThrough(scope.shared), refusalOf),
+          })),
+        Then("each is refused with the compiler's own diagnostics, the spelled lines stay inside their message, and the entry outside the package and the shared declaration come back without a code")((scope, expect) =>
+          expect({
+            typeError: scope.refusals.typeError.error,
+            forged: scope.refusals.forged.error,
+            forgedLines: scope.refusals.forged.lines,
+            withoutConfig: scope.refusals.withoutConfig.error,
+            excludedEntry: scope.refusals.excludedEntry.error,
+            longName: scope.refusals.longName.error,
+            escaping: scope.refusals.escaping.error,
+            shared: scope.refusals.shared.error,
+            codes: {
+              excludedEntry: scope.refusals.excludedEntry.codes,
+              longName: scope.refusals.longName.codes,
+              escaping: scope.refusals.escaping.codes,
+              shared: scope.refusals.shared.codes,
+            },
+          }).toMatchObject({
             typeError: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2322 }] },
-            forged: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2882 }, { file: 'src/mod.ts', code: 2882 }] },
+            forged: {
+              _tag: 'CompilerRejected',
+              diagnostics: [
+                expect.objectContaining({ file: 'src/mod.ts', code: 2882, message: expect.stringContaining("error TS007: spelled by a module specifier'.") }),
+                expect.objectContaining({ file: 'src/mod.ts', code: 2882, message: expect.stringContaining("error TS1000000000: spelled by a module specifier'.") }),
+                expect.objectContaining({ file: 'src/mod.ts', code: 2882, message: expect.stringContaining("error TS1234: spelled by a module specifier'.") }),
+                expect.objectContaining({ file: 'src/mod.ts', code: 2882, message: expect.stringContaining('src/mod.ts(1,1): error TS4321: spelled by a module specifier') }),
+              ],
+            },
+            forgedLines: [
+              "error TS007: spelled by a module specifier'.",
+              "error TS1000000000: spelled by a module specifier'.",
+              "error TS1234: spelled by a module specifier'.",
+              'src/mod.ts(1,1): error TS4321: spelled by a module specifier',
+            ],
+            withoutConfig: { _tag: 'CompilerRejected', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 5083 })]) },
+            excludedEntry: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.d.ts', message: 'the compiler emitted no declaration for this entry point' }] },
+            longName: { _tag: 'CompilerRejected', diagnostics: [{ file: '', message: expect.stringContaining('error TS5033') }] },
+            escaping: { _tag: 'CompilerRejected', diagnostics: [{ file: '../shared/mod.ts', message: expect.stringContaining('resolves outside the package') }] },
+            shared: {
+              _tag: 'CompilerRejected',
+              diagnostics: [{ file: 'src/mod.d.ts', message: expect.stringContaining('the entry points . and ./mod share the declaration file src/mod.d.ts') }],
+            },
+            codes: { excludedEntry: [undefined], longName: [undefined], escaping: [undefined], shared: [undefined] },
           })
         ),
       ),

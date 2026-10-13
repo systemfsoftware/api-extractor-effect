@@ -14,4 +14,12 @@ export { layer as isolatedEmitterLayer, OXC_TRANSFORM_PRODUCER } from './front-e
 export { FAMILY_SOURCE_CONDITION, readPackage, type ReadPackageRequest } from './front-end/read-package.ts'
 export { resolveMessages } from './front-end/resolve-messages.ts'
 export { Fallback, FastPath, Route } from './front-end/route.schema.ts'
-export { layer as compilerEmitterLayer } from './front-end/typescript-7-compiler.ts'
+export {
+  compilerEmitPolicy,
+  type CompilerEmitPolicy,
+  type CompilerEmitPolicyRequest,
+  derivedTsconfig,
+  type DerivedTsconfigRequest,
+  layer as compilerEmitterLayer,
+  TYPESCRIPT_PRODUCER,
+} from './front-end/typescript-7-compiler.ts'

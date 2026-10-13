@@ -24,9 +24,15 @@ const Manifest = Schema.Struct({
 })
 type Manifest = typeof Manifest.Type
 
-type ProfileError = PlatformError | Schema.SchemaError | UsageError
+type ProfileError = PlatformError | Schema.SchemaError | UsageError | GitError
 
 class UsageError extends Schema.TaggedError<UsageError>()('UsageError', { usage: Schema.String }) {}
+
+class GitError extends Schema.TaggedError<GitError>()('GitError', { args: Schema.Array(Schema.String), exitCode: Schema.Int, stderr: Schema.String }) {
+  override get message(): string {
+    return `git ${this.args.join(' ')} exited with code ${this.exitCode}: ${this.stderr}`
+  }
+}
 
 interface Subject {
   readonly origin: 'systemfsoftware' | 'api-extractor-effect'
@@ -153,10 +159,16 @@ interface CompileRun {
 const compile = (tsc: string, subject: Subject, extra: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const outDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-end-profile-' })
     const tsconfig = yield* tsconfigOf(subject.root)
-    const args = [tsc, '-p', tsconfig, '--noEmit', 'false', '--declaration', '--emitDeclarationOnly', '--declarationMap', 'false', '--sourceMap', 'false', '--incremental', 'false', '--composite', 'false', '--tsBuildInfoFile', 'null', '--rootDir', subject.workspaceRoot, '--outDir', outDir, '--pretty', 'false', ...extra]
+    const derived = path.join(outDir, 'tsconfig.json')
+    yield* fileSystem.writeFileString(
+      derived,
+      yield* FrontEnd.derivedTsconfig({ tsconfigPath: tsconfig, packageRoot: subject.root, workspaceRoot: subject.workspaceRoot, outDir }),
+    )
+    const args = [tsc, '-p', derived, '--pretty', 'false', ...extra]
     const handle = yield* spawner.spawn(ChildProcess.make(process.execPath, args, { cwd: subject.root }))
     const stdout = yield* Stream.decodeText(handle.stdout).pipe(Stream.mkString)
     const exitCode = yield* handle.exitCode
@@ -325,7 +337,15 @@ const gitLines = (root: string, args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const handle = yield* spawner.spawn(ChildProcess.make('git', args, { cwd: root }))
-    return (yield* Stream.decodeText(handle.stdout).pipe(Stream.mkString)).split('\n').filter((line) => line !== '')
+    const [stdout, stderr] = yield* Effect.all(
+      [Stream.decodeText(handle.stdout).pipe(Stream.mkString), Stream.decodeText(handle.stderr).pipe(Stream.mkString)],
+      { concurrency: 2 },
+    )
+    const exitCode = yield* handle.exitCode
+    return yield* Option.match(Option.liftPredicate(exitCode, (code) => code === 0), {
+      onNone: () => Effect.fail(new GitError({ args, exitCode, stderr: stderr.trim() })),
+      onSome: () => Effect.succeed(stdout.split('\n').filter((line) => line !== '')),
+    })
   })
 
 const corpusSubjects = (corpusRoot: string) =>
