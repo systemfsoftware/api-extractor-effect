@@ -99,6 +99,6 @@ fallbackArgs = ['-p', tsconfig, ...emitPolicyAsFlags(FAST_PATH_OPTIONS), ...outp
 
 ## Related
 
-- `docs/plans/2026-10-12-2048-feat-front-ends-plan.md` (R3; U10 disposition #6)
+- `docs/plans/2026-10-13-1629-feat-front-ends-plan.md` (R3; U10 disposition #6)
 - `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md`: a law passes
   vacuously when its corpus lacks the triggering shape

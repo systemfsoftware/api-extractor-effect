@@ -128,13 +128,25 @@ Feature('Both front-ends reduce a package to one model')
     )
 
     scenario(
-      'a package the compiler rejects is refused with the compiler diagnostic and no model',
+      'a package the compiler rejects is refused with the diagnostics tsc reported and no model',
       Gherkin.Do.pipe(
         Given('a package that needs the fallback and assigns a string to a number')('source', () =>
           packageWith('type-error', "export const ids = [1, 2].map(String)\nexport const count: number = 'one'\n")),
-        When('the engine analyses it')('refusal', (scope) => Effect.flip(FrontEnd.analyse(scope.source))),
-        Then('it is refused with TS2322')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2322 }] })
+        Given('a package that needs the fallback and whose unresolved imports make tsc print lines spelling a zero-padded and a ten-digit code')(
+          'forged',
+          () =>
+            packageWith(
+              'forged-codes',
+              "export const ids = [1, 2].map(String)\nimport 'x\\nerror TS007: spelled by a module specifier'\nimport 'y\\nerror TS1000000000: spelled by a module specifier'\n",
+            ),
+        ),
+        When('the engine analyses each')('refusals', (scope) =>
+          Effect.all({ typeError: Effect.flip(FrontEnd.analyse(scope.source)), forged: Effect.flip(FrontEnd.analyse(scope.forged)) })),
+        Then('each is refused with only the diagnostics tsc reported: TS2322, and TS2882 for each import')((scope, expect) =>
+          expect(scope.refusals).toMatchObject({
+            typeError: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2322 }] },
+            forged: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2882 }, { file: 'src/mod.ts', code: 2882 }] },
+          })
         ),
       ),
     )

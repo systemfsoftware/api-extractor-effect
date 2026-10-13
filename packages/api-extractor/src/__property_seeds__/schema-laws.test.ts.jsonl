@@ -1,4 +1,0 @@
-{"_tag":"Refuted","property":"∀x_SourcelessDiagnosticLine_=x","seed":1588784167,"attempt":69,"size":7,"path":[0,2,3,15],"failure":"ReturnedFalse"}
-{"_tag":"Refuted","property":"∀x_FiledDiagnosticLineEnc_=x","seed":817721849,"attempt":0,"size":0,"path":[0,0,0,0],"failure":"ReturnedFalse"}
-{"_tag":"Refuted","property":"∀x_FiledDiagnosticLineEnc_=x","seed":2434346067,"attempt":27,"size":3,"path":[4,0,0,0],"failure":"ReturnedFalse"}
-{"_tag":"Refuted","property":"∀x_FiledDiagnosticLine_=x","seed":707307667,"attempt":26,"size":3,"path":[0,0,0,0,3,0,0,0],"failure":"ReturnedFalse"}

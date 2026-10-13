@@ -1,12 +1,12 @@
 ---
 title: API extractor front-ends - Plan
 type: feat
-date: 2026-10-12
+date: 2026-10-13
 topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-12-1532-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-12-2048-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -266,7 +266,7 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Files:** `.changeset/*.md`, `packages/api-extractor/src/front-end/{compiler-output.schema,oxc-isolated-emitter,typescript-7-compiler,build-model}.ts`, `packages/api-extractor/tests/front-end-{routing,model}.integration.test.ts`, `apps/api-extractor-e2e/tests/front-ends.integration.test.ts`, `README.md`.
 - **Approach:**
   - #1: a `minor` change intent for `@systemfsoftware/api-extractor`. The `FrontEnd` namespace is new public surface (pack: package-topology, surface-changes-are-versioned.md).
-  - #2: `Position` is capped below 1e9 and digit text has one spelling, with no zero padding. Each refinement has a refusal law in its own file (pack: schema-laws, refusals-beside-generated-laws.md). The four committed `Refuted` seeds stay as regression coverage.
+  - #2: `Position` is capped below 1e9 and digit text has one spelling, with no zero padding. Each refinement has a refusal law in its own file (pack: schema-laws, refusals-beside-generated-laws.md). The four committed `Refuted` seeds stay as regression coverage. U11 supersedes the refusal laws and the seeds; the refinements stay.
   - #5: the isolated emitter declines with `NotIsolated`, naming the declaration file, when an entry point's source cannot be read.
   - #6: the fallback passes `--stripInternal false`, so both routes keep `@internal` declarations.
   - #9: an entry point's declarations load from its recorded source path before any sibling candidate.
@@ -275,6 +275,19 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
   - Rejected: #4. tsc 7.0.2 imports a non-exported interface from an import-bearing `.d.ts` (exit 0), and adding `export {}` makes the same import TS2459. The validator rejected #3, #7, #8 and #10-#16.
 - **Test expectation:** the routing feature gains a missing-entry scenario and a `.tsx`-beside-`.ts` scenario; the model feature gains a computed-enum refusal; the e2e equality journey gains an `@internal` package without adding a journey (KTD11). Each fails at `fd4ad93` and passes after its fix. Each refusal law fails when its refinement is widened.
 - **Verification:** the Verification Contract gates, plus a delta review of the fixes by a named non-Claude cross-model peer (DeepSeek or MiniMax only).
+
+### U11. Ruling #2's refusal properties under the refusal-properties rule
+
+- **Goal:** each in-source refusal property ruling #2 added is kept only if no consumer can observe its refusal (pack: schema-laws, refusal-properties-cover-unobservable-boundaries.md, systemfsoftware #761). `main` retired the generated schema laws in #9.
+- **Requirements:** R3; KTD11.
+- **Files:** `packages/api-extractor/src/front-end/compiler-output.schema.ts`, `packages/api-extractor/src/__property_seeds__/schema-laws.test.ts.jsonl`, `apps/api-extractor-e2e/tests/front-ends.integration.test.ts`.
+- **Approach:**
+  - The digit-spelling refusal (`∀s_SourcelessDiagnosticLineDigitsRefusal_≡CanonicalSpelling`) is observable. A package's own text reaches `tsc`'s stdout: TypeScript 7.0.2 prints an unresolved import specifier raw, so `import 'x\nerror TS007: m'` puts the line `error TS007: m'.` on stdout, and `FrontEnd.analyse` reports through `CompilerRejected` whether that line became a diagnostic. The property goes. The e2e refusal journey proves the refusal there instead, without adding a journey (KTD11).
+  - The `Position` cap refusal (`∀n_SourcelessDiagnosticFieldsPositionRefusal_≡PrintableByTsc`) is not observable, and no oracle justifies keeping it. Decoding never meets the cap, because `Digits` (`compiler-output.schema.ts:10,26`) admits at most nine digits first. The only other way in is `Schema.is` on the struct itself, which the rule says is not a consumer. Its predicate `printableByTsc` (non-negative safe integer printing in at most nine digits) restates the refinement `[0, 1e9)` rather than coming from an oracle the schema did not produce, and its can-fail evidence was a hand-widened refinement, which REPO-D3 now forbids. The property goes; the cap stays (ruling #2).
+  - The four `Refuted` seeds belong to generated laws that #9 deleted with `src/schema-laws.test.ts`, the file the seed store is keyed to. Nothing reads them, so the store goes.
+- **Test expectation:** the e2e refusal journey gains a package whose import specifiers make `tsc` print `error TS007:` and `error TS1000000000:` lines, and asserts that only `tsc`'s two TS2882 diagnostics come back. It fails at `fd4ad93`, where `Digits` admitted zero padding and returned a forged code 7. Admission (skill test-layer-selection): the refusal is observable only where real `tsc` stdout reaches the public `CompilerEmitter`, a process spawn the in-process layer forbids, so it belongs to the e2e failure-contract journey; it extends that journey rather than adding a fifth (KTD11).
+- **Residual risk:** the scenario relies on TypeScript 7.0.2 printing an unresolved specifier raw. A `tsc` that escapes it would print no forged line, and the scenario would pass without exercising the refusal. A `typescript` bump re-checks that the forged lines still appear on stdout.
+- **Verification:** the Verification Contract gates.
 
 ---
 
