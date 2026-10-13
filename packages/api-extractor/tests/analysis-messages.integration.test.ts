@@ -186,6 +186,45 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      'A mapped-type key or an inferred type variable does not stand for a declaration of the same name',
+      Gherkin.Do.pipe(
+        Given('a package whose mapped type and conditional type bind K and U while an exported function uses imported types K and U')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { K, U } from './inner.ts'",
+                    '/** @public */',
+                    "export declare const keyed: { [K in 'a' | 'b']: K }",
+                    '/** @public */',
+                    'export type Unwrap<T> = T extends Promise<infer U> ? U : never',
+                    '/** @public */',
+                    'export declare function use(k: K, u: U): void',
+                    '',
+                  ].join('\n'),
+                ],
+                ['inner.d.ts', 'export interface K { readonly k: string }\nexport interface U { readonly u: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('both note K and U as forgotten exports of the function only')((scope, expect) =>
+          expect({
+            notes: reviewed(scope.both.declarations, scope.both.messages),
+            forgotten: forgottenAt(scope.both.messages),
+          }).toEqual({
+            notes: sorted(scope.both.upstream),
+            forgotten: [
+              { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'use', symbol: 'K' },
+              { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'use', symbol: 'U' },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
       'A package that repeats one note reports it once, in code-unit order',
       Gherkin.Do.pipe(
         Given('a package whose exported function names one non-exported type twice beside an internal export without an underscore')('declarations', () =>

@@ -6,7 +6,10 @@ import {
   type Program,
   type TSClassImplements,
   type TSImportType,
+  type TSConditionalType,
+  type TSInferType,
   type TSInterfaceHeritage,
+  type TSMappedType,
   type TSTypeName,
   type TSTypeParameterDeclaration,
   type TSTypeQuery,
@@ -100,9 +103,40 @@ const openScope = (scopes: Array<TypeParameterScope>, node: ScopeCarrier): void 
 
 const closeScope = (scopes: Array<TypeParameterScope>): void => void scopes.pop()
 
+const openNamedScope = (scopes: Array<TypeParameterScope>, node: TSMappedType): void =>
+  void scopes.push({ start: node.start, end: node.end, names: [node.key.name] })
+
+type ConditionalScope = {
+  readonly start: number
+  readonly end: number
+  readonly extendsStart: number
+  readonly extendsEnd: number
+  readonly names: Array<string>
+}
+
+const openConditional = (scopes: Array<TypeParameterScope>, conditionals: Array<ConditionalScope>, node: TSConditionalType): void => {
+  const scope: ConditionalScope = { start: node.start, end: node.trueType.end, extendsStart: node.extendsType.start, extendsEnd: node.extendsType.end, names: [] }
+  scopes.push(scope)
+  conditionals.push(scope)
+}
+
+const closeConditional = (scopes: Array<TypeParameterScope>, conditionals: Array<ConditionalScope>): void => {
+  scopes.pop()
+  conditionals.pop()
+}
+
+const bindsInfer = (scope: ConditionalScope, at: number): boolean => at >= scope.extendsStart && at < scope.extendsEnd
+
+const bindInfer = (conditionals: ReadonlyArray<ConditionalScope>, node: TSInferType): void =>
+  Option.match(Arr.findLast(conditionals, (scope) => bindsInfer(scope, node.start)), {
+    onNone: () => undefined,
+    onSome: (scope) => void scope.names.push(node.typeParameter.name.name),
+  })
+
 const scanOf = (program: Program): ReferenceScan => {
   const references: Array<Reference> = []
   const scopes: Array<TypeParameterScope> = []
+  const conditionals: Array<ConditionalScope> = []
   const record = (node: NameNode | null, start: number): void =>
     Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => addReference(references, scopes, name, start) })
   const enter = (node: ScopeCarrier): void => openScope(scopes, node)
@@ -143,6 +177,11 @@ const scanOf = (program: Program): ReferenceScan => {
     'TSFunctionType:exit': exit,
     TSConstructorType: enter,
     'TSConstructorType:exit': exit,
+    TSMappedType: (node: TSMappedType) => openNamedScope(scopes, node),
+    'TSMappedType:exit': exit,
+    TSConditionalType: (node: TSConditionalType) => openConditional(scopes, conditionals, node),
+    'TSConditionalType:exit': () => closeConditional(scopes, conditionals),
+    TSInferType: (node: TSInferType) => bindInfer(conditionals, node),
   }).visit(program)
   return { references }
 }
