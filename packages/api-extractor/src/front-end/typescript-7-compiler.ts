@@ -67,12 +67,19 @@ const defaultTypeRoots = (path: Path.Path, directory: string): ReadonlyArray<str
 
 const isStringArray = (value: unknown): value is ReadonlyArray<string> => Array.isArray(value) && value.every((entry) => typeof entry === 'string')
 
-const declaredTypeRoots = (packageRoot: string, tsconfigPath: string): Effect.Effect<Option.Option<ReadonlyArray<string>>> =>
+type PackageConfig = { readonly typeRoots: Option.Option<ReadonlyArray<string>>; readonly fileNames: ReadonlyArray<string> }
+
+const packageConfig = (packageRoot: string, tsconfigPath: string): Effect.Effect<Option.Option<PackageConfig>> =>
   Effect.acquireUseRelease(
     Effect.sync(() => new API({ cwd: packageRoot })),
-    (api) => Effect.map(Effect.promise(() => api.parseConfigFile(tsconfigPath)), (parsed) => Option.liftPredicate(parsed.options['typeRoots'], isStringArray)),
+    (api) =>
+      Effect.map(Effect.promise(() => api.parseConfigFile(tsconfigPath)), (parsed) =>
+        Option.some({ typeRoots: Option.liftPredicate(parsed.options['typeRoots'], isStringArray), fileNames: parsed.fileNames })),
     (api) => Effect.ignoreCause(Effect.promise(() => api.close())),
   ).pipe(Effect.catchCause(() => Effect.succeedNone))
+
+const rootFilesField = (config: Option.Option<PackageConfig>): { readonly files?: ReadonlyArray<string> } =>
+  Option.match(config, { onNone: () => ({}), onSome: ({ fileNames }) => ({ files: fileNames }) })
 
 export type DerivedTsconfigRequest = {
   readonly tsconfigPath: string
@@ -84,10 +91,12 @@ export type DerivedTsconfigRequest = {
 export const derivedTsconfig = (request: DerivedTsconfigRequest): Effect.Effect<string, never, Path.Path> =>
   Effect.gen(function* () {
     const path = yield* Path.Path
-    const typeRoots = Option.getOrElse(yield* declaredTypeRoots(request.packageRoot, request.tsconfigPath), () => defaultTypeRoots(path, request.packageRoot))
+    const config = yield* packageConfig(request.packageRoot, request.tsconfigPath)
+    const typeRoots = Option.getOrElse(Option.flatMap(config, (found) => found.typeRoots), () => defaultTypeRoots(path, request.packageRoot))
     return JSON.stringify({
       extends: request.tsconfigPath,
       compilerOptions: { ...compilerEmitPolicy({ workspaceRoot: request.workspaceRoot, outDir: request.outDir }), typeRoots },
+      ...rootFilesField(config),
     })
   })
 

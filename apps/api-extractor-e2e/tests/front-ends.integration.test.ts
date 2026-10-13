@@ -74,6 +74,13 @@ const declaredTypeRootsPackage = fallingBackPackage(
   { ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, types: ['greeting'], typeRoots: ['./types'] } },
 )
 
+const defaultIncludePackage = fallingBackPackage(
+  'default-include',
+  { '.': './src/mod.ts' },
+  { 'src/mod.ts': 'export const counted: number = 1\n' },
+  { compilerOptions: STANDALONE_TSCONFIG.compilerOptions },
+)
+
 const forgedCodesPackage = packageWith(
   'forged-codes',
   [
@@ -174,13 +181,14 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir or type roots',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots or included files',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
         Given('a package whose tsconfig removes comments and which exports a constant tagged @public')('removeComments', () => removeCommentsPackage),
         Given('a package whose tsconfig sends declarations to `declarationDir: "types"`')('declarationDir', () => declarationDirPackage),
         Given('a package whose tsconfig names a global type from its own `typeRoots: ["./types"]`')('typeRoots', () => declaredTypeRootsPackage),
+        Given('a package whose tsconfig names no `include`, so every file under it is compiled')('defaultInclude', () => defaultIncludePackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
             ownPackage: throughBothRoutes(scope.source),
@@ -188,6 +196,7 @@ Feature('Both front-ends reduce a package to one model')
             removeComments: throughBothRoutes(scope.removeComments),
             declarationDir: throughBothRoutes(scope.declarationDir),
             typeRoots: throughBothRoutes(scope.typeRoots),
+            defaultInclude: throughBothRoutes(scope.defaultInclude),
             wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
           })
         ),
@@ -200,6 +209,7 @@ Feature('Both front-ends reduce a package to one model')
             taggedNotes: scope.analyses.removeComments.isolated.messages,
             declarationDir: scope.analyses.declarationDir.compiled,
             typeRoots: scope.analyses.typeRoots.compiled,
+            defaultInclude: scope.analyses.defaultInclude.compiled,
             wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
             ownPackage: scope.analyses.ownPackage.isolated,
@@ -209,6 +219,7 @@ Feature('Both front-ends reduce a package to one model')
             taggedNotes: [],
             declarationDir: scope.analyses.declarationDir.isolated,
             typeRoots: scope.analyses.typeRoots.isolated,
+            defaultInclude: scope.analyses.defaultInclude.isolated,
             wroteIntoPackage: false,
           })
         ),
