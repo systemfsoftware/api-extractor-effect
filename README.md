@@ -79,8 +79,10 @@ import names no file), the package takes the fallback. This package's own TypeSc
 `tsc` runs as a process on a config that extends the package's tsconfig with a fixed emit
 policy (`FrontEnd.compilerEmitPolicy`), and `route` is `Fallback` with the diagnostics that
 sent it there. A `tsc` that fails refuses the package with `CompilerRejected`, whose
-diagnostics come from the TypeScript 7 API, never from `tsc`'s printed output, which a
-package's own file names and import specifiers can spell. A diagnostic no compiler reported
+diagnostics come from the TypeScript 7 API. Only when the API reports no error (a write
+failure, say) does the refusal carry one diagnostic with `tsc`'s exit code and printed
+output, which a package's own file names and import specifiers can spell, so a consumer
+treats that message as untrusted text. A diagnostic no compiler reported
 (a missing entry, say) carries no TypeScript code, and a diagnostic the compiler reported
 names a `file` only when that file is inside the package. A refusal of an entry point names
 the entry's recorded source, which may lie outside the package.
