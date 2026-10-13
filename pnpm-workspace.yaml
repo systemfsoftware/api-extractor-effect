@@ -9,6 +9,7 @@ catalog:
   "@effect/platform-node": 4.0.2
   "@effect/tsgo": 0.50.0
   "@microsoft/api-extractor": 7.59.1
+  "@microsoft/tsdoc": 0.16.0
   "@types/node": 24.19.1
   effect: 4.0.2
   oxlint: 1.82.0

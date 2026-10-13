@@ -1,3 +1,4 @@
+import { type StandardModifierTagSet, TSDocParser } from '@microsoft/tsdoc'
 import { Array as Arr, Effect, HashMap, HashSet, Match, Option, Order, Predicate } from 'effect'
 import {
   type Class,
@@ -25,14 +26,22 @@ import type { UnsupportedDeclaration } from './front-end-error.schema.ts'
 type ReleaseTag = 'internal' | 'alpha' | 'beta' | 'public'
 
 const RELEASE_TAG_RANK: Record<ReleaseTag, number> = { internal: 1, alpha: 2, beta: 3, public: 4 }
-const RELEASE_TAG_TEXT = /@(public|beta|alpha|internal)\b/
-const RELEASE_TAG_NAMES: HashSet.HashSet<string> = HashSet.make('public', 'beta', 'alpha', 'internal')
 
-const isReleaseTag = (name: string): name is ReleaseTag => HashSet.has(RELEASE_TAG_NAMES, name)
+const releaseTagParser: TSDocParser = new TSDocParser()
+
+const docCommentText = (comment: string): string => `/*${comment}*/`
+
+const tagIn = (tags: StandardModifierTagSet): Option.Option<ReleaseTag> =>
+  Match.value(tags).pipe(
+    Match.when((candidate) => candidate.isPublic(), () => Option.some<ReleaseTag>('public')),
+    Match.when((candidate) => candidate.isBeta(), () => Option.some<ReleaseTag>('beta')),
+    Match.when((candidate) => candidate.isAlpha(), () => Option.some<ReleaseTag>('alpha')),
+    Match.when((candidate) => candidate.isInternal(), () => Option.some<ReleaseTag>('internal')),
+    Match.orElse(() => Option.none<ReleaseTag>()),
+  )
 
 const tagOfComment = (comment: string): Option.Option<ReleaseTag> =>
-  Option.flatMap(Option.fromNullishOr(RELEASE_TAG_TEXT.exec(comment)), (match) =>
-    Option.flatMap(Option.fromNullishOr(match[1]), (name) => Option.liftPredicate(name, isReleaseTag)))
+  tagIn(releaseTagParser.parseString(docCommentText(comment)).docComment.modifierTagSet)
 
 const isDocComment = (comment: Comment): boolean => comment.type === 'Block' && comment.value.startsWith('*')
 

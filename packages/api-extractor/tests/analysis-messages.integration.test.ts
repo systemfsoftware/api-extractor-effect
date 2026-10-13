@@ -99,6 +99,35 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      'A release tag written inside a code sample or a code span is not a release tag',
+      Gherkin.Do.pipe(
+        Given('a package whose doc comments name a release tag only inside a fenced code block and inside an inline code span')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: entry([
+                '/**',
+                ' * Summary.',
+                ' * @example',
+                ' * ```ts',
+                ' * // @internal',
+                ' * ```',
+                ' */',
+                'export declare function g(): void',
+                '/** Not `@beta` at all. */',
+                'export declare function h(): void',
+              ]),
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('both note the two functions as untagged')((scope, expect) =>
+          expect({ derived: reviewed(scope.both.declarations, scope.both.messages), upstream: sorted(scope.both.upstream) }).toEqual({
+            derived: [['ae-missing-release-tag', 'g', ''], ['ae-missing-release-tag', 'h', '']],
+            upstream: [['ae-missing-release-tag', 'g', ''], ['ae-missing-release-tag', 'h', '']],
+          })),
+      ),
+    )
+
+    scenario(
       "A release tag belongs to its own declaration, not to the one after it",
       Gherkin.Do.pipe(
         Given('a package where a tagged value and an interface member\'s doc comment precede untagged values')('declarations', () =>

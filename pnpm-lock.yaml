@@ -173,6 +173,9 @@ catalogs:
     '@microsoft/api-extractor':
       specifier: 7.59.1
       version: 7.59.1
+    '@microsoft/tsdoc':
+      specifier: 0.16.0
+      version: 0.16.0
     '@types/node':
       specifier: 24.19.1
       version: 24.19.1
@@ -344,6 +347,9 @@ importers:
 
   packages/api-extractor:
     dependencies:
+      '@microsoft/tsdoc':
+        specifier: 'catalog:'
+        version: 0.16.0
       '@systemfsoftware/effect-cell-types':
         specifier: file:../../.sfs-deps/effect-cell-types-12.0.0.tgz
         version: file:.sfs-deps/effect-cell-types-12.0.0.tgz(effect@4.0.2)
