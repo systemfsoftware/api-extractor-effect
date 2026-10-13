@@ -207,6 +207,25 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
+      'a package whose exports is a bare path or absent names no source entry',
+      Gherkin.Do.pipe(
+        Given('a package whose `exports` is the string `./src/mod.ts`')('stringExports', () =>
+          rawPackageOf(JSON.stringify({ name: 'fixture', version: '1.0.0', exports: './src/mod.ts' })),
+        ),
+        Given('a package with no `exports` field')('absentExports', () => rawPackageOf(JSON.stringify({ name: 'fixture', version: '1.0.0' }))),
+        When('the package reader reads both')('refusals', (scope) =>
+          Effect.all({ stringExports: refusalOfReading(scope.stringExports), absentExports: refusalOfReading(scope.absentExports) }),
+        ),
+        Then('each is refused as having no source entry, naming its own package root')((scope, expect) =>
+          expect(scope.refusals).toMatchObject({
+            stringExports: { _tag: 'NoSourceEntry', packageRoot: scope.stringExports },
+            absentExports: { _tag: 'NoSourceEntry', packageRoot: scope.absentExports },
+          }),
+        ),
+      ),
+    )
+
+    scenario(
       'a caller may name another source condition, and the reader follows only that one',
       Gherkin.Do.pipe(
         Given('a package whose `.` entry names `./src/mod.ts` under the family condition and `./src/other.ts` under a `development` condition')(
