@@ -160,7 +160,7 @@ const exitMessage = (exitCode: number, stdout: string, stderr: string): string =
     },
   )
 
-const exitDiagnostic = (run: CompilerRun): Diagnostic => ({ message: exitMessage(run.exitCode, run.stdout, run.stderr) })
+const exitDiagnostic = (run: CompilerRun): Diagnostic => ({ _tag: 'Note', message: exitMessage(run.exitCode, run.stdout, run.stderr) })
 
 const indented = (text: string): string => text.replaceAll('\n', '\n  ')
 
@@ -177,6 +177,7 @@ const fileFieldOf = (path: Path.Path, packageRoot: string, fileName: Option.Opti
   )
 
 const apiDiagnostic = (path: Path.Path, packageRoot: string, diagnostic: ApiDiagnostic): Diagnostic => ({
+  _tag: 'Reported',
   ...fileFieldOf(path, packageRoot, Option.fromNullishOr(diagnostic.fileName)),
   code: diagnostic.code,
   message: chainText(diagnostic),
@@ -250,6 +251,7 @@ const emittedDeclarationFiles = (path: Path.Path, fileSystem: FileSystem.FileSys
   )
 
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
+  _tag: 'Note',
   file: declarationFile,
   message: 'the compiler emitted no declaration for this entry point',
 })
@@ -315,6 +317,7 @@ const accepted = (source: PackageSource, run: CompilerRun) =>
   })
 
 const missingSourceDiagnostic = (entry: SourceEntryPoint, reason: string): Diagnostic => ({
+  _tag: 'Note',
   file: entry.sourceFile,
   message: `the entry point ${entry.exportPath} names the source file ${entry.sourceFile}, which ${reason}`,
 })
@@ -337,6 +340,7 @@ const entryProblem = (source: PackageSource) =>
     })
 
 const sharedDeclarationDiagnostic = (shared: SharedDeclaration): Diagnostic => ({
+  _tag: 'Note',
   file: shared.declarationFile,
   message: `the entry points ${shared.exportPaths.join(ENTRY_SEPARATOR)} share the declaration file ${shared.declarationFile}`,
 })

@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Order, Path, Ref, Result } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Option, Order, Path, Ref, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
@@ -14,13 +14,20 @@ const DIAGNOSTIC_TEXT = /^TS(\d+): (.*)$/s
 
 const diagnosticOf = (file: string, text: string): Diagnostic =>
   Option.match(Option.fromNullishOr(DIAGNOSTIC_TEXT.exec(text)), {
-    onNone: () => ({ file, message: text }),
-    onSome: ([, code, message]) => ({ file, code: Number(code), message: message ?? '' }),
+    onNone: (): Diagnostic => ({ _tag: 'Note', file, message: text }),
+    onSome: ([, code, message]): Diagnostic => ({ _tag: 'Reported', file, code: Number(code), message: message ?? '' }),
   })
+
+const codeOf = (diagnostic: Diagnostic): Option.Option<number> =>
+  Match.value(diagnostic).pipe(
+    Match.tag('Reported', ({ code }): Option.Option<number> => Option.some(code)),
+    Match.tag('Note', () => Option.none<number>()),
+    Match.exhaustive,
+  )
 
 const diagnosticOrder: Order.Order<Diagnostic> = Order.combineAll([
   Order.mapInput(Option.makeOrder(Order.String), (diagnostic: Diagnostic) => Option.fromNullishOr(diagnostic.file)),
-  Order.mapInput(Option.makeOrder(Order.Number), (diagnostic: Diagnostic) => Option.fromNullishOr(diagnostic.code)),
+  Order.mapInput(Option.makeOrder(Order.Number), codeOf),
   Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.message),
 ])
 
@@ -52,6 +59,7 @@ const firstSource = (
   })
 
 const unresolvedImportDiagnostic = (unresolved: UnresolvedImport): Diagnostic => ({
+  _tag: 'Note',
   file: unresolved.file,
   message: `the import \`${unresolved.specifier}\` names no declaration file inside the package`,
 })
@@ -74,6 +82,7 @@ const refusedOrClosed = (
   })
 
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
+  _tag: 'Note',
   file: declarationFile,
   message: 'no source file inside the package could be read for this entry point',
 })
@@ -85,6 +94,7 @@ const everyEntryEmitted = (files: ReadonlyArray<DeclarationFile>, entryDeclarati
   })
 
 const sharedDeclarationDiagnostic = (shared: SharedDeclaration): Diagnostic => ({
+  _tag: 'Note',
   file: shared.declarationFile,
   message: `two entry points share one declaration file: ${shared.exportPaths.map((exportPath) => `\`${exportPath}\``).join(' and ')}`,
 })

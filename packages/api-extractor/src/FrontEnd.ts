@@ -8,7 +8,7 @@ export {
   IsolatedEmitter,
   type IsolatedEmitterId,
 } from './front-end/declaration-emitter.service.ts'
-export { type DeclarationFile, Declarations, Diagnostic, type PackageSource, type SourceEntryPoint } from './front-end/declarations.schema.ts'
+export { type DeclarationFile, Declarations, Diagnostic, Note, type PackageSource, Reported, type SourceEntryPoint } from './front-end/declarations.schema.ts'
 export { CompilerRejected, ManifestRejected, NoSourceEntry, NotIsolated, UnsupportedDeclaration } from './front-end/front-end-error.schema.ts'
 export { layer as isolatedEmitterLayer, OXC_TRANSFORM_PRODUCER } from './front-end/oxc-isolated-emitter.ts'
 export { FAMILY_SOURCE_CONDITION, readPackage, type ReadPackageRequest } from './front-end/read-package.ts'

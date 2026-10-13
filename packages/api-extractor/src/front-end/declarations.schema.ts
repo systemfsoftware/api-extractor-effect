@@ -33,14 +33,30 @@ export const Declarations: Schema.Codec<Declarations> = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, text: Schema.String })),
 })
 
-export type Diagnostic = {
-  readonly file?: string
-  readonly code?: number
-  readonly message: string
-}
+const positiveInt: Schema.Codec<number> = Schema.Int.check(Schema.isGreaterThan(0))
 
-export const Diagnostic: Schema.Codec<Diagnostic> = Schema.Struct({
+export const Reported: Schema.TaggedStruct<'Reported', {
+  readonly file: Schema.optionalKey<Schema.String>
+  readonly code: typeof positiveInt
+  readonly message: Schema.String
+}> = Schema.TaggedStruct('Reported', {
   file: Schema.optionalKey(Schema.String),
-  code: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+  code: positiveInt,
   message: Schema.String,
 })
+
+export type Reported = typeof Reported.Type
+
+export const Note: Schema.TaggedStruct<'Note', {
+  readonly file: Schema.optionalKey<Schema.String>
+  readonly message: Schema.String
+}> = Schema.TaggedStruct('Note', {
+  file: Schema.optionalKey(Schema.String),
+  message: Schema.String,
+})
+
+export type Note = typeof Note.Type
+
+export type Diagnostic = Reported | Note
+
+export const Diagnostic: Schema.Codec<Diagnostic> = Schema.Union([Reported, Note])

@@ -1,7 +1,7 @@
 import { NodeServices } from '@effect/platform-node'
 import { ApiModel, FrontEnd } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, FileSystem, Layer, Option, Path } from 'effect'
+import { Effect, FileSystem, Layer, Match, Option, Path } from 'effect'
 
 const Feature = makeFeature({ it })
 
@@ -179,11 +179,18 @@ const sharedDeclarationPackage = fallingBackPackage(
 
 type Refused = { readonly message: string; readonly diagnostics?: ReadonlyArray<FrontEnd.Diagnostic> }
 
+const codeOf = (diagnostic: FrontEnd.Diagnostic): number | undefined =>
+  Match.value(diagnostic).pipe(
+    Match.tag('Reported', (reported) => reported.code),
+    Match.tag('Note', () => undefined),
+    Match.exhaustive,
+  )
+
 const refusalOf = (error: Refused) => {
   const diagnostics = error.diagnostics ?? []
   return {
     error,
-    codes: diagnostics.map((diagnostic) => diagnostic.code),
+    codes: diagnostics.map(codeOf),
     files: diagnostics.map((diagnostic) => diagnostic.file),
     lines: diagnostics.flatMap((diagnostic) => diagnostic.message.split('\n').filter((line) => /error TS\d+/.test(line))),
   }
@@ -196,7 +203,7 @@ const routedAs = (analysis: FrontEnd.Analysis) => ({
 })
 
 const STRING_ARRAY_FALLBACK = {
-  route: { _tag: 'Fallback', diagnostics: [{ file: 'src/mod.ts', code: 9010 }] },
+  route: { _tag: 'Fallback', diagnostics: [{ _tag: 'Reported', file: 'src/mod.ts', code: 9010 }] },
   declarations: FrontEnd.TYPESCRIPT_PRODUCER,
   items: [{ kind: 'variable', name: 'ids', constant: true, type: { kind: 'array', element: { kind: 'keyword', name: 'string' } } }],
 }
@@ -370,7 +377,7 @@ Feature('Both front-ends reduce a package to one model')
               shared: scope.refusals.shared.codes,
             },
           }).toMatchObject({
-            typeError: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.ts', code: 2322 }] },
+            typeError: { _tag: 'CompilerRejected', diagnostics: [{ _tag: 'Reported', file: 'src/mod.ts', code: 2322 }] },
             forged: {
               _tag: 'CompilerRejected',
               diagnostics: [
@@ -387,12 +394,12 @@ Feature('Both front-ends reduce a package to one model')
               'src/mod.ts(1,1): error TS4321: spelled by a module specifier',
             ],
             withoutConfig: { _tag: 'CompilerRejected', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 5083 })]) },
-            excludedEntry: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.d.ts', message: 'the compiler emitted no declaration for this entry point' }] },
+            excludedEntry: { _tag: 'CompilerRejected', diagnostics: [{ _tag: 'Note', file: 'src/mod.d.ts', message: 'the compiler emitted no declaration for this entry point' }] },
             longName: { _tag: 'CompilerRejected', diagnostics: [{ message: expect.stringContaining('error TS5033') }] },
-            escaping: { _tag: 'CompilerRejected', diagnostics: [{ file: '../shared/mod.ts', message: expect.stringContaining('resolves outside the package') }] },
+            escaping: { _tag: 'CompilerRejected', diagnostics: [{ _tag: 'Note', file: '../shared/mod.ts', message: expect.stringContaining('resolves outside the package') }] },
             shared: {
               _tag: 'CompilerRejected',
-              diagnostics: [{ file: 'src/mod.d.ts', message: expect.stringContaining('the entry points . and ./mod share the declaration file src/mod.d.ts') }],
+              diagnostics: [{ _tag: 'Note', file: 'src/mod.d.ts', message: expect.stringContaining('the entry points . and ./mod share the declaration file src/mod.d.ts') }],
             },
             files: { longName: [undefined] },
             codes: { excludedEntry: [undefined], longName: [undefined], escaping: [undefined], shared: [undefined] },

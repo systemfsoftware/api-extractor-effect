@@ -82,10 +82,11 @@ sent it there. A `tsc` that fails refuses the package with `CompilerRejected`, w
 diagnostics come from the TypeScript 7 API. Only when the API reports no error (a write
 failure, say) does the refusal carry one diagnostic with `tsc`'s exit code and printed
 output, which a package's own file names and import specifiers can spell, so a consumer
-treats that message as untrusted text. A diagnostic no compiler reported
-(a missing entry, say) carries no TypeScript code, and a diagnostic the compiler reported
-names a `file` only when that file is inside the package. A refusal of an entry point names
-the entry's recorded source, which may lie outside the package.
+treats that message as untrusted text. A `Reported` diagnostic is one the compiler
+reported, carrying its `TSxxxx` code; a `Note` is a refusal reason no compiler reported, so
+it carries no code. Either names a `file` only when that file is inside the package. A
+refusal of an entry point names the entry's recorded source, which may lie outside the
+package.
 Both routes meet at declaration text: one syntactic builder makes the model and one
 resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and

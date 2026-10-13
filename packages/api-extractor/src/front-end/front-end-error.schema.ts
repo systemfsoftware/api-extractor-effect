@@ -1,14 +1,23 @@
-import { type Cause, Schema } from 'effect'
-import { Diagnostic } from './declarations.schema.ts'
+import { type Cause, Match, Schema } from 'effect'
+import { Diagnostic, type Note, type Reported } from './declarations.schema.ts'
 
 type DiagnosticsFields = { readonly diagnostics: Schema.$Array<typeof Diagnostic> }
 
 const diagnosticsFields: DiagnosticsFields = { diagnostics: Schema.Array(Diagnostic) }
 
-const codeLabel = (code: number | undefined): string => (code === undefined ? '' : `TS${code} `)
+const fileLabel = (file: string | undefined): string => (file === undefined ? '' : `${file}: `)
 
-const listed = (diagnostics: ReadonlyArray<Diagnostic>): string =>
-  diagnostics.map(({ file, code, message }) => `${file === undefined ? '' : `${file}: `}${codeLabel(code)}${message}`).join('\n')
+const reportedLine = ({ file, code, message }: Reported): string => `${fileLabel(file)}TS${code} ${message}`
+
+const noteLine = ({ file, message }: Note): string => `${fileLabel(file)}${message}`
+
+const listedLine: (diagnostic: Diagnostic) => string = Match.type<Diagnostic>().pipe(
+  Match.tag('Reported', reportedLine),
+  Match.tag('Note', noteLine),
+  Match.exhaustive,
+)
+
+const listed = (diagnostics: ReadonlyArray<Diagnostic>): string => diagnostics.map(listedLine).join('\n')
 
 const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', { readonly packageRoot: Schema.String }>, Cause.YieldableError> =
   Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', { packageRoot: Schema.String })
