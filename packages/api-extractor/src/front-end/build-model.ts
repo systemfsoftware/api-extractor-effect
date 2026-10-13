@@ -5,7 +5,6 @@ import type {
   Class,
   Declaration as DeclarationNode,
   Directive,
-  ExportNamedDeclaration,
   Expression,
   Function as FunctionNode,
   Statement,
@@ -19,6 +18,7 @@ import type {
   TSQualifiedName,
   TSTypeAliasDeclaration,
   TSTypeAnnotation,
+  VariableDeclaration,
   VariableDeclarator,
 } from 'oxc-parser'
 import {
@@ -33,12 +33,12 @@ import {
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
-import { declarationGraph, exportedNames, exportedSymbol, type Declaration, type DeclarationGraph } from './declaration-graph.ts'
+import { declarationGraph, exportedNames, exportedSymbol, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
 
-const { refuse, withTypeParameters } = TypePrinting
+const { withTypeParameters } = TypePrinting
 
 const { classMembersOf, heritageOf, membersOf, referenceToExpression, signatureOf, typeExprOf, typeParametersOf } = TypeExprs
 
@@ -418,6 +418,36 @@ const enumMemberOf = (context: TypeContext, member: TSEnumMember): Effect.Effect
   Effect.flatMap(enumMemberNameOf(context, member.id), (name) =>
     Effect.map(memberValue(context, name, member.initializer), (value): EnumMember => ({ name, ...value })))
 
+const duplicateEnumMember = (seen: HashSet.HashSet<string>, member: EnumMember): Option.Option<string> =>
+  Option.liftPredicate(member.name, (name) => HashSet.has(seen, name))
+
+type EnumMemberScan = { readonly seen: HashSet.HashSet<string>; readonly duplicate: Option.Option<string> }
+
+const scanEnumMember = (state: EnumMemberScan, member: EnumMember): EnumMemberScan =>
+  Option.match(state.duplicate, {
+    onSome: () => state,
+    onNone: () => Option.match(duplicateEnumMember(state.seen, member), {
+      onNone: () => ({ seen: HashSet.add(state.seen, member.name), duplicate: Option.none() }),
+      onSome: (name) => ({ seen: state.seen, duplicate: Option.some(name) }),
+    }),
+  })
+
+const duplicatedMemberName = (members: ReadonlyArray<EnumMember>): Option.Option<string> =>
+  Arr.reduce(members, { seen: HashSet.empty<string>(), duplicate: Option.none<string>() }, scanEnumMember).duplicate
+
+const enumMembersOf = (
+  context: TypeContext,
+  nodes: ReadonlyArray<TSEnumDeclaration>,
+): Effect.Effect<ReadonlyArray<EnumMember>, UnsupportedDeclaration> =>
+  Effect.flatMap(
+    Effect.forEach(nodes.flatMap((node) => node.body.members), (member) => enumMemberOf(context, member)),
+    (members) =>
+      Option.match(duplicatedMemberName(members), {
+        onNone: () => Effect.succeed(members),
+        onSome: (name) => refuse(context.file, `enum member \`${name}\` declared twice`),
+      }),
+  )
+
 const enumItemOf = (
   context: TypeContext,
   nodes: ReadonlyArray<TSEnumDeclaration>,
@@ -427,10 +457,7 @@ const enumItemOf = (
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: (present) =>
       Effect.asSome(
-        Effect.map(
-          Effect.forEach(present.flatMap((node) => node.body.members), (member) => enumMemberOf(context, member)),
-          (members): ApiItem => ({ kind: 'enum', name, const: Arr.headNonEmpty(present).const, members }),
-        ),
+        Effect.map(enumMembersOf(context, present), (members): ApiItem => ({ kind: 'enum', name, const: Arr.headNonEmpty(present).const, members })),
       ),
   })
 
@@ -443,87 +470,105 @@ const namespaceItemOf = (
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: (present) =>
       Effect.asSome(
-        Effect.map(Effect.forEach(present, (node) => namespaceBodyItems(context, node.body)), (bodies): ApiItem => ({
-          kind: 'namespace',
-          name,
-          items: bodies.flat(),
-        })),
+        Effect.map(namespaceBodyItems(context, present.map((node) => node.body)), (items): ApiItem => ({ kind: 'namespace', name, items })),
       ),
   })
 
-const namespaceBodyItems = (context: TypeContext, body: TSModuleBlock | null): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(Option.fromNullishOr(body), {
-    onNone: () => Effect.succeed<ReadonlyArray<ApiItem>>([]),
-    onSome: (block) => Effect.map(Effect.forEach(block.body, (statement) => statementItems(context, statement)), (items) => items.flat()),
+const namespaceBodyItems = (
+  context: TypeContext,
+  bodies: ReadonlyArray<TSModuleBlock | null>,
+): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
+  Effect.map(
+    Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
+      Effect.forEach(Arr.sort(HashMap.keys(groups), Order.String), (name) =>
+        itemsOfDeclarations(context, Option.getOrThrow(HashMap.get(groups, name)), name))),
+    (items) => items.flat(),
+  )
+
+const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
+  bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
+
+const bodyDeclarations = (
+  context: TypeContext,
+  bodies: ReadonlyArray<TSModuleBlock | null>,
+): Effect.Effect<HashMap.HashMap<string, ReadonlyArray<Declaration>>, UnsupportedDeclaration> =>
+  Effect.map(
+    Effect.forEach(bodyStatements(bodies), (statement) => statementDeclarations(context, statement)),
+    (all) => groupDeclarations(all.flat()),
+  )
+
+const groupDeclarations = (declarations: ReadonlyArray<Declaration>): HashMap.HashMap<string, ReadonlyArray<Declaration>> =>
+  Arr.reduce(declarations, HashMap.empty<string, ReadonlyArray<Declaration>>(), (groups, declaration) => {
+    const name = declaration.declared.name
+    return HashMap.set(groups, name, [...Option.getOrElse(HashMap.get(groups, name), (): ReadonlyArray<Declaration> => []), declaration])
   })
+
+const declaredEntry = (declared: Declared, statementStart: number): Declaration => ({ declared, statementStart })
+
+const identifierName = (id: { readonly name: string } | null): Option.Option<string> =>
+  Option.map(Option.fromNullishOr(id), (present) => present.name)
+
+const oneDeclaration = (declared: Option.Option<Declared>, statementStart: number): ReadonlyArray<Declaration> =>
+  Option.match(declared, { onNone: () => [], onSome: (present) => [declaredEntry(present, statementStart)] })
+
+const declaratorDeclarations = (variable: VariableDeclaration, declarator: VariableDeclarator): ReadonlyArray<Declaration> =>
+  Option.match(
+    Match.value(declarator.id).pipe(
+      Match.when({ type: 'Identifier' }, (id) => Option.some(id.name)),
+      Match.orElse(() => Option.none()),
+    ),
+    {
+      onNone: () => [],
+      onSome: (name) => [declaredEntry({ kind: 'variable', constant: variable.kind === 'const', node: declarator, name }, variable.start)],
+    },
+  )
+
+const nodeDeclarations = (node: DeclarationNode | Statement): ReadonlyArray<Declaration> =>
+  Match.value(node).pipe(
+    Match.when({ type: 'VariableDeclaration' }, (variable) => variable.declarations.flatMap((declarator) => declaratorDeclarations(variable, declarator))),
+    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_: FunctionNode) =>
+      oneDeclaration(Option.map(identifierName(function_.id), (name): Declared => ({ kind: 'function', node: function_, name })), function_.start)),
+    Match.when({ type: 'ClassDeclaration' }, (class_: Class) =>
+      oneDeclaration(Option.map(identifierName(class_.id), (name): Declared => ({ kind: 'class', node: class_, name })), class_.start)),
+    Match.when({ type: 'TSInterfaceDeclaration' }, (iface: TSInterfaceDeclaration) =>
+      [declaredEntry({ kind: 'interface', node: iface, name: iface.id.name }, iface.start)]),
+    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias: TSTypeAliasDeclaration) =>
+      [declaredEntry({ kind: 'typeAlias', node: alias, name: alias.id.name }, alias.start)]),
+    Match.when({ type: 'TSEnumDeclaration' }, (enumeration: TSEnumDeclaration) =>
+      [declaredEntry({ kind: 'enum', node: enumeration, name: enumeration.id.name }, enumeration.start)]),
+    Match.orElse(() => []),
+  )
+
+const namespaceDeclarations = (
+  context: TypeContext,
+  module: TSModuleDeclaration,
+): Effect.Effect<ReadonlyArray<Declaration>, UnsupportedDeclaration> =>
+  Option.match(moduleName(module.id), {
+    onNone: () => refuse(context.file, `a ${module.id.type} namespace name`),
+    onSome: (name) => Effect.succeed<ReadonlyArray<Declaration>>([declaredEntry({ kind: 'namespace', node: module, name }, module.start)]),
+  })
+
+const statementDeclarations = (
+  context: TypeContext,
+  statement: Directive | Statement,
+): Effect.Effect<ReadonlyArray<Declaration>, UnsupportedDeclaration> =>
+  Match.value(statement).pipe(
+    Match.when({ type: 'ExportNamedDeclaration' }, (declaration) =>
+      Option.match(Option.fromNullishOr(declaration.declaration), {
+        onNone: () => Effect.succeed<ReadonlyArray<Declaration>>([]),
+        onSome: (inner) => Effect.succeed(nodeDeclarations(inner)),
+      })),
+    Match.when({ type: Match.is('VariableDeclaration', 'FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSEnumDeclaration') }, (node) =>
+      Effect.succeed(nodeDeclarations(node))),
+    Match.when({ type: 'TSModuleDeclaration', global: false }, (module) => namespaceDeclarations(context, module)),
+    Match.orElse(() => Effect.succeed<ReadonlyArray<Declaration>>([])),
+  )
 
 const moduleName = (id: BindingIdentifier | StringLiteral | TSQualifiedName): Option.Option<string> =>
   Match.value(id).pipe(
     Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
     Match.orElse(() => Option.none()),
   )
-
-const declaredStatementItems = (context: TypeContext, node: DeclarationNode | Statement): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Match.value(node).pipe(
-    Match.when({ type: 'VariableDeclaration' }, (variable) =>
-      Effect.map(
-        Effect.forEach(variable.declarations, (declarator) => declaratorStatementItems(context, declarator, variable.kind === 'const')),
-        (items) => items.flat(),
-      )),
-    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_) =>
-      namedStatementItems(function_.id, (name) => functionItemOf(context, [function_], name))),
-    Match.when({ type: 'ClassDeclaration' }, (class_) => namedStatementItems(class_.id, (name) => classItemOf(context, [class_], name))),
-    Match.when({ type: 'TSInterfaceDeclaration' }, (iface) => optionalItems(interfaceItemOf(context, [iface], iface.id.name))),
-    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias) => optionalItems(typeAliasItemOf(context, [alias], alias.id.name))),
-    Match.when({ type: 'TSEnumDeclaration' }, (enumeration) => optionalItems(enumItemOf(context, [enumeration], enumeration.id.name))),
-    Match.when({ type: 'TSModuleDeclaration', global: false }, (module) => namespaceStatementItems(context, module)),
-    Match.orElse(() => Effect.succeed<ReadonlyArray<ApiItem>>([])),
-  )
-
-const statementItems = (context: TypeContext, statement: Directive | Statement): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Match.value(statement).pipe(
-    Match.when({ type: 'ExportNamedDeclaration' }, (declaration) => exportedStatementItems(context, declaration)),
-    Match.when({ type: 'TSModuleDeclaration', global: false }, (module) => namespaceStatementItems(context, module)),
-    Match.when({ type: Match.is('VariableDeclaration', 'FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSEnumDeclaration') }, (node) =>
-      declaredStatementItems(context, node)),
-    Match.orElse(() => Effect.succeed<ReadonlyArray<ApiItem>>([])),
-  )
-
-const exportedStatementItems = (context: TypeContext, declaration: ExportNamedDeclaration): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(Option.fromNullishOr(declaration.declaration), {
-    onNone: () => Effect.succeed<ReadonlyArray<ApiItem>>([]),
-    onSome: (inner) => declaredStatementItems(context, inner),
-  })
-
-const declaratorStatementItems = (context: TypeContext, declarator: VariableDeclarator, constant: boolean): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(
-    Match.value(declarator.id).pipe(
-      Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
-      Match.orElse(() => Option.none()),
-    ),
-    {
-      onNone: () => Effect.succeed<ReadonlyArray<ApiItem>>([]),
-      onSome: (name) => optionalItems(variableItemOf(context, [{ constant, node: declarator }], name)),
-    },
-  )
-
-const namedStatementItems = (
-  id: BindingIdentifier | null,
-  build: (name: string) => Effect.Effect<Option.Option<ApiItem>, UnsupportedDeclaration>,
-): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(Option.fromNullishOr(id), {
-    onNone: () => Effect.succeed<ReadonlyArray<ApiItem>>([]),
-    onSome: (identifier) => optionalItems(build(identifier.name)),
-  })
-
-const namespaceStatementItems = (context: TypeContext, module: TSModuleDeclaration): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(moduleName(module.id), {
-    onNone: () => refuse(context.file, `a ${module.id.type} namespace name`),
-    onSome: (name) => optionalItems(namespaceItemOf(context, [module], name)),
-  })
-
-const optionalItems = (item: Effect.Effect<Option.Option<ApiItem>, UnsupportedDeclaration>): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Effect.map(item, (built) => Option.match(built, { onNone: () => [], onSome: (value) => [value] }))
 
 const itemsOfDeclarations = (context: TypeContext, declarations: ReadonlyArray<Declaration>, name: string): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Effect.map(

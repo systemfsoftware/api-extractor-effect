@@ -66,7 +66,9 @@ process.stdout.write(ApiModel.serialise(analysis.model))
 ```
 
 `readPackage` takes each export whose `@systemfsoftware/source` condition names a
-`.ts`, `.tsx`, `.mts` or `.cts` file as an entry point. A subpath pattern (`"./*"`)
+`.ts`, `.tsx`, `.mts` or `.cts` file as an entry point; `readPackage({ packageRoot,
+sourceCondition })` reads another condition instead, for example `types` for a package
+whose sources are not under the family's condition. A subpath pattern (`"./*"`)
 expands to one entry per matching source under Node's `exports` rules, and an explicit
 subpath wins over a pattern. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
@@ -97,17 +99,27 @@ from the producer stamp (`producer.declarations`), which names the emitter that 
 The builder refuses a package with `UnsupportedDeclaration`, naming the file and the
 construct, when its declarations contain one of these constructs, which model schema
 version 2 cannot hold. The compiler fallback refuses the same way when a declaration it
-emitted imports a relative path that names no declaration file inside the package.
+emitted imports a relative path that names no declaration file inside the package. This
+is the whole list:
 
-- a destructuring declaration, a variable without a type, `import x = require(...)`,
-  `export as namespace` and `export default` of an expression
+- a destructuring declaration or parameter, a variable without a type or with an
+  initialiser that is not a literal, `import x = require(...)`, `export as namespace`
+  and `export default` of an expression
 - an entry point that re-exports a name from another package (`export { it } from 'vitest'`).
   The whole package is refused, not just that export.
-- `declare global` and module augmentation (`declare module 'vitest'`)
+- `declare global`, module augmentation (`declare module 'vitest'`) and a dotted
+  namespace (`declare namespace A.B`)
 - `export =`
+- an import type that names a module without a member (`typeof import('./x.js')`)
 - an enum member whose declared value is computed rather than a literal, for example a
-  hand-written `.d.ts` with `Write = 1 << 1`. Both emitters write constant members as
-  literals, so this happens only with declaration text written by hand.
+  hand-written `.d.ts` with `Write = 1 << 1`, and an enum member declared twice across
+  merged declarations of one enum. Both emitters write constant members as literals and
+  `tsc` refuses a repeated member, so these happen only with declaration text written by hand.
+- an index signature without a parameter, a computed member or method name other than a
+  literal or a dotted name (`[Symbol.iterator]` is kept), an enum member named by neither
+  an identifier nor a string, a heritage clause that is not a name (`extends
+  mixin(Base)`), a type node the printer has no form for, and text that does not parse as
+  a declaration file
 
 One construct is not refused: `export * from 'effect'`, or `export *` from any other
 package, adds no items to the model. The names it re-exports are missing from the model,

@@ -42,7 +42,7 @@ export const relativeWithin: {
 } = Fn.dual(3, (path: Path.Path, root: string, target: string): Option.Option<string> =>
   Option.liftPredicate(path.relative(root, target), isInsideRoot(path)))
 
-const directoryOf = (path: string): string => path.slice(0, Math.max(path.lastIndexOf('/'), 0))
+export const directoryOf = (path: string): string => path.slice(0, Math.max(path.lastIndexOf('/'), 0))
 
 const parentOf = (kept: ReadonlyArray<string>): Option.Option<ReadonlyArray<string>> =>
   Option.map(Option.liftPredicate(kept, Arr.isReadonlyArrayNonEmpty), (nonEmpty) => nonEmpty.slice(0, -1))
@@ -124,7 +124,7 @@ const parsed = (path: string, text: string): Effect.Effect<Parsed, UnsupportedDe
   const result = parseSync(path, text, { lang: 'dts', sourceType: 'module' })
   return Option.match(Arr.head(result.errors), {
     onNone: () => Effect.succeed({ program: result.program, comments: result.comments }),
-    onSome: (error) => Effect.fail(new UnsupportedDeclaration({ file: path, construct: `unparseable declaration text (${error.message})` })),
+    onSome: (error) => refuse(path, `unparseable declaration text (${error.message})`),
   })
 }
 
@@ -327,9 +327,6 @@ export type DeclarationGraph = {
   readonly entryPoints: ReadonlyArray<{ readonly exportPath: string; readonly declarationFile: string }>
 }
 
-const unsupported = (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration> =>
-  Effect.fail(new UnsupportedDeclaration({ file, construct }))
-
 type ScopeParts = {
   readonly declarations: ReadonlyArray<readonly [string, Declaration]>
   readonly imports: ReadonlyArray<readonly [string, ImportBinding]>
@@ -341,6 +338,12 @@ const EMPTY_PARTS: ScopeParts = { declarations: [], imports: [], exports: [], st
 
 type DeclaredResult = Effect.Effect<ReadonlyArray<Declared>, UnsupportedDeclaration>
 
+export const refuse: {
+  (construct: string): (file: string) => Effect.Effect<never, UnsupportedDeclaration>
+  (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration>
+} = Fn.dual(2, (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration> =>
+  Effect.fail(new UnsupportedDeclaration({ file, construct })))
+
 const DEFAULT_EXPORT_NAME = 'default'
 
 const declarationName = (id: { readonly name: string } | null): string => (id === null ? DEFAULT_EXPORT_NAME : id.name)
@@ -349,13 +352,13 @@ const variablesOf = (node: VariableDeclaration, file: string): DeclaredResult =>
   Effect.forEach(node.declarations, (declarator) =>
     declarator.id.type === 'Identifier'
       ? Effect.succeed<Declared>({ kind: 'variable', constant: node.kind === 'const', node: declarator, name: declarator.id.name })
-      : unsupported(file, 'a destructuring variable declaration'))
+      : refuse(file, 'a destructuring variable declaration'))
 
 const namespaceOf = (node: TSModuleDeclaration, file: string): DeclaredResult =>
   Match.value(node.id).pipe(
     Match.when({ type: 'Identifier' }, (id) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'namespace', node, name: id.name }])),
-    Match.when({ type: 'Literal' }, (id) => unsupported(file, `\`declare module "${id.value}"\``)),
-    Match.orElse(() => unsupported(file, 'a dotted namespace declaration')),
+    Match.when({ type: 'Literal' }, (id) => refuse(file, `\`declare module "${id.value}"\``)),
+    Match.orElse(() => refuse(file, 'a dotted namespace declaration')),
   )
 
 const declaredOf = (node: DeclarationNode | Statement | ExportDefaultDeclaration['declaration'], file: string): DeclaredResult =>
@@ -369,7 +372,7 @@ const declaredOf = (node: DeclarationNode | Statement | ExportDefaultDeclaration
     Match.when({ type: 'TSTypeAliasDeclaration' }, (alias) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'typeAlias', node: alias, name: alias.id.name }])),
     Match.when({ type: 'TSEnumDeclaration' }, (enumeration) =>
       Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'enum', node: enumeration, name: enumeration.id.name }])),
-    Match.when({ type: 'TSModuleDeclaration', global: true }, () => unsupported(file, '`declare global`')),
+    Match.when({ type: 'TSModuleDeclaration', global: true }, () => refuse(file, '`declare global`')),
     Match.when({ type: 'TSModuleDeclaration', global: false }, (module: TSModuleDeclaration) => namespaceOf(module, file)),
     Match.orElse(() => Effect.succeed<ReadonlyArray<Declared>>([])),
   )
@@ -426,7 +429,7 @@ const exportDefaultParts = (statement: ExportDefaultDeclaration, file: string): 
       { type: 'TSInterfaceDeclaration' },
       (declaration) => Effect.map(declaredOf(declaration, file), (declared) => defaultExportOf(declared, statement.start)),
     ),
-    Match.orElse(() => unsupported(file, '`export default` of an expression')),
+    Match.orElse(() => refuse(file, '`export default` of an expression')),
   )
 
 const statementParts = (statement: Directive | Statement, file: string): Effect.Effect<ScopeParts, UnsupportedDeclaration> =>
@@ -441,9 +444,9 @@ const statementParts = (statement: Directive | Statement, file: string): Effect.
             : { ...EMPTY_PARTS, exports: [[moduleNameOf(node.exported), { kind: 'reexport', specifier: node.source.value, imported: '*' }]] },
         ),
       ExportDefaultDeclaration: (node) => exportDefaultParts(node, file),
-      TSExportAssignment: () => unsupported(file, '`export =`'),
-      TSImportEqualsDeclaration: () => unsupported(file, '`import =`'),
-      TSNamespaceExportDeclaration: () => unsupported(file, '`export as namespace`'),
+      TSExportAssignment: () => refuse(file, '`export =`'),
+      TSImportEqualsDeclaration: () => refuse(file, '`import =`'),
+      TSNamespaceExportDeclaration: () => refuse(file, '`export as namespace`'),
     }),
     Match.orElse((node) => Effect.map(declaredOf(node, file), (declared) => declarationsPart(declared, node.start))),
   )

@@ -1,7 +1,7 @@
 import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Match, Option, Order, Path, Schema } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
-import { relativeWithin } from './declaration-graph.ts'
+import { directoryOf, relativeWithin } from './declaration-graph.ts'
 import { ManifestRejected, NoSourceEntry } from './front-end-error.schema.ts'
 import { isAbsent } from './package-file.ts'
 import { type ExportTarget, PackageManifest } from './package-source.schema.ts'
@@ -77,11 +77,6 @@ const patternEntryOf = (key: string, prefix: string, suffix: string) =>
       entry: { exportPath: key.replace('*', () => substring), sourceFile: candidate },
       key,
     }))
-
-const directoryOf = (relative: string): string => {
-  const at = relative.lastIndexOf('/')
-  return at === -1 ? '' : relative.slice(0, at)
-}
 
 const joinRelative = (path: Path.Path, relative: string, name: string): string => path.join(relative, name).split(path.sep).join('/')
 

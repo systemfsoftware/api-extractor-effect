@@ -39,7 +39,7 @@ import type {
   TemplateElement,
 } from 'oxc-parser'
 import type { KeywordName } from '../model/type-expr.schema.ts'
-import { type Declaration, type DeclarationGraph, isRelativeSpecifier, resolveFile, resolveName } from './declaration-graph.ts'
+import { type Declaration, type DeclarationGraph, isRelativeSpecifier, refuse, resolveFile, resolveName } from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 export type ReferenceTarget = {
@@ -62,9 +62,6 @@ const withTypeParameters = (context: TypeContext, names: ReadonlyArray<string>):
   ...context,
   typeParameters: HashSet.union(context.typeParameters, HashSet.fromIterable(names)),
 })
-
-const refuse = (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration> =>
-  Effect.fail(new UnsupportedDeclaration({ file, construct }))
 
 export const KEYWORD_ENTRIES = [
   ['TSAnyKeyword', 'any'],
@@ -541,12 +538,10 @@ export const TypePrinting: {
     source: Option.Option<string>,
   ) => Effect.Effect<ReferenceTarget>
   readonly withTypeParameters: (context: TypeContext, names: ReadonlyArray<string>) => TypeContext
-  readonly refuse: (file: string, construct: string) => Effect.Effect<never, UnsupportedDeclaration>
   readonly bindingName: (pattern: BindingPattern) => string
 } = {
   canonicalTypeText: canonicalTypeText,
   referenceTargetFor: referenceTargetFor,
   withTypeParameters: withTypeParameters,
-  refuse: refuse,
   bindingName: bindingName,
 }

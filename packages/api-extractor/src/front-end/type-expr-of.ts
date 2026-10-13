@@ -39,9 +39,10 @@ import {
   TypePrinting,
   type TypeContext,
 } from './canonical-type-text.ts'
+import { refuse } from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
-const { bindingName, canonicalTypeText, referenceTargetFor, refuse, withTypeParameters } = TypePrinting
+const { bindingName, canonicalTypeText, referenceTargetFor, withTypeParameters } = TypePrinting
 
 const unknownKeyword: TypeExpr = { kind: 'keyword', name: 'unknown' }
 
