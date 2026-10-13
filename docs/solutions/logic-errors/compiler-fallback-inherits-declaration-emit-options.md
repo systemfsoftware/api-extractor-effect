@@ -47,7 +47,7 @@ one depends on the route it took.
 ## Solution
 
 The emit policy is one exported record, `compilerEmitPolicy` in the TypeScript 7 adapter:
-`stripInternal: false`, `removeComments: false`, `declaration`, `emitDeclarationOnly`,
+`stripInternal: false`, `isolatedDeclarations: false`, `removeComments: false`, `declaration`, `emitDeclarationOnly`,
 `declarationMap: false`, `sourceMap: false`, `incremental: false`, `composite: false`,
 `tsBuildInfoFile: null`, `rootDir` (workspace root), and `outDir` and `declarationDir` (the
 adapter's scoped temp directory). The adapter writes `{ "extends": <package tsconfig>,
@@ -77,35 +77,54 @@ fallback reported `ae-missing-release-tag` for an export the fast path saw as ta
 adapter sets `removeComments: false`, and the journey analyses a package whose tsconfig
 sets `removeComments: true` and asserts both routes give the same notes, and none.
 
-Moving the policy into a derived config file exposed two settings whose defaults resolve from
-the config file's directory, not the package's. Both were reproduced on TypeScript 7.0.2 with a
-derived config in the temp directory:
+Moving the policy into a derived config file exposed settings that resolve from the config
+file's directory, not the package's. Each was reproduced on TypeScript 7.0.2 with a derived
+config in a temp directory:
 
-- The default `typeRoots`: the `@types` folder of every `node_modules` directory from the config's directory upward. Extending this
-  package's `tsconfig.build.json` (`types: ["node"]`) failed with TS2688 `Cannot find type
-  definition file for 'node'`.
+- The default `typeRoots`: the `@types` folder of every `node_modules` directory from the
+  config's directory upward. Extending this package's `tsconfig.build.json` (`types: ["node"]`)
+  failed with TS2688 `Cannot find type definition file for 'node'`.
+- A `types` entry that names a package rather than an `@types` folder. `tsc` looks it up in the
+  `node_modules` directories from the config's directory upward, honouring the package's
+  `exports`. Four corpus packages that name `vitest/globals` (`effect-daemon-cluster` and three
+  siblings) failed with TS2688 `Cannot find type definition file for 'vitest/globals'`, after
+  an earlier profile had modelled them.
 - The default `include` (`**/*`). A package tsconfig that names no `include` or `files` failed
   with TS18003 `No inputs were found in config file`, because `**/*` matched the temp
   directory.
 
-The derived config therefore reads the package's config once with the TypeScript 7 API's
-`parseConfigFile`. It sets `files` to the package config's resolved `fileNames`, and
-`typeRoots` to the package's declared value or, when it declares none, the default chain from
-the package root. Setting the default chain unconditionally would replace a package's declared
-`typeRoots`. The journey's `typeRoots: ["./types"]` package fails that way. `paths` needed
-nothing: a package declaring `paths: { "#lib/*": ["./lib/*"] }` compiled through the derived
-config.
+The derived config is therefore written into a scoped mirror of the package config's
+directory: every ancestor of that directory is recreated under the temp root, each with a
+symlink to the real ancestor's `node_modules` where one exists. `tsc`'s upward `node_modules`
+walk from the derived config then visits the same directories as from the package's own
+config, so default `typeRoots` and `types` lookups resolve as they would from the package. A
+declared `typeRoots` resolves against the config that declares it through `extends`. The
+derived config sets `files` to the package config's resolved `fileNames`, read once with the
+TypeScript 7 API's `parseConfigFile`. An earlier fix carried an explicit `typeRoots` chain
+instead. It did not cover `types` packages, and with it in place the mirror still failed
+TS2688 for `vitest/globals`. `paths` needed nothing: a package declaring
+`paths: { "#lib/*": ["./lib/*"] }` compiled through the derived config.
+
+`isolatedDeclarations` changes whether `tsc` refuses, not what it prints. The fast path
+declines a package with an unannotated export (`NotIsolated`, TS9010) and routes it to the
+fallback. A package whose own tsconfig sets `isolatedDeclarations: true` made the fallback's
+`tsc` raise the same TS9010, exit non-zero, and refuse the package with `CompilerRejected`,
+so the route meant for that package could never analyse it (reproduced on TypeScript 7.0.2:
+the same source gave a model with the flag off and `CompilerRejected` with it on). The
+policy pins `isolatedDeclarations: false`, and the e2e TS9010 routing scenario analyses the
+same package with the flag set and asserts the same fallback model.
 
 ## Architectural invariant
 
 **Single emit policy.** The fast path's options are the declaration-emit policy. The
 fallback's derived config restates every option in that policy, so a package's tsconfig
 cannot make the routes disagree on them. Every other tsconfig option still reaches the
-fallback through `extends`, unless its default depends on the config file's location, in
-which case the derived config carries the value the package's own config resolves to:
+fallback through `extends`. A setting that resolves from the config file's location sees the
+package's own `node_modules` ancestry through the mirror, and the root files are carried
+explicitly:
 
 ```
-derived = { extends: packageTsconfig, files: packageFileNames, compilerOptions: { ...compilerEmitPolicy, typeRoots: declaredOrDefault } }
+derived at mirror(dirname(packageTsconfig)) = { extends: packageTsconfig, files: packageFileNames, compilerOptions: compilerEmitPolicy }
 ```
 
 ## Prevention
@@ -119,13 +138,17 @@ derived = { extends: packageTsconfig, files: packageFileNames, compilerOptions: 
   output-location option (`outDir`, `declarationDir`) points at the adapter's scoped temp
   directory. Gate: the `wroteIntoPackage: false` assertion of the journey "Both front-ends
   reduce a package to one model" fails when a package is written to.
-- A setting whose default resolves from the config file's directory is carried into the
-  derived config with the value the package's config resolves to. Gate: the `typeRoots` and
-  no-`include` cases of the same journey; each refuses on the fallback when its value is not
-  carried.
+- A setting that resolves from the config file's directory resolves through the mirrored
+  `node_modules` ancestry, and the root files are carried as `files`. Gates, in the same
+  journey: the `types: ["greeting/globals"]` case refuses on the fallback when the derived
+  config sits outside the mirror, the `typeRoots: ["./types"]` case when a default chain
+  replaces the declared one, and the no-`include` case when `files` is not carried.
+- Pin every option that makes `tsc` refuse what the fast path routes to it. Gate: the e2e
+  scenario "an export with an inferred type routes to the compiler" analyses a package that
+  sets `isolatedDeclarations: true` and refuses on the fallback when the option is not pinned.
 
 ## Related
 
-- `docs/plans/2026-10-13-1834-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy)
+- `docs/plans/2026-10-13-1834-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy; U13 #4)
 - `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md`: a law passes
   vacuously when its corpus lacks the triggering shape
