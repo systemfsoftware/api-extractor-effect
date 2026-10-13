@@ -1,20 +1,18 @@
-import { Array as Arr, Effect, FileSystem, HashMap, Layer, Option, Path, Stream } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Path, Stream } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import typescriptManifest from 'typescript/package.json' with { type: 'json' }
 import { type CompilerOutput, parseCompilerOutput } from './compiler-output.schema.ts'
-import { closeDeclarations, declarationPathOf, relativeWithin } from './declaration-graph.ts'
+import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, relativeWithin, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
 import { CompilerEmitter, type CompilerEmitterId, type DeclarationEmitter } from './declaration-emitter.service.ts'
 import type { Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
-import { CompilerRejected } from './front-end-error.schema.ts'
+import { CompilerRejected, UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 export const TYPESCRIPT_PRODUCER: string = `typescript@${typescriptManifest.version}`
 
 const TYPESCRIPT_MANIFEST_URL: string = import.meta.resolve('typescript/package.json')
 
 const TSC_SCRIPT: string = typescriptManifest.bin.tsc
-
-type DeclarationEntryPoint = { readonly exportPath: string; readonly declarationFile: string }
 
 type EmittedDeclaration = { readonly declared: string; readonly emittedFile: string }
 
@@ -85,36 +83,35 @@ const rejectionOf = (run: CompilerRun): Option.Option<ReadonlyArray<Diagnostic>>
 const packageDeclarationOf = (path: Path.Path, declaredRoot: string, emittedFile: string): Option.Option<EmittedDeclaration> =>
   Option.map(relativeWithin(path, declaredRoot, emittedFile), (declared) => ({ declared, emittedFile }))
 
-const entryPointsOf = (source: PackageSource): ReadonlyArray<DeclarationEntryPoint> =>
-  source.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
-
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
   file: declarationFile,
   message: 'the compiler emitted no declaration for this entry point',
 })
 
-const missingEntries = (
-  emitted: HashMap.HashMap<string, string>,
-  entryPoints: ReadonlyArray<DeclarationEntryPoint>,
-): ReadonlyArray<Diagnostic> =>
-  entryPoints.filter((entry) => !HashMap.has(emitted, entry.declarationFile)).map((entry) => missingEntryDiagnostic(entry.declarationFile))
+const unsupportedImport = (unresolved: UnresolvedImport): UnsupportedDeclaration =>
+  new UnsupportedDeclaration({ file: unresolved.file, construct: `the import \`${unresolved.specifier}\` names no declaration file` })
 
 const declarationsOf = (
   source: PackageSource,
-  entryPoints: ReadonlyArray<DeclarationEntryPoint>,
+  entryPoints: ReadonlyArray<EntryDeclaration>,
   emitted: HashMap.HashMap<string, string>,
-) =>
-  Effect.map(
+): Effect.Effect<Declarations, UnsupportedDeclaration> =>
+  Effect.flatMap(
     closeDeclarations({
       entryDeclarations: entryPoints.map((entry) => entry.declarationFile),
       load: (declarationFile) => Effect.succeed(HashMap.get(emitted, declarationFile)),
     }),
-    (files): Declarations => ({
-      producer: TYPESCRIPT_PRODUCER,
-      package: { name: source.name, version: source.version },
-      entryPoints,
-      files,
-    }),
+    (report) =>
+      Arr.match(report.unresolvedImports, {
+        onEmpty: (): Effect.Effect<Declarations, UnsupportedDeclaration> =>
+          Effect.succeed({
+            producer: TYPESCRIPT_PRODUCER,
+            package: { name: source.name, version: source.version },
+            entryPoints,
+            files: report.files,
+          }),
+        onNonEmpty: ([unresolved]) => Effect.fail(unsupportedImport(unresolved)),
+      }),
   )
 
 const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
@@ -128,10 +125,10 @@ const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
         Effect.map(fileSystem.readFileString(declaration.emittedFile), (text) => [declaration.declared, text] as const),
       ),
     )
-    const entryPoints = entryPointsOf(source)
-    return yield* Arr.match(missingEntries(emitted, entryPoints), {
+    const entryPoints = entryPointDeclarations(source.entryPoints)
+    return yield* Arr.match(missingEntryDeclarations(HashSet.fromIterable(HashMap.keys(emitted)), entryPoints.map((entry) => entry.declarationFile)), {
       onEmpty: () => declarationsOf(source, entryPoints, emitted),
-      onNonEmpty: (diagnostics) => Effect.fail(new CompilerRejected({ diagnostics })),
+      onNonEmpty: (missing) => Effect.fail(new CompilerRejected({ diagnostics: missing.map(missingEntryDiagnostic) })),
     })
   })
 

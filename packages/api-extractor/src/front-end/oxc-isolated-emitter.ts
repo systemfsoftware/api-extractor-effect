@@ -2,10 +2,10 @@ import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Optio
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
-import { closeDeclarations, declarationPathOf, relativeWithin, sourceCandidatesOf } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, relativeWithin, sourceCandidatesOf, type ClosureResult, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
 import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
-import { NotIsolated } from './front-end-error.schema.ts'
+import { NotIsolated, type UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 export const OXC_TRANSFORM_PRODUCER: string = `oxc-transform@${oxcTransformManifest.version}`
 
@@ -31,20 +31,26 @@ const isAbsent = (error: PlatformError): boolean =>
 
 type Emission = {
   readonly source: PackageSource
+  readonly realRoot: string
   readonly diagnostics: Ref.Ref<ReadonlyArray<Diagnostic>>
 }
 
-const readSource = (packageRoot: string, sourceFile: string) =>
+const readSource = (emission: Emission, sourceFile: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    return yield* Option.match(relativeWithin(path, packageRoot, path.resolve(packageRoot, sourceFile)), {
+    const real = yield* Effect.option(fileSystem.realPath(path.resolve(emission.source.packageRoot, sourceFile)))
+    return yield* Option.match(real, {
       onNone: () => Effect.succeedNone,
-      onSome: (inside) =>
-        fileSystem.readFileString(path.join(packageRoot, inside)).pipe(
-          Effect.asSome,
-          Effect.catchIf(isAbsent, () => Effect.succeedNone),
-        ),
+      onSome: (realFile) =>
+        Option.match(relativeWithin(path, emission.realRoot, realFile), {
+          onNone: () => Effect.succeedNone,
+          onSome: () =>
+            fileSystem.readFileString(realFile).pipe(
+              Effect.asSome,
+              Effect.catchIf(isAbsent, () => Effect.succeedNone),
+            ),
+        }),
     })
   })
 
@@ -62,16 +68,32 @@ const firstSource = (
   Arr.match(candidates, {
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: ([sourceFile, ...rest]) =>
-      Effect.flatMap(readSource(emission.source.packageRoot, sourceFile), (text) =>
+      Effect.flatMap(readSource(emission, sourceFile), (text) =>
         Option.match(text, {
           onNone: () => firstSource(emission, rest),
           onSome: (value) => Effect.asSome(declare(emission, sourceFile, value)),
         })),
   })
 
-const refusedOrClosed = <A, E>(found: ReadonlyArray<Diagnostic>, closed: Result.Result<A, E>): Effect.Effect<A, NotIsolated | E> =>
+const unresolvedImportDiagnostic = (unresolved: UnresolvedImport): Diagnostic => ({
+  file: unresolved.file,
+  message: `the import \`${unresolved.specifier}\` names no declaration file inside the package`,
+})
+
+const refusedOrClosed = (
+  found: ReadonlyArray<Diagnostic>,
+  closed: Result.Result<ClosureResult, PlatformError | UnsupportedDeclaration>,
+): Effect.Effect<ReadonlyArray<DeclarationFile>, NotIsolated | PlatformError | UnsupportedDeclaration> =>
   Arr.match(found, {
-    onEmpty: () => Result.match(closed, { onSuccess: Effect.succeed, onFailure: Effect.fail }),
+    onEmpty: () =>
+      Result.match(closed, {
+        onSuccess: (report) =>
+          Arr.match(report.unresolvedImports.map(unresolvedImportDiagnostic), {
+            onEmpty: () => Effect.succeed(report.files),
+            onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
+          }),
+        onFailure: Effect.fail,
+      }),
     onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
   })
 
@@ -80,25 +102,45 @@ const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
   message: 'no source file inside the package could be read for this entry point',
 })
 
-const missingEntries = (files: ReadonlyArray<DeclarationFile>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<Diagnostic> => {
-  const emitted = HashSet.fromIterable(files.map((file) => file.path))
-  return entryDeclarations.filter((declarationFile) => !HashSet.has(emitted, declarationFile)).map(missingEntryDiagnostic)
-}
-
 const everyEntryEmitted = (files: ReadonlyArray<DeclarationFile>, entryDeclarations: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<DeclarationFile>, NotIsolated> =>
-  Arr.match(missingEntries(files, entryDeclarations), {
+  Arr.match(missingEntryDeclarations(HashSet.fromIterable(files.map((file) => file.path)), entryDeclarations), {
     onEmpty: () => Effect.succeed(files),
-    onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
+    onNonEmpty: (missing) => Effect.fail(new NotIsolated({ diagnostics: missing.map(missingEntryDiagnostic) })),
   })
 
+const sharedDeclarationDiagnostic = (declarationFile: string, exportPaths: ReadonlyArray<string>): Diagnostic => ({
+  file: declarationFile,
+  message: `two entry points share one declaration file: ${exportPaths.map((exportPath) => `\`${exportPath}\``).join(' and ')}`,
+})
+
+const sharedDeclarationOwners = (entryPoints: ReadonlyArray<EntryDeclaration>, declarationFile: string): ReadonlyArray<string> =>
+  Arr.sort(Arr.map(Arr.filter(entryPoints, (entry) => entry.declarationFile === declarationFile), (entry) => entry.exportPath), Order.String)
+
+const sharedDeclarationDiagnostics = (entryPoints: ReadonlyArray<EntryDeclaration>): ReadonlyArray<Diagnostic> =>
+  Arr.dedupe(entryPoints.map((entry) => entry.declarationFile)).flatMap((declarationFile) =>
+    Option.match(Option.liftPredicate(sharedDeclarationOwners(entryPoints, declarationFile), (exportPaths) => exportPaths.length > 1), {
+      onNone: () => [],
+      onSome: (exportPaths) => [sharedDeclarationDiagnostic(declarationFile, exportPaths)],
+    }),
+  )
+
 const recordedSourceFirst = (recorded: HashMap.HashMap<string, string>) => (declarationFile: string): ReadonlyArray<string> =>
-  Arr.dedupe([...Option.toArray(HashMap.get(recorded, declarationFile)), ...sourceCandidatesOf(declarationFile)])
+  Option.match(HashMap.get(recorded, declarationFile), {
+    onNone: () => sourceCandidatesOf(declarationFile),
+    onSome: (sourceFile) => [sourceFile],
+  })
 
 const emit = (source: PackageSource) =>
   Effect.gen(function* () {
-    const emission: Emission = { source, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
-    const entryPoints = source.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
+    const fileSystem = yield* FileSystem.FileSystem
+    const realRoot = yield* fileSystem.realPath(source.packageRoot)
+    const emission: Emission = { source, realRoot, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
+    const entryPoints = entryPointDeclarations(source.entryPoints)
     const entryDeclarations = entryPoints.map((entry) => entry.declarationFile)
+    yield* Arr.match(sharedDeclarationDiagnostics(entryPoints), {
+      onEmpty: () => Effect.void,
+      onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
+    })
     const candidatesOf = recordedSourceFirst(HashMap.fromIterable(source.entryPoints.map((entry) => [declarationPathOf(entry.sourceFile), entry.sourceFile] as const)))
     const closed = yield* Effect.result(closeDeclarations({
       entryDeclarations,

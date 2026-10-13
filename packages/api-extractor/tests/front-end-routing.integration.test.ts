@@ -50,6 +50,38 @@ const entryOutsidePackage = Effect.gen(function* () {
 const emittedOnFastPath = (packageRoot: string) =>
   Effect.flatMap(FrontEnd.readPackage({ packageRoot }), (source) => Effect.flatMap(FrontEnd.IsolatedEmitter, (emitter) => emitter.emit(source)))
 
+const missingImportPackage = packageOf(sourceManifest('missing-import', './src/mod.ts'), {
+  'mod.ts': "export { thing } from './missing.js'\n",
+})
+
+const deletedTsxEntryBesideTsPackage = packageOf(sourceManifest('deleted-tsx-entry', './src/mod.tsx'), {
+  'mod.ts': 'export const fromTs: number = 2\n',
+})
+
+const sharedDeclarationPathPackage = packageOf(
+  {
+    name: 'shared-declaration',
+    version: '1.0.0',
+    exports: {
+      '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: './src/mod.ts' },
+      './other': { [FrontEnd.FAMILY_SOURCE_CONDITION]: './src/mod.tsx' },
+    },
+  },
+  { 'mod.ts': 'export const fromTs: number = 2\n', 'mod.tsx': 'export const fromTsx: number = 1\n' },
+)
+
+const symlinkedEntryPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-end-symlinked-entry-' })
+  const root = path.join(parent, 'package')
+  yield* fileSystem.makeDirectory(path.join(root, 'src'), { recursive: true })
+  yield* fileSystem.writeFileString(path.join(parent, 'outside.ts'), 'export const outside: number = 1\n')
+  yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify(sourceManifest('symlinked-entry', './src/mod.ts')))
+  yield* fileSystem.symlink(path.join(parent, 'outside.ts'), path.join(root, 'src', 'mod.ts'))
+  return root
+})
+
 Feature('A package is routed to the front-end its declarations allow')
   .withLayer(emitters)
   .live('the emitters read real package files from disk')
@@ -132,6 +164,65 @@ Feature('A package is routed to the front-end its declarations allow')
         When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
         Then('the fast path declines naming the entry declaration file instead of modelling a file outside the package')((scope, expect) =>
           expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: '../shared/mod.d.ts' }] })
+        ),
+      ),
+    )
+
+    scenario(
+      'a package whose entry imports a specifier that names no file is declined by the fast path, naming the import',
+      Gherkin.Do.pipe(
+        Given('a package whose entry re-exports from `./missing.js`, which has no source')('packageRoot', () => missingImportPackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the importing declaration file and the specifier, with no TypeScript code')((scope, expect) =>
+          expect({ refusal: scope.refusal, message: scope.refusal.message }).toMatchObject({
+            refusal: {
+              _tag: 'NotIsolated',
+              diagnostics: [{ file: 'src/mod.d.ts', message: 'the import `./missing.js` names no declaration file inside the package' }],
+            },
+            message: 'declarations need the type checker:\nsrc/mod.d.ts: the import `./missing.js` names no declaration file inside the package',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'an entry point whose source file is deleted is not modelled from a sibling of the same name',
+      Gherkin.Do.pipe(
+        Given('a package whose export names a `./src/mod.tsx` that is deleted, beside an existing `./src/mod.ts`')('packageRoot', () => deletedTsxEntryBesideTsPackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the missing entry declaration instead of modelling the sibling')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({
+            _tag: 'NotIsolated',
+            diagnostics: [{ file: 'src/mod.d.ts', message: 'no source file inside the package could be read for this entry point' }],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'two entry points that share one declaration file are declined by the fast path',
+      Gherkin.Do.pipe(
+        Given('a package whose exports name `./src/mod.ts` and `./src/mod.tsx`')('packageRoot', () => sharedDeclarationPathPackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the shared declaration file and both export paths')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({
+            _tag: 'NotIsolated',
+            diagnostics: [{ file: 'src/mod.d.ts', message: 'two entry points share one declaration file: `.` and `./other`' }],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'an entry point whose source is a symlink out of the package is declined by the fast path',
+      Gherkin.Do.pipe(
+        Given('a package whose `./src/mod.ts` is a symlink to a file outside the package')('packageRoot', () => symlinkedEntryPackage),
+        When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
+        Then('the fast path declines naming the missing entry declaration instead of reading through the symlink')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({
+            _tag: 'NotIsolated',
+            diagnostics: [{ file: 'src/mod.d.ts', message: 'no source file inside the package could be read for this entry point' }],
+          })
         ),
       ),
     )

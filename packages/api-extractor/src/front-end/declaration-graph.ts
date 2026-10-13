@@ -21,7 +21,7 @@ import {
   type VariableDeclarator,
   Visitor,
 } from 'oxc-parser'
-import type { DeclarationFile, Declarations } from './declarations.schema.ts'
+import type { DeclarationFile, Declarations, SourceEntryPoint } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/
@@ -79,6 +79,20 @@ export const declarationCandidates: {
 
 export const declarationPathOf = (sourceFile: string): string =>
   sourceFile.replace(/\.([mc]?)tsx?$/, (_, flavour: string) => declarationExtensionOf(flavour))
+
+export type EntryDeclaration = {
+  readonly exportPath: string
+  readonly declarationFile: string
+}
+
+export const entryPointDeclarations = (entryPoints: ReadonlyArray<SourceEntryPoint>): ReadonlyArray<EntryDeclaration> =>
+  entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
+
+export const missingEntryDeclarations: {
+  (emitted: HashSet.HashSet<string>): (entryDeclarations: ReadonlyArray<string>) => ReadonlyArray<string>
+  (emitted: HashSet.HashSet<string>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<string>
+} = Fn.dual(2, (emitted: HashSet.HashSet<string>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<string> =>
+  entryDeclarations.filter((declarationFile) => !HashSet.has(emitted, declarationFile)))
 
 const sourcesForFlavour = (stem: string, flavour: string): ReadonlyArray<string> =>
   flavour === '' ? [`${stem}.ts`, `${stem}.tsx`] : [`${stem}.${flavour}ts`]
@@ -139,43 +153,73 @@ const firstLoaded = <E, R>(
     onNonEmpty: ([candidate, ...rest]) => loadCandidate(candidate, rest, loaded, load),
   })
 
-const followed = (file: string, program: Program): ReadonlyArray<ReadonlyArray<string>> =>
-  specifiersOf(program).filter(isRelativeSpecifier).map((specifier) => declarationCandidates(file, specifier))
-
-type WorkQueue = {
-  readonly push: (candidates: ReadonlyArray<string>) => void
-  readonly get: (index: number) => Option.Option<ReadonlyArray<string>>
+export type UnresolvedImport = {
+  readonly file: string
+  readonly specifier: string
 }
 
-const workQueue = (initial: ReadonlyArray<ReadonlyArray<string>>): WorkQueue => {
-  const pending: Array<ReadonlyArray<string>> = [...initial]
+export type ClosureResult = {
+  readonly files: ReadonlyArray<DeclarationFile>
+  readonly unresolvedImports: ReadonlyArray<UnresolvedImport>
+}
+
+const unresolvedImport = (file: string, specifier: string): UnresolvedImport => ({ file, specifier })
+
+type ClosureTask = {
+  readonly candidates: ReadonlyArray<string>
+  readonly unresolved: Option.Option<UnresolvedImport>
+}
+
+const entryTask = (declarationFile: string): ClosureTask => ({ candidates: [declarationFile], unresolved: Option.none() })
+
+const importTasks = (file: string, program: Program): ReadonlyArray<ClosureTask> =>
+  specifiersOf(program)
+    .filter(isRelativeSpecifier)
+    .map((specifier) => ({ candidates: declarationCandidates(file, specifier), unresolved: Option.some(unresolvedImport(file, specifier)) }))
+
+type WorkQueue = {
+  readonly push: (task: ClosureTask) => void
+  readonly get: (index: number) => Option.Option<ClosureTask>
+}
+
+const workQueue = (initial: ReadonlyArray<ClosureTask>): WorkQueue => {
+  const pending: Array<ClosureTask> = [...initial]
   return {
-    push: (candidates) => void pending.push(candidates),
+    push: (task) => void pending.push(task),
     get: (index) => Arr.get(pending, index),
   }
 }
 
-const visitFound = <E, R>(file: string, text: string, queue: WorkQueue, at: number, loaded: Loaded, load: Loader<E, R>) =>
-  HashMap.has(loaded, file)
-    ? visit(queue, at, loaded, load)
+type ClosureState = {
+  readonly loaded: Loaded
+  readonly unresolved: ReadonlyArray<UnresolvedImport>
+}
+
+const visitFound = <E, R>(file: string, text: string, queue: WorkQueue, at: number, state: ClosureState, load: Loader<E, R>) =>
+  HashMap.has(state.loaded, file)
+    ? visit(queue, at, state, load)
     : Effect.flatMap(parsed(file, text), ({ program }) => {
-        Arr.forEach(followed(file, program), (candidates) => queue.push(candidates))
-        return visit(queue, at, HashMap.set(loaded, file, text), load)
+        Arr.forEach(importTasks(file, program), (task) => queue.push(task))
+        return visit(queue, at, { loaded: HashMap.set(state.loaded, file, text), unresolved: state.unresolved }, load)
       })
 
 const visit = <E, R>(
   queue: WorkQueue,
   at: number,
-  loaded: Loaded,
+  state: ClosureState,
   load: Loader<E, R>,
-): Effect.Effect<Loaded, E | UnsupportedDeclaration, R> =>
+): Effect.Effect<ClosureState, E | UnsupportedDeclaration, R> =>
   Option.match(queue.get(at), {
-    onNone: () => Effect.succeed(loaded),
-    onSome: (candidates) =>
-      Effect.flatMap(firstLoaded(candidates, loaded, load), (found) =>
+    onNone: () => Effect.succeed(state),
+    onSome: (task) =>
+      Effect.flatMap(firstLoaded(task.candidates, state.loaded, load), (found) =>
         Option.match(found, {
-          onNone: () => visit(queue, at + 1, loaded, load),
-          onSome: ([file, text]) => visitFound(file, text, queue, at + 1, loaded, load),
+          onNone: () =>
+            Option.match(task.unresolved, {
+              onNone: () => visit(queue, at + 1, state, load),
+              onSome: (unresolved) => visit(queue, at + 1, { loaded: state.loaded, unresolved: [...state.unresolved, unresolved] }, load),
+            }),
+          onSome: ([file, text]) => visitFound(file, text, queue, at + 1, state, load),
         })),
   })
 
@@ -186,10 +230,13 @@ export type ClosureRequest<E, R> = {
   readonly load: Loader<E, R>
 }
 
-export const closeDeclarations = <E, R>(request: ClosureRequest<E, R>): Effect.Effect<ReadonlyArray<DeclarationFile>, E | UnsupportedDeclaration, R> =>
+export const closeDeclarations = <E, R>(request: ClosureRequest<E, R>): Effect.Effect<ClosureResult, E | UnsupportedDeclaration, R> =>
   Effect.map(
-    Effect.suspend(() => visit(workQueue(request.entryDeclarations.map(Arr.of)), 0, HashMap.empty(), request.load)),
-    (loaded) => Arr.sort(Arr.map(HashMap.toEntries(loaded), ([path, text]) => ({ path, text })), byPath),
+    Effect.suspend(() => visit(workQueue(request.entryDeclarations.map(entryTask)), 0, { loaded: HashMap.empty(), unresolved: [] }, request.load)),
+    (state): ClosureResult => ({
+      files: Arr.sort(Arr.map(HashMap.toEntries(state.loaded), ([path, text]) => ({ path, text })), byPath),
+      unresolvedImports: state.unresolved,
+    }),
   )
 
 export type Declared =
