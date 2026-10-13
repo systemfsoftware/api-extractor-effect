@@ -102,8 +102,11 @@ Feature('A package is routed to the front-end its declarations allow')
       Gherkin.Do.pipe(
         Given('a package whose export names `./src/mod.ts`, which does not exist')('packageRoot', () => missingEntrySourcePackage),
         When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
-        Then('the fast path declines naming the missing declaration file')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: 'src/mod.d.ts', code: 0 }] })
+        Then('the fast path declines naming the missing declaration file, with no TypeScript code since no compiler reported it')((scope, expect) =>
+          expect({ refusal: scope.refusal, message: scope.refusal.message }).toMatchObject({
+            refusal: { _tag: 'NotIsolated', diagnostics: [{ file: 'src/mod.d.ts', message: 'no source file inside the package could be read for this entry point' }] },
+            message: 'declarations need the type checker:\nsrc/mod.d.ts: no source file inside the package could be read for this entry point',
+          })
         ),
       ),
     )
@@ -128,7 +131,7 @@ Feature('A package is routed to the front-end its declarations allow')
         Given('a package whose export names `../shared/mod.ts`, a readable file beside the package')('packageRoot', () => entryOutsidePackage),
         When('its declarations are emitted on the fast path')('refusal', (scope) => Effect.flip(emittedOnFastPath(scope.packageRoot))),
         Then('the fast path declines naming the entry declaration file instead of modelling a file outside the package')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: '../shared/mod.d.ts', code: 0 }] })
+          expect(scope.refusal).toMatchObject({ _tag: 'NotIsolated', diagnostics: [{ file: '../shared/mod.d.ts' }] })
         ),
       ),
     )

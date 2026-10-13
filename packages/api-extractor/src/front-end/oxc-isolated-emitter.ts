@@ -13,13 +13,13 @@ const DIAGNOSTIC_TEXT = /^TS(\d+): (.*)$/s
 
 const diagnosticOf = (file: string, text: string): Diagnostic =>
   Option.match(Option.fromNullishOr(DIAGNOSTIC_TEXT.exec(text)), {
-    onNone: () => ({ file, code: 0, message: text }),
+    onNone: () => ({ file, message: text }),
     onSome: ([, code, message]) => ({ file, code: Number(code), message: message ?? '' }),
   })
 
 const diagnosticOrder: Order.Order<Diagnostic> = Order.combineAll([
   Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.file),
-  Order.mapInput(Order.Number, (diagnostic: Diagnostic) => diagnostic.code),
+  Order.mapInput(Option.makeOrder(Order.Number), (diagnostic: Diagnostic) => Option.fromNullishOr(diagnostic.code)),
   Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.message),
 ])
 
@@ -77,7 +77,6 @@ const refusedOrClosed = <A, E>(found: ReadonlyArray<Diagnostic>, closed: Result.
 
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
   file: declarationFile,
-  code: 0,
   message: 'no source file inside the package could be read for this entry point',
 })
 

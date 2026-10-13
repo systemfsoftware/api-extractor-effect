@@ -5,8 +5,10 @@ type DiagnosticsFields = { readonly diagnostics: Schema.$Array<typeof Diagnostic
 
 const diagnosticsFields: DiagnosticsFields = { diagnostics: Schema.Array(Diagnostic) }
 
+const codeLabel = (code: number | undefined): string => (code === undefined ? '' : `TS${code} `)
+
 const listed = (diagnostics: ReadonlyArray<Diagnostic>): string =>
-  diagnostics.map(({ file, code, message }) => `${file === '' ? '' : `${file}: `}TS${code} ${message}`).join('\n')
+  diagnostics.map(({ file, code, message }) => `${file === '' ? '' : `${file}: `}${codeLabel(code)}${message}`).join('\n')
 
 const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', { readonly packageRoot: Schema.String }>, Cause.YieldableError> =
   Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', { packageRoot: Schema.String })

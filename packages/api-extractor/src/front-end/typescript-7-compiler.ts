@@ -75,7 +75,6 @@ const runCompiler = (source: PackageSource, tsc: string) =>
 
 const exitDiagnostic = (exitCode: number, stderr: string): Diagnostic => ({
   file: '',
-  code: 0,
   message: stderr.trim() === '' ? `\`tsc\` exited with code ${exitCode}` : `\`tsc\` exited with code ${exitCode}: ${stderr.trim()}`,
 })
 
@@ -91,7 +90,6 @@ const entryPointsOf = (source: PackageSource): ReadonlyArray<DeclarationEntryPoi
 
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
   file: declarationFile,
-  code: 0,
   message: 'the compiler emitted no declaration for this entry point',
 })
 
