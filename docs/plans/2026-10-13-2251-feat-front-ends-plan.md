@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-2019-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-2114-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -393,6 +393,30 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Test expectation:** each fix names its scenario, at the public surface (`FrontEnd.*` or a spawned `tsc`), and fails at `a98496e`. e2e cases extend the existing journeys (KTD11 keeps four).
 - **Verification:** the Verification Contract gates, a named DeepSeek delta lens over the fixing commits, and a fresh full-path receipt at the final head.
 
+### U15. Rulings on the full-path review at the merged head `932ae50`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `932ae50` (run `20261013-215304-932ae50a`: ten reviewer roles, the learnings and ci-wall-clock checks, and the DeepSeek peer `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling: fixed with a named commit, rejected with a reason, or a follow-up with an owner and a trigger. The testing and learnings reviewers and the DeepSeek delta lens died with a session crash and were run again; the delta lens is taken at the final head over every fixing commit since `a98496e`.
+- **Requirements:** R3, R5, R6, R16; KTD4, KTD5, KTD6, KTD7.
+- **Rulings, fixes** (each scenario fails at `932ae50`, or at `4fec99b` for F7, unless marked as pinning existing behaviour):
+  - F1 (correctness P2): a reference to an unexported interface, class or other non-alias declaration kept its bare name, so it read as the exported item of that name, and two hidden `Opts` collapsed into one. Every reachable hidden declaration takes a distinct model name through the alias-local name assignment; only aliases are emitted into `locals`, so the schema is unchanged (`4fec99b`). Builder scenario.
+  - F2 (adversarial P2): a function or constructor type inside text printed `=>: T`; it prints `(x: number) => string` as `tsc` does (`4fec99b`). Builder scenario.
+  - F3 (adversarial P3): local renames inserted the model name as a replacement pattern, so `T$$` became `T$`; the name is inserted literally (`4fec99b`). Builder scenario.
+  - F4 (correctness P3, DeepSeek peer P2): an entry whose source condition names a hand-written `.d.ts` mapped to a `.d.d.ts` path; the fast path modelled it and the compiler route refused it. The entry keeps its own path and the compiler route reads it as a hand-written declaration (`1109e48`). Equality-journey package.
+  - F5 (api-contract P2): the README said a refusal never carries `tsc`'s printed output. Per U13 P3 it does, alone, when the TypeScript 7 API reports no error; the README now says so and calls that text untrusted (`5dd424b`). Removing the output from the code is rejected: it reverses U13 P3, and a write failure the API cannot see would surface as an exit code only.
+  - F6 (maintainability P2, P3): one shared-declaration rule, `sharedDeclarations` in `declaration-graph.ts`, serves both adapters, and `read-package.ts` reuses `package-file.ts`'s `isAbsent` (`611a024`). Routing, reader and e2e journeys pass unchanged.
+  - F7 (pack rows schema-laws/tagged-unions-over-state-by-presence and rich-type-over-foreign-encoded, learnings P3): `Diagnostic` is the union of `Reported` (TS code, optional in-package file, message) and `Note` (optional file, message). The adapters turn oxc's text and the TypeScript 7 API's diagnostic into a variant; the refusal text and the fast path's diagnostic order match on the tag (`34206fd`). `file` stays optional in both variants, absent the same way in each (rule 2). The e2e routing and refusal journeys assert the tags.
+  - F8 (testing P3 and gaps): pinning scenarios, passing before and after: two files re-exporting each other (`4fec99b`); a package with two entry points that do not share a declaration file, and the reader's `sourceCondition` option (`eca9cee`); a refused diagnostic keeps `tsc`'s elaboration lines (`47bf1c3`).
+- **Rulings, rejected:**
+  - Reliability P2 (`catchCause` at `typescript-7-compiler.ts:97,229`): the TypeScript 7 API resolves `parseConfigFile` on a malformed tsconfig (empty `fileNames`) and rejects only when it cannot read the file (orchestrator probe on 7.0.2: "could not read file"); `tsc` then fails on the same `extends` and the package is refused. At `:229` an API failure leaves the refusal in place with the exit diagnostic. Neither turns a refusal into a model. The two gaps beside it (a `tsc` that cannot be spawned, an API rejection) are the tool's own installation, not package input.
+  - Security gap (recursion budget on the manifest codec): `recursionBudget` budgets arbitrary generation for generated laws, which `main` retired (#9); it does not bound decoding, so there is no behaviour to pin.
+  - Residuals: the verdict's `declarations` field carries each surface's producer stamp by design (R7); `VerdictTypeId` sits on `Verdict.prototype` since U1 (isolatedDeclarations) and `VerdictTypeId in verdict` holds for a judged, decoded and constructed verdict (orchestrator probe); a `NotIsolated`-only fallback is ruling #5 and the U14 unreadable-source ruling; the oracle's projection is ruling #7 and A18; the native parsers run in-process because parsing package text is the tool's job (KTD17 approved packages); a diagnostic's file outside the package is dropped by `fileFieldOf` (`typescript-7-compiler.ts:173-177`) and its message is `tsc`'s own text (F5).
+- **Follow-ups:**
+  - The profile harness's own discovery, declaration-path and resolution rules, its deadline-free `git`/`tsc` spawns, its abort on one undecodable corpus manifest, its separate timing of `buildModel` and `resolveMessages`, and the unmeasured cost of the TSDoc tag parse (maintainability P3 and gaps, performance, reliability and correctness residuals). Owner: the CI benchmark unit (PR5, origin U9). Trigger: PR5 moving the profile into its benchmark lane, which re-records it; until then the committed profiles must reproduce from this harness (R13).
+  - Adversarial inputs: a wildcard export whose matched directory is a symlink out of the package, a reported diagnostic whose file lies outside the package, a `tsc` failure the API cannot see, and a multi-entry package checked against upstream's messages (security, api-contract, testing and learnings gaps). Owner: the report and differential unit (PR4), whose adversarial corpus and differential lane (R9) are the arbiter. Trigger: PR4 adding its adversarial corpus.
+  - Text fidelity of the canonical printer and the fast path's text against `tsc`'s on the real corpus (adversarial residuals, DeepSeek gap). Owner: PR4. Trigger: PR4's renderer comparing the `.api.md` text with upstream 7.59.1.
+- **Preserved:** U11-U14 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, the DeepSeek delta lens over `a98496e..` the final head, and a fresh full-path receipt at the final head.
+
 ---
 
 ## Verification Contract
@@ -415,7 +439,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U14 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U15 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
