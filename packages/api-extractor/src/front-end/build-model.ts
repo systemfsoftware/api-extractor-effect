@@ -52,9 +52,15 @@ type LocalDeclaration = {
 type VariableEntry = { readonly constant: boolean; readonly node: VariableDeclarator }
 type EntryFile = { readonly exportPath: string; readonly declarationFile: string }
 
-const localKey = (file: string, name: string): string => `${file}\u0000${name}`
-const localKeyFile = (key: string): string => key.slice(0, Math.max(key.indexOf('\u0000'), 0))
-const localKeyName = (key: string): string => key.slice(key.indexOf('\u0000') + 1)
+const KEY_DELIMITER = '\u0000'
+
+const localKey = (file: string, name: string): string => `${KEY_DELIMITER}${file}${KEY_DELIMITER}${name}${KEY_DELIMITER}`
+
+const localKeyParts = (key: string): ReadonlyArray<string> => key.split(KEY_DELIMITER)
+
+const localKeyFile = (key: string): string => Option.getOrElse(Arr.get(localKeyParts(key), 1), () => '')
+
+const localKeyName = (key: string): string => Option.getOrElse(Arr.get(localKeyParts(key), 2), () => '')
 
 const keyOrder: Order.Order<string> = Order.combineAll([
   Order.mapInput(Order.String, localKeyFile),

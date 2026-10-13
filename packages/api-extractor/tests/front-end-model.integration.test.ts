@@ -308,4 +308,245 @@ Feature('Building a package API model from its declaration text')
           })),
       ),
     )
+
+    scenario(
+      'locals whose names share a prefix keep their own names in a text type',
+      Gherkin.Do.pipe(
+        Given(
+          'an entry exporting names that also name aliases it reaches from another file, one alias name a prefix of the other, each used in a mapped type',
+        )('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                "import type { B as ShortB, BC, Id as ShortId, Ids, K as ShortK, Key, Opt as ShortOpt, Options } from './a.js'\n" +
+                  'export type B = { readonly ownB: string }\n' +
+                  'export type Id = { readonly ownId: string }\n' +
+                  'export type K = { readonly ownK: string }\n' +
+                  'export type Opt = { readonly ownOpt: string }\n' +
+                  'export type S1 = { readonly [P in keyof ShortB]: BC }\n' +
+                  'export type S2 = { readonly [P in keyof ShortId]: Ids }\n' +
+                  'export type S3 = { readonly [P in keyof ShortK]: Key }\n' +
+                  'export type S4 = { readonly [P in keyof ShortOpt]: Options }\n',
+              ],
+              [
+                'a.d.ts',
+                'export type B = { readonly b: string }\n' +
+                  'export type BC = { readonly bc: string }\n' +
+                  'export type Id = { readonly id: string }\n' +
+                  'export type Ids = { readonly ids: string }\n' +
+                  'export type K = { readonly k: string }\n' +
+                  'export type Key = { readonly key: string }\n' +
+                  'export type Opt = { readonly opt: string }\n' +
+                  'export type Options = { readonly options: string }\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('every mapped type names the whole local name, never part of another')((scope, expect) =>
+          expect({
+            S1: itemOf(scope.model, '.', 'S1', 'typeAlias'),
+            S2: itemOf(scope.model, '.', 'S2', 'typeAlias'),
+            S3: itemOf(scope.model, '.', 'S3', 'typeAlias'),
+            S4: itemOf(scope.model, '.', 'S4', 'typeAlias'),
+          }).toMatchObject({
+            S1: { kind: 'typeAlias', type: { kind: 'text', text: '{ readonly [P in keyof B_2]: BC }' } },
+            S2: { kind: 'typeAlias', type: { kind: 'text', text: '{ readonly [P in keyof Id_2]: Ids }' } },
+            S3: { kind: 'typeAlias', type: { kind: 'text', text: '{ readonly [P in keyof K_2]: Key }' } },
+            S4: { kind: 'typeAlias', type: { kind: 'text', text: '{ readonly [P in keyof Opt_2]: Options }' } },
+          })),
+      ),
+    )
+
+    scenario(
+      'a named optional tuple member keeps its question mark',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `[first: string, second?: number]`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare type Pair = [first: string, second?: number]\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the canonical text marks the optional member')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Pair', 'typeAlias')).toMatchObject({
+            kind: 'typeAlias',
+            type: { kind: 'text', text: '[first: string, second?: number]' },
+          })),
+      ),
+    )
+
+    scenario(
+      'an interface item keeps its type parameters, heritage and every member kind',
+      Gherkin.Do.pipe(
+        Given('an entry declaring an interface with a bounded default parameter, two extensions and property, method members')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export interface Collection<A extends string = "a"> extends Base<A>, Marker {\n' +
+                  '  readonly size: number\n' +
+                  '  count(): number\n' +
+                  '  create(value: A): A\n' +
+                  '}\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the interface item carries all of them')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Collection', 'interface')).toMatchObject({
+            kind: 'interface',
+            name: 'Collection',
+            typeParameters: [{ name: 'A', constraint: { kind: 'keyword', name: 'string' }, default: { kind: 'literal', text: '"a"' } }],
+            extends: [
+              { kind: 'reference', name: 'Base', args: [{ kind: 'reference', name: 'A', args: [] }] },
+              { kind: 'reference', name: 'Marker', args: [] },
+            ],
+            members: [
+              { kind: 'property', name: 'size', optional: false, readonly: true, type: { kind: 'keyword', name: 'number' } },
+              { kind: 'method', name: 'count', optional: false, signatures: [{ typeParameters: [], parameters: [], returns: { kind: 'keyword', name: 'number' } }] },
+              {
+                kind: 'method',
+                name: 'create',
+                optional: false,
+                signatures: [
+                  {
+                    typeParameters: [],
+                    parameters: [{ name: 'value', type: { kind: 'reference', name: 'A', args: [] }, optional: false, rest: false }],
+                    returns: { kind: 'reference', name: 'A', args: [] },
+                  },
+                ],
+              },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
+      'a class item keeps its abstractness, type parameters, heritage and every member kind',
+      Gherkin.Do.pipe(
+        Given('an entry declaring an abstract class extending a base, implementing a marker, with a property, a constructor, a getter and a method')(
+          'declarations',
+          () =>
+            Effect.succeed(
+              declarations([
+                [
+                  'index.d.ts',
+                  'export declare abstract class Bag<A> extends Base<A> implements Marker {\n' +
+                    '  readonly size: number\n' +
+                    '  constructor(initial: A)\n' +
+                    '  get first(): A\n' +
+                    '  create(value: A): A\n' +
+                    '}\n',
+                ],
+              ]),
+            ),
+        ),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the class item carries all of them')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Bag', 'class')).toMatchObject({
+            kind: 'class',
+            name: 'Bag',
+            abstract: true,
+            typeParameters: [{ name: 'A' }],
+            extends: [{ kind: 'reference', name: 'Base', args: [{ kind: 'reference', name: 'A', args: [] }] }],
+            implements: [{ kind: 'reference', name: 'Marker', args: [] }],
+            members: [
+              { kind: 'property', name: 'size', optional: false, readonly: true, type: { kind: 'keyword', name: 'number' } },
+              {
+                kind: 'method',
+                name: 'constructor',
+                optional: false,
+                signatures: [
+                  {
+                    typeParameters: [],
+                    parameters: [{ name: 'initial', type: { kind: 'reference', name: 'A', args: [] }, optional: false, rest: false }],
+                    returns: { kind: 'keyword', name: 'any' },
+                  },
+                ],
+              },
+              { kind: 'property', name: 'first', optional: false, readonly: true, type: { kind: 'reference', name: 'A', args: [] } },
+              {
+                kind: 'method',
+                name: 'create',
+                optional: false,
+                signatures: [
+                  {
+                    typeParameters: [],
+                    parameters: [{ name: 'value', type: { kind: 'reference', name: 'A', args: [] }, optional: false, rest: false }],
+                    returns: { kind: 'reference', name: 'A', args: [] },
+                  },
+                ],
+              },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
+      'a global augmentation is refused naming the file and the construct',
+      Gherkin.Do.pipe(
+        Given('a declaration file augmenting the global scope')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'declare global {\n  interface Window { extra: string }\n}\nexport declare type T = string\n']]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the global augmentation')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`declare global`' })),
+      ),
+    )
+
+    scenario(
+      'a module augmentation is refused naming the file and the named module',
+      Gherkin.Do.pipe(
+        Given('a declaration file augmenting another module')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'declare module "other" {\n  interface Thing { extra: string }\n}\nexport declare type T = string\n']]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the module')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`declare module "other"`' })),
+      ),
+    )
+
+    scenario(
+      'a named re-export from another package is refused naming the file and the re-export',
+      Gherkin.Do.pipe(
+        Given('an entry re-exporting one name from another package')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', "export { X } from 'other-pkg'\n"]]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the re-export')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({
+            _tag: 'UnsupportedDeclaration',
+            file: 'index.d.ts',
+            construct: 're-export of "X" from "other-pkg"',
+          })),
+      ),
+    )
+
+    scenario(
+      'a set accessor models as a writable property and prints without a return type',
+      Gherkin.Do.pipe(
+        Given('an interface, a class and a mapped value each declaring `set value(input: string)`')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export interface Readout {\n  set value(input: string)\n}\n' +
+                  'export declare class Meter {\n  set value(input: string)\n}\n' +
+                  'export declare type Boxed = { [K in "a"]: { set value(input: string) } }\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each accessor is a writable property and the printed one invents no return type')((scope, expect) =>
+          expect({
+            interface: itemOf(scope.model, '.', 'Readout', 'interface'),
+            class: itemOf(scope.model, '.', 'Meter', 'class'),
+            boxed: itemOf(scope.model, '.', 'Boxed', 'typeAlias'),
+          }).toMatchObject({
+            interface: {
+              kind: 'interface',
+              members: [{ kind: 'property', name: 'value', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } }],
+            },
+            class: {
+              kind: 'class',
+              members: [{ kind: 'property', name: 'value', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } }],
+            },
+            boxed: { kind: 'typeAlias', type: { kind: 'text', text: '{ [K in "a"]: { set value(input: string) } }' } },
+          })),
+      ),
+    )
   })

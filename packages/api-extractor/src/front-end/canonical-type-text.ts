@@ -66,21 +66,7 @@ const withTypeParameters = (context: TypeContext, names: ReadonlyArray<string>):
 const refuse = (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration> =>
   Effect.fail(new UnsupportedDeclaration({ file, construct }))
 
-type KeywordNodeName =
-  | 'TSAnyKeyword'
-  | 'TSBigIntKeyword'
-  | 'TSBooleanKeyword'
-  | 'TSNeverKeyword'
-  | 'TSNullKeyword'
-  | 'TSNumberKeyword'
-  | 'TSObjectKeyword'
-  | 'TSStringKeyword'
-  | 'TSSymbolKeyword'
-  | 'TSUndefinedKeyword'
-  | 'TSUnknownKeyword'
-  | 'TSVoidKeyword'
-
-const KEYWORDS: HashMap.HashMap<string, KeywordName> = HashMap.fromIterable<string, KeywordName>([
+export const KEYWORD_ENTRIES = [
   ['TSAnyKeyword', 'any'],
   ['TSBigIntKeyword', 'bigint'],
   ['TSBooleanKeyword', 'boolean'],
@@ -93,26 +79,17 @@ const KEYWORDS: HashMap.HashMap<string, KeywordName> = HashMap.fromIterable<stri
   ['TSUndefinedKeyword', 'undefined'],
   ['TSUnknownKeyword', 'unknown'],
   ['TSVoidKeyword', 'void'],
-])
+] as const
 
-export const KEYWORD_NODE_NAMES: ReadonlyArray<KeywordNodeName> = [
-  'TSAnyKeyword',
-  'TSBigIntKeyword',
-  'TSBooleanKeyword',
-  'TSNeverKeyword',
-  'TSNullKeyword',
-  'TSNumberKeyword',
-  'TSObjectKeyword',
-  'TSStringKeyword',
-  'TSSymbolKeyword',
-  'TSUndefinedKeyword',
-  'TSUnknownKeyword',
-  'TSVoidKeyword',
-]
+type KeywordNodeName = (typeof KEYWORD_ENTRIES)[number][0]
+
+const KEYWORDS: HashMap.HashMap<string, KeywordName> = HashMap.fromIterable<string, KeywordName>(KEYWORD_ENTRIES)
+
+export const KEYWORD_NODE_NAMES: ReadonlyArray<KeywordNodeName> = KEYWORD_ENTRIES.map(([node]) => node)
 
 export const keywordNameOf = (nodeType: string): Option.Option<KeywordName> => HashMap.get(KEYWORDS, nodeType)
 
-const keywordName = (nodeType: KeywordNodeName): KeywordName => Option.getOrThrow(keywordNameOf(nodeType))
+const keywordName = (nodeType: string): KeywordName => Option.getOrThrow(keywordNameOf(nodeType))
 
 export const literalTextOf = (node: Expression | TSLiteral): Option.Option<string> =>
   Match.value(node).pipe(
@@ -134,7 +111,7 @@ export const expressionPath = (expression: Expression): Option.Option<ReadonlyAr
     Match.orElse(() => Option.none()),
   )
 
-const propertyKeyName = (key: PropertyKey): Option.Option<string> =>
+export const propertyKeyName = (key: PropertyKey): Option.Option<string> =>
   Match.value(key).pipe(
     Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
     Match.when({ type: 'Literal', value: Match.string }, (literal) => Option.some(JSON.stringify(literal.value))),
@@ -305,13 +282,14 @@ const printSignatureLike = (
   typeParameters: TSTypeParameterDeclaration | null,
   params: ReadonlyArray<ParamPattern>,
   returnType: TSTypeAnnotation | null,
+  kind: TSMethodSignatureKind,
   decorate: (parts: { readonly typeParameters: string; readonly parameters: string; readonly returnType: string }) => string,
 ): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const inner = withTypeParameters(context, typeParameterNames(typeParameters))
     const printedTypeParameters = yield* printTypeParameters(inner, typeParameters)
     const printedParameters = yield* printParameters(inner, params)
-    const printedReturnType = yield* printMethodTail(inner, 'method', returnType)
+    const printedReturnType = yield* printMethodTail(inner, kind, returnType)
     return decorate({ typeParameters: printedTypeParameters, parameters: printedParameters, returnType: printedReturnType })
   })
 
@@ -327,7 +305,7 @@ const printMethodSignature = (context: TypeContext, member: TSMethodSignature): 
   Option.match(propertyKeyName(member.key), {
     onNone: () => refuse(context.file, `a ${member.key.type} method name`),
     onSome: (name) =>
-      printSignatureLike(context, member.typeParameters, member.params, member.returnType, (parts) =>
+      printSignatureLike(context, member.typeParameters, member.params, member.returnType, member.kind, (parts) =>
         `${methodPrefix(member.kind)}${name}${optionalMark(member.optional)}${parts.typeParameters}(${parts.parameters})${parts.returnType}`),
   })
 
@@ -339,11 +317,11 @@ const methodPrefix = (kind: TSMethodSignatureKind): string =>
   )
 
 const printCallSignature = (context: TypeContext, member: TSCallSignatureDeclaration): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, member.typeParameters, member.params, member.returnType, (parts) =>
+  printSignatureLike(context, member.typeParameters, member.params, member.returnType, 'method', (parts) =>
     `${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printConstructSignature = (context: TypeContext, member: TSConstructSignatureDeclaration): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, member.typeParameters, member.params, member.returnType, (parts) =>
+  printSignatureLike(context, member.typeParameters, member.params, member.returnType, 'method', (parts) =>
     `new ${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printIndexSignature = (context: TypeContext, member: TSIndexSignature): Effect.Effect<string, UnsupportedDeclaration> =>
@@ -380,7 +358,7 @@ const printSpecialTupleElement = (
 ): Effect.Effect<string, UnsupportedDeclaration> =>
   Match.value(element).pipe(
     Match.when({ type: 'TSNamedTupleMember' }, (named) =>
-      Effect.map(printTupleElement(context, named.elementType), (type) => `${named.label.name}: ${type}`)),
+      Effect.map(printTupleElement(context, named.elementType), (type) => `${named.label.name}${optionalMark(named.optional)}: ${type}`)),
     Match.when({ type: 'TSOptionalType' }, (optional) =>
       Effect.map(canonicalTypeText(context, optional.typeAnnotation), (type) => `${type}?`)),
     Match.orElse((rest) => Effect.map(canonicalTypeText(context, rest.typeAnnotation), (type) => `...${type}`)),
@@ -396,11 +374,11 @@ const printTuple = (context: TypeContext, node: TSTupleType): Effect.Effect<stri
   Effect.map(Effect.forEach(node.elementTypes, (element) => printTupleElement(context, element)), (parts) => `[${parts.join(', ')}]`)
 
 const printFunctionType = (context: TypeContext, node: TSFunctionType): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, node.typeParameters, node.params, node.returnType, (parts) =>
+  printSignatureLike(context, node.typeParameters, node.params, node.returnType, 'method', (parts) =>
     `${parts.typeParameters}(${parts.parameters}) =>${parts.returnType}`)
 
 const printConstructorType = (context: TypeContext, node: TSConstructorType): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, node.typeParameters, node.params, node.returnType, (parts) =>
+  printSignatureLike(context, node.typeParameters, node.params, node.returnType, 'method', (parts) =>
     `${node.abstract ? 'abstract ' : ''}new ${parts.typeParameters}(${parts.parameters}) =>${parts.returnType}`)
 
 const printTypeReference = (context: TypeContext, node: TSTypeReference): Effect.Effect<string, UnsupportedDeclaration> =>
