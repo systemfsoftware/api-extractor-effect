@@ -245,6 +245,9 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.50.0
+      '@systemfsoftware/effect-schema-recursion-budget':
+        specifier: file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz
+        version: file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz(effect@4.0.2)
       turbo:
         specifier: 'catalog:'
         version: 2.10.12
