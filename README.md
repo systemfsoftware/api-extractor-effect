@@ -79,7 +79,8 @@ policy (`FrontEnd.compilerEmitPolicy`), and `route` is `Fallback` with the diagn
 sent it there. A `tsc` that fails refuses the package with `CompilerRejected`, whose
 diagnostics come from the TypeScript 7 API, never from `tsc`'s printed output, which a
 package's own file names and import specifiers can spell. A diagnostic no compiler reported
-(a missing entry, say) carries no TypeScript code.
+(a missing entry, say) carries no TypeScript code, and a diagnostic names a `file` only when
+that file is inside the package.
 Both routes meet at declaration text: one syntactic builder makes the model and one
 resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and

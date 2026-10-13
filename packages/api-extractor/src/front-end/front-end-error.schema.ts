@@ -8,7 +8,7 @@ const diagnosticsFields: DiagnosticsFields = { diagnostics: Schema.Array(Diagnos
 const codeLabel = (code: number | undefined): string => (code === undefined ? '' : `TS${code} `)
 
 const listed = (diagnostics: ReadonlyArray<Diagnostic>): string =>
-  diagnostics.map(({ file, code, message }) => `${file === '' ? '' : `${file}: `}${codeLabel(code)}${message}`).join('\n')
+  diagnostics.map(({ file, code, message }) => `${file === undefined ? '' : `${file}: `}${codeLabel(code)}${message}`).join('\n')
 
 const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', { readonly packageRoot: Schema.String }>, Cause.YieldableError> =
   Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', { packageRoot: Schema.String })

@@ -18,7 +18,7 @@ const diagnosticOf = (file: string, text: string): Diagnostic =>
   })
 
 const diagnosticOrder: Order.Order<Diagnostic> = Order.combineAll([
-  Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.file),
+  Order.mapInput(Option.makeOrder(Order.String), (diagnostic: Diagnostic) => Option.fromNullishOr(diagnostic.file)),
   Order.mapInput(Option.makeOrder(Order.Number), (diagnostic: Diagnostic) => Option.fromNullishOr(diagnostic.code)),
   Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.message),
 ])

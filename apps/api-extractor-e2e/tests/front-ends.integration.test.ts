@@ -139,8 +139,16 @@ const refusalOf = (error: Refused) => {
   return {
     error,
     codes: diagnostics.map((diagnostic) => diagnostic.code),
+    files: diagnostics.map((diagnostic) => diagnostic.file),
     lines: diagnostics.flatMap((diagnostic) => diagnostic.message.split('\n').filter((line) => /error TS\d+/.test(line))),
   }
+}
+
+const routedAs = (analysis: FrontEnd.Analysis) => ({ route: analysis.route, items: analysis.model.entryPoints.flatMap((entry) => entry.items) })
+
+const STRING_ARRAY_FALLBACK = {
+  route: { _tag: 'Fallback', diagnostics: [{ file: 'src/mod.ts', code: 9010 }] },
+  items: [{ kind: 'variable', name: 'ids', constant: true, type: { kind: 'array', element: { kind: 'keyword', name: 'string' } } }],
 }
 
 const refusedThrough = (source: FrontEnd.PackageSource) =>
@@ -231,14 +239,14 @@ Feature('Both front-ends reduce a package to one model')
       Gherkin.Do.pipe(
         Given('a package exporting `const ids = [1, 2].map(String)` with no annotation')('source', () =>
           packageWith('inferred-export', 'export const ids = [1, 2].map(String)\n')),
-        When('the engine analyses it')('analysis', (scope) => FrontEnd.analyse(scope.source)),
-        Then('it took the fallback for TS9010 on `ids` and modelled `ids` as a string array')((scope, expect) =>
-          expect({
-            route: scope.analysis.route,
-            items: scope.analysis.model.entryPoints.flatMap((entry) => entry.items),
-          }).toMatchObject({
-            route: { _tag: 'Fallback', diagnostics: [{ file: 'src/mod.ts', code: 9010 }] },
-            items: [{ kind: 'variable', name: 'ids', constant: true, type: { kind: 'array', element: { kind: 'keyword', name: 'string' } } }],
+        Given('the same package whose tsconfig turns on isolatedDeclarations')('declaresIsolated', () =>
+          packageWith('inferred-export-isolated', 'export const ids = [1, 2].map(String)\n', { isolatedDeclarations: true })),
+        When('the engine analyses each')('analyses', (scope) =>
+          Effect.all({ plain: FrontEnd.analyse(scope.source), declaresIsolated: FrontEnd.analyse(scope.declaresIsolated) })),
+        Then('both took the fallback for TS9010 on `ids` and modelled `ids` as a string array')((scope, expect) =>
+          expect({ plain: routedAs(scope.analyses.plain), declaresIsolated: routedAs(scope.analyses.declaresIsolated) }).toMatchObject({
+            plain: STRING_ARRAY_FALLBACK,
+            declaresIsolated: STRING_ARRAY_FALLBACK,
           })
         ),
       ),
@@ -281,6 +289,7 @@ Feature('Both front-ends reduce a package to one model')
             longName: scope.refusals.longName.error,
             escaping: scope.refusals.escaping.error,
             shared: scope.refusals.shared.error,
+            files: { longName: scope.refusals.longName.files },
             codes: {
               excludedEntry: scope.refusals.excludedEntry.codes,
               longName: scope.refusals.longName.codes,
@@ -306,12 +315,13 @@ Feature('Both front-ends reduce a package to one model')
             ],
             withoutConfig: { _tag: 'CompilerRejected', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 5083 })]) },
             excludedEntry: { _tag: 'CompilerRejected', diagnostics: [{ file: 'src/mod.d.ts', message: 'the compiler emitted no declaration for this entry point' }] },
-            longName: { _tag: 'CompilerRejected', diagnostics: [{ file: '', message: expect.stringContaining('error TS5033') }] },
+            longName: { _tag: 'CompilerRejected', diagnostics: [{ message: expect.stringContaining('error TS5033') }] },
             escaping: { _tag: 'CompilerRejected', diagnostics: [{ file: '../shared/mod.ts', message: expect.stringContaining('resolves outside the package') }] },
             shared: {
               _tag: 'CompilerRejected',
               diagnostics: [{ file: 'src/mod.d.ts', message: expect.stringContaining('the entry points . and ./mod share the declaration file src/mod.d.ts') }],
             },
+            files: { longName: [undefined] },
             codes: { excludedEntry: [undefined], longName: [undefined], escaping: [undefined], shared: [undefined] },
           })
         ),

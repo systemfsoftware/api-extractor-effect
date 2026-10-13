@@ -34,13 +34,13 @@ export const Declarations: Schema.Codec<Declarations> = Schema.Struct({
 })
 
 export type Diagnostic = {
-  readonly file: string
+  readonly file?: string
   readonly code?: number
   readonly message: string
 }
 
 export const Diagnostic: Schema.Codec<Diagnostic> = Schema.Struct({
-  file: Schema.String,
+  file: Schema.optionalKey(Schema.String),
   code: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
   message: Schema.String,
 })

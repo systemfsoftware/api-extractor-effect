@@ -29,6 +29,7 @@ export type CompilerEmitPolicy = {
   readonly declarationMap: false
   readonly sourceMap: false
   readonly stripInternal: false
+  readonly isolatedDeclarations: false
   readonly removeComments: false
   readonly incremental: false
   readonly composite: false
@@ -50,6 +51,7 @@ export const compilerEmitPolicy: (request: CompilerEmitPolicyRequest) => Compile
   declarationMap: false,
   sourceMap: false,
   stripInternal: false,
+  isolatedDeclarations: false,
   removeComments: false,
   incremental: false,
   composite: false,
@@ -139,7 +141,7 @@ const exitMessage = (exitCode: number, stdout: string, stderr: string): string =
     },
   )
 
-const exitDiagnostic = (run: CompilerRun): Diagnostic => ({ file: '', message: exitMessage(run.exitCode, run.stdout, run.stderr) })
+const exitDiagnostic = (run: CompilerRun): Diagnostic => ({ message: exitMessage(run.exitCode, run.stdout, run.stderr) })
 
 const indented = (text: string): string => text.replaceAll('\n', '\n  ')
 
@@ -149,14 +151,14 @@ const chainText = (diagnostic: ApiDiagnostic): string =>
     onNonEmpty: (chain) => `${diagnostic.text}\n  ${chain.map((next) => indented(chainText(next))).join('\n  ')}`,
   })
 
-const fileOf = (path: Path.Path, packageRoot: string, fileName: Option.Option<string>): string =>
-  Option.getOrElse(
+const fileFieldOf = (path: Path.Path, packageRoot: string, fileName: Option.Option<string>): { readonly file?: string } =>
+  Option.match(
     Option.flatMap(fileName, (name) => relativeWithin(path, packageRoot, path.resolve(packageRoot, name))),
-    () => '',
+    { onNone: () => ({}), onSome: (file) => ({ file }) },
   )
 
 const apiDiagnostic = (path: Path.Path, packageRoot: string, diagnostic: ApiDiagnostic): Diagnostic => ({
-  file: fileOf(path, packageRoot, Option.fromNullishOr(diagnostic.fileName)),
+  ...fileFieldOf(path, packageRoot, Option.fromNullishOr(diagnostic.fileName)),
   code: diagnostic.code,
   message: chainText(diagnostic),
 })
