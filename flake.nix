@@ -9,10 +9,13 @@
     # `packageManager` pins.
     systemfsoftware.url = "github:systemfsoftware/systemfsoftware/732f66a0c85819b2005f9e0930a595bc4de91ee1";
     nixpkgs.follows = "systemfsoftware/nixpkgs";
-    # stryker-js-effect at the commit of `@systemfsoftware/stryker-js@v18.1.0`.
-    # Nothing follows: its own lock reproduces the released tarballs byte for
-    # byte, the integrity each release tag records.
-    stryker-published.url = "github:systemfsoftware/stryker-js-effect/27b1075905a6c69e74eff163567ac25dd4839a1b";
+    # stryker-js-effect at the release commit of `@systemfsoftware/stryker-js@v19.0.0`
+    # and `@systemfsoftware/stryker-ignorer-effect-schema-declarations@v0.3.0`.
+    # Every stryker-js-effect package comes from this one commit; stryker-config
+    # comes from the systemfsoftware input. Nothing follows: its own
+    # lock reproduces the released tarballs byte for byte, the integrity each
+    # release tag records.
+    stryker-published.url = "github:systemfsoftware/stryker-js-effect/9e81669b84711a9635eaa97b17dd13efea9f0c8c";
     # are-the-types-wrong-effect at `@systemfsoftware/arethetypeswrong-cli@v4.2.0`,
     # for its `attw` binary. Nothing follows, for the same reason.
     are-the-types-wrong-effect.url = "github:systemfsoftware/are-the-types-wrong-effect/d43a8020f7dc82a32de410823c6da5298c53a3b6";
