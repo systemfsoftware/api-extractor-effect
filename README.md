@@ -66,7 +66,8 @@ process.stdout.write(ApiModel.serialise(analysis.model))
 ```
 
 `readPackage` takes each export whose `@systemfsoftware/source` condition names a
-`.ts`, `.tsx`, `.mts` or `.cts` file as an entry point; `readPackage({ packageRoot,
+`.ts`, `.tsx`, `.mts` or `.cts` file, or a hand-written `.d.ts`, `.d.mts` or `.d.cts`
+file, as an entry point; `readPackage({ packageRoot,
 sourceCondition })` reads another condition instead, for example `types` for a package
 whose sources are not under the family's condition. A subpath pattern (`"./*"`)
 expands to one entry per matching source under Node's `exports` rules, and an explicit

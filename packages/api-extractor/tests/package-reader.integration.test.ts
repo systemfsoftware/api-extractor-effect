@@ -48,6 +48,17 @@ const commonJsEntryPackage = packageOf(
 
 const patternPackage = packageOf({ './*': { [condition]: './src/*.ts' } }, { 'src/a.ts': '', 'src/b.ts': '', 'src/nested/c.ts': '' })
 
+const loopPatternPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'package-reader-' })
+  yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0', exports: { './*': { [condition]: './src/*.ts' } } }))
+  yield* fileSystem.makeDirectory(path.join(root, 'src'), { recursive: true })
+  yield* fileSystem.writeFileString(path.join(root, 'src/a.ts'), '')
+  yield* fileSystem.symlink('.', path.join(root, 'src/loop'))
+  return root
+})
+
 const explicitOverridePackage = packageOf(
   { './special': { [condition]: './src/b.ts' }, './*': { [condition]: './src/*.ts' } },
   { 'src/a.ts': '', 'src/b.ts': '', 'src/special.ts': '' },
@@ -109,6 +120,24 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
+      'a package whose exports name hand-written declaration files reads them as entry points',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./src/index.d.ts` at `.` and `./src/legacy.d.cts` at `./legacy`')('packageRoot', () =>
+          packageOf(
+            { '.': { [condition]: './src/index.d.ts' }, './legacy': { [condition]: './src/legacy.d.cts' } },
+            { 'src/index.d.ts': 'export declare const a: number\n', 'src/legacy.d.cts': 'export declare const b: number\n' },
+          )),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('each declaration file is its own entry source')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([
+            { exportPath: '.', sourceFile: 'src/index.d.ts' },
+            { exportPath: './legacy', sourceFile: 'src/legacy.d.cts' },
+          ])
+        ),
+      ),
+    )
+
+    scenario(
       'a pattern export expands to one entry per source file under the target directory',
       Gherkin.Do.pipe(
         Given('a package exporting every `./src/<name>.ts` through `"./*"`')('packageRoot', () => patternPackage),
@@ -119,6 +148,17 @@ Feature("A package's exports name its entry points")
             { exportPath: './b', sourceFile: 'src/b.ts' },
             { exportPath: './nested/c', sourceFile: 'src/nested/c.ts' },
           ])
+        ),
+      ),
+    )
+
+    scenario(
+      'a pattern export walks a self-referential symlinked directory only once',
+      Gherkin.Do.pipe(
+        Given('a package exporting every `./src/<name>.ts` through `"./*"` where `src/loop` is a symlink back to `src`')('packageRoot', () => loopPatternPackage),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only the real source is read, the symlink loop contributing no entry')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: './a', sourceFile: 'src/a.ts' }])
         ),
       ),
     )

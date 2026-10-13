@@ -85,17 +85,78 @@ const withinRoot = (path: Path.Path, root: string, candidate: string): Option.Op
 
 type Platform = FileSystem.FileSystem | Path.Path
 
-const walkDirectory = (root: string, directory: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+type WalkState = {
+  readonly visited: HashSet.HashSet<string>
+  readonly names: ReadonlyArray<string>
+}
+
+const emptyWalk = (visited: HashSet.HashSet<string>): WalkState => ({ visited, names: [] })
+
+const keepName = (state: WalkState, name: string): WalkState => ({ visited: state.visited, names: Arr.append(state.names, name) })
+
+const mergeWalk = (state: WalkState, walked: WalkState): WalkState => ({ visited: walked.visited, names: Arr.appendAll(state.names, walked.names) })
+
+const listNames = (directory: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    return yield* fileSystem.readDirectory(directory).pipe(Effect.catchIf(isAbsent, () => Effect.succeed<ReadonlyArray<string>>([])))
+  })
+
+const isDirectory = (childPath: string): Effect.Effect<boolean, PlatformError, Platform> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    return yield* fileSystem.stat(childPath).pipe(
+      Effect.map((info) => info.type === 'Directory'),
+      Effect.catchIf(isAbsent, () => Effect.succeed(false)),
+    )
+  })
+
+const directoryRealPath = (childPath: string): Effect.Effect<Option.Option<string>, PlatformError, Platform> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    return yield* (yield* isDirectory(childPath))
+      ? Effect.asSome(fileSystem.realPath(childPath))
+      : Effect.succeed(Option.none<string>())
+  })
+
+const walkStep = (root: string, relative: string, visited: HashSet.HashSet<string>): Effect.Effect<WalkState, PlatformError, Platform> =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path
+    const names = yield* listNames(path.join(root, relative))
+    return yield* Effect.reduce(names, () => emptyWalk(visited), stepChild(root, relative))
+  })
+
+const enterDirectory = (root: string, relative: string, state: WalkState, realPath: string): Effect.Effect<WalkState, PlatformError, Platform> =>
+  HashSet.has(state.visited, realPath)
+    ? Effect.succeed(state)
+    : Effect.map(walkStep(root, relative, HashSet.add(state.visited, realPath)), (walked) => mergeWalk(state, walked))
+
+const stepChild = (root: string, relative: string) =>
+  (state: WalkState, name: string): Effect.Effect<WalkState, PlatformError, Platform> =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path
+      const childRelative = joinRelative(path, relative, name)
+      return yield* Option.match(yield* directoryRealPath(path.join(root, relative, name)), {
+        onNone: () => Effect.succeed(keepName(state, childRelative)),
+        onSome: (realPath) => enterDirectory(root, childRelative, state, realPath),
+      })
+    })
+
+const walkRelative = (root: string, relative: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
+    const absolute = path.join(root, relative)
+    const seed = yield* fileSystem.realPath(absolute).pipe(Effect.catchIf(isAbsent, () => Effect.succeed(absolute)))
+    return (yield* walkStep(root, relative, HashSet.make(seed))).names
+  })
+
+const walkDirectory = (root: string, directory: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path
     return yield* Option.match(withinRoot(path, root, path.resolve(root, directory)), {
       onNone: () => Effect.succeed<ReadonlyArray<string>>([]),
-      onSome: (relative) =>
-        fileSystem.readDirectory(path.join(root, relative), { recursive: true }).pipe(
-          Effect.catchIf(isAbsent, () => Effect.succeed<ReadonlyArray<string>>([])),
-          Effect.map((names) => names.map((name) => joinRelative(path, relative, name))),
-        ),
+      onSome: (relative) => walkRelative(root, relative),
     })
   })
 
