@@ -297,8 +297,9 @@ const EMPTY_PARTS: ScopeParts = { declarations: [], imports: [], exports: [], st
 
 type DeclaredResult = Effect.Effect<ReadonlyArray<Declared>, UnsupportedDeclaration>
 
-const named = <A>(id: { readonly name: string } | null, declared: (name: string) => A): ReadonlyArray<A> =>
-  id === null ? [] : [declared(id.name)]
+const DEFAULT_EXPORT_NAME = 'default'
+
+const declarationName = (id: { readonly name: string } | null): string => (id === null ? DEFAULT_EXPORT_NAME : id.name)
 
 const variablesOf = (node: VariableDeclaration, file: string): DeclaredResult =>
   Effect.forEach(node.declarations, (declarator) =>
@@ -317,8 +318,9 @@ const declaredOf = (node: DeclarationNode | Statement | ExportDefaultDeclaration
   Match.value(node).pipe(
     Match.when({ type: 'VariableDeclaration' }, (variable) => variablesOf(variable, file)),
     Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (fn: FunctionNode) =>
-      Effect.succeed(named<Declared>(fn.id, (name) => ({ kind: 'function', node: fn, name })))),
-    Match.when({ type: 'ClassDeclaration' }, (cls: Class) => Effect.succeed(named<Declared>(cls.id, (name) => ({ kind: 'class', node: cls, name })))),
+      Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'function', node: fn, name: declarationName(fn.id) }])),
+    Match.when({ type: 'ClassDeclaration' }, (cls: Class) =>
+      Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'class', node: cls, name: declarationName(cls.id) }])),
     Match.when({ type: 'TSInterfaceDeclaration' }, (iface) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'interface', node: iface, name: iface.id.name }])),
     Match.when({ type: 'TSTypeAliasDeclaration' }, (alias) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'typeAlias', node: alias, name: alias.id.name }])),
     Match.when({ type: 'TSEnumDeclaration' }, (enumeration) =>
@@ -338,7 +340,7 @@ const importedNameOf = (specifier: ImportDeclarationSpecifier): string =>
     Match.discriminatorsExhaustive('type')({
       ImportSpecifier: (named) => moduleNameOf(named.imported),
       ImportNamespaceSpecifier: () => '*',
-      ImportDefaultSpecifier: () => 'default',
+      ImportDefaultSpecifier: () => DEFAULT_EXPORT_NAME,
     }),
   )
 
@@ -367,12 +369,12 @@ const exportNamedParts = (statement: ExportNamedDeclaration, file: string): Effe
 const defaultExportOf = (declared: ReadonlyArray<Declared>, statementStart: number): ScopeParts =>
   Option.match(Arr.head(declared), {
     onNone: () => EMPTY_PARTS,
-    onSome: (first) => ({ ...declarationsPart(declared, statementStart), exports: [['default', { kind: 'local', local: first.name }]] }),
+    onSome: (first) => ({ ...declarationsPart(declared, statementStart), exports: [[DEFAULT_EXPORT_NAME, { kind: 'local', local: first.name }]] }),
   })
 
 const exportDefaultParts = (statement: ExportDefaultDeclaration, file: string): Effect.Effect<ScopeParts, UnsupportedDeclaration> =>
   Match.value(statement.declaration).pipe(
-    Match.when({ type: 'Identifier' }, (identifier) => Effect.succeed<ScopeParts>({ ...EMPTY_PARTS, exports: [['default', { kind: 'local', local: identifier.name }]] })),
+    Match.when({ type: 'Identifier' }, (identifier) => Effect.succeed<ScopeParts>({ ...EMPTY_PARTS, exports: [[DEFAULT_EXPORT_NAME, { kind: 'local', local: identifier.name }]] })),
     Match.whenOr(
       { type: 'FunctionDeclaration' },
       { type: 'TSDeclareFunction' },
@@ -406,18 +408,29 @@ const grouped = <A>(entries: ReadonlyArray<readonly [string, A]>): HashMap.HashM
   Arr.reduce(entries, HashMap.empty<string, ReadonlyArray<A>>(), (groups, [key, value]) =>
     HashMap.set(groups, key, [...Option.getOrElse(HashMap.get(groups, key), (): ReadonlyArray<A> => []), value]))
 
-const isEmptyExportList = (node: ExportNamedDeclaration): boolean => node.declaration === null && node.specifiers.length === 0
-
-const isExportBlocker = (statement: Directive | Statement): boolean =>
-  Match.value(statement).pipe(
-    Match.when({ type: 'ExportNamedDeclaration' }, isEmptyExportList),
+const declaresDefault = (node: ExportDefaultDeclaration): boolean =>
+  Match.value(node.declaration).pipe(
+    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration') }, () => true),
     Match.orElse(() => false),
   )
 
+const stopsImplicitExports = (statement: Directive | Statement): boolean =>
+  Match.value(statement).pipe(
+    Match.discriminators('type')({
+      ExportNamedDeclaration: (node) => node.declaration === null,
+      ExportAllDeclaration: () => true,
+      ExportDefaultDeclaration: (node) => !declaresDefault(node),
+    }),
+    Match.orElse(() => false),
+  )
+
+const exportsNothing = (part: ScopeParts): boolean => part.exports.length === 0 && part.starExports.length === 0
+
+const implicitNames = (part: ScopeParts): ReadonlyArray<readonly [string, ExportBinding]> =>
+  exportsNothing(part) ? part.declarations.map(([name]) => [name, { kind: 'local', local: name }] as const) : []
+
 const implicitExports = (program: Program, parts: ReadonlyArray<ScopeParts>): ReadonlyArray<readonly [string, ExportBinding]> =>
-  program.body.some(isExportBlocker)
-    ? []
-    : parts.flatMap((part) => part.declarations.map(([name]) => [name, { kind: 'local', local: name }] as const))
+  program.body.some(stopsImplicitExports) ? [] : parts.flatMap(implicitNames)
 
 const scopeOf = (file: DeclarationFile): Effect.Effect<FileScope, UnsupportedDeclaration> =>
   Effect.gen(function* () {
@@ -483,7 +496,7 @@ const boundExport = (graph: DeclarationGraph, scope: FileScope, binding: ExportB
     : importTarget(graph, scope.path, { specifier: binding.specifier, imported: binding.imported }, seen)
 
 const starredExport = (graph: DeclarationGraph, scope: FileScope, name: string, seen: Seen): Option.Option<ResolvedSymbol> =>
-  name === 'default'
+  name === DEFAULT_EXPORT_NAME
     ? Option.none()
     : Arr.findFirst(scope.starExports, (specifier) =>
       Option.flatMap(resolveFile(graph, scope.path, specifier), (target) => exportedFrom(graph, target, name, seen)))

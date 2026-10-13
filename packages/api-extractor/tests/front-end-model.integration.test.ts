@@ -28,6 +28,8 @@ const itemOf = (model: Model, path: string, name: string, kind: Item['kind']): I
 const itemsNamed = (model: Model, path: string, name: string): ReadonlyArray<Item> =>
   entryAt(model, path).items.filter((item) => item.name === name)
 
+const itemNames = (model: Model, path: string): ReadonlyArray<string> => entryAt(model, path).items.map((item) => item.name)
+
 const builtOf = (given: FrontEnd.Declarations) => FrontEnd.buildModel(given)
 
 Feature('Building a package API model from its declaration text')
@@ -546,6 +548,194 @@ Feature('Building a package API model from its declaration text')
               members: [{ kind: 'property', name: 'value', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } }],
             },
             boxed: { kind: 'typeAlias', type: { kind: 'text', text: '{ [K in "a"]: { set value(input: string) } }' } },
+          })),
+      ),
+    )
+
+    scenario(
+      'an unnamed default function models the same default item as a named one',
+      Gherkin.Do.pipe(
+        Given('one entry declaring a named default function and another declaring the same function unnamed')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['named.d.ts', 'export default function format(x: number): string;\n'],
+                ['unnamed.d.ts', 'export default function(x: number): string;\n'],
+              ],
+              [
+                ['.', 'named.d.ts'],
+                ['./unnamed', 'unnamed.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the unnamed entry models the default function the named entry models')((scope, expect) =>
+          expect({ unnamed: itemOf(scope.model, './unnamed', 'default', 'function') }).toEqual({
+            unnamed: itemOf(scope.model, '.', 'default', 'function'),
+          })),
+      ),
+    )
+
+    scenario(
+      'an unnamed default class models the same default item as a named one',
+      Gherkin.Do.pipe(
+        Given('one entry declaring a named default class and another declaring the same class unnamed')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['named.d.ts', 'export default class Widget {\n\tm(): void;\n}\n'],
+                ['unnamed.d.ts', 'export default class {\n\tm(): void;\n}\n'],
+              ],
+              [
+                ['.', 'named.d.ts'],
+                ['./unnamed', 'unnamed.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the unnamed entry models the default class the named entry models')((scope, expect) =>
+          expect({ unnamed: itemOf(scope.model, './unnamed', 'default', 'class') }).toEqual({
+            unnamed: itemOf(scope.model, '.', 'default', 'class'),
+          })),
+      ),
+    )
+
+    scenario(
+      'a module that lists its exports offers only the names it lists',
+      Gherkin.Do.pipe(
+        Given('an entry exporting one value under another name and an entry whose export list is empty')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['renamed.d.ts', 'declare const x: number\nexport { x as y }\n'],
+                ['nothing.d.ts', 'declare const x: number\nexport {}\n'],
+              ],
+              [
+                ['.', 'renamed.d.ts'],
+                ['./nothing', 'nothing.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each entry offers exactly the names a consumer can import from it')((scope, expect) =>
+          expect({ renamed: itemNames(scope.model, '.'), nothing: itemNames(scope.model, './nothing') }).toEqual({
+            renamed: ['y'],
+            nothing: [],
+          })),
+      ),
+    )
+
+    scenario(
+      'a module that assigns its default export offers no other name',
+      Gherkin.Do.pipe(
+        Given('an entry assigning its default export to one of two declarations')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'declare const x: number\ndeclare const z: number\nexport default x\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the entry offers the default name alone, bound to the assigned declaration')((scope, expect) =>
+          expect({
+            names: itemNames(scope.model, '.'),
+            default: itemOf(scope.model, '.', 'default', 'variable'),
+          }).toEqual({
+            names: ['default'],
+            default: { kind: 'variable', name: 'default', constant: true, type: { kind: 'keyword', name: 'number' } },
+          })),
+      ),
+    )
+
+    scenario(
+      'a module that re-exports from another file offers only those names',
+      Gherkin.Do.pipe(
+        Given('three entries re-exporting everything, one name and everything as a namespace from another file')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['star.d.ts', "export * from './b.js'\ndeclare const x: number\n"],
+                ['named.d.ts', "export { q } from './b.js'\ndeclare const x: number\n"],
+                ['namespace.d.ts', "export * as ns from './b.js'\ndeclare const x: number\n"],
+                ['b.d.ts', 'export declare const q: number\n'],
+              ],
+              [
+                ['.', 'star.d.ts'],
+                ['./named', 'named.d.ts'],
+                ['./namespace', 'namespace.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each entry offers exactly the names a consumer can import from it')((scope, expect) =>
+          expect({
+            star: itemNames(scope.model, '.'),
+            named: itemNames(scope.model, './named'),
+            namespace: itemNames(scope.model, './namespace'),
+          }).toEqual({ star: ['q'], named: ['q'], namespace: ['ns'] })),
+      ),
+    )
+
+    scenario(
+      'a module that exports by declaring keeps the declarations it does not export',
+      Gherkin.Do.pipe(
+        Given('an entry declaring a default class beside an unexported class and an entry exporting one declaration beside another')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['default.d.ts', 'export default class Widget {\n\tm(): void;\n}\ndeclare class Hidden {}\n'],
+                ['declared.d.ts', 'export declare const y: number\ndeclare const z: number\n'],
+              ],
+              [
+                ['.', 'default.d.ts'],
+                ['./declared', 'declared.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each entry offers exactly the names a consumer can import from it')((scope, expect) =>
+          expect({
+            declared: itemNames(scope.model, '.'),
+            exported: itemNames(scope.model, './declared'),
+          }).toEqual({ declared: ['Hidden', 'default'], exported: ['y', 'z'] })),
+      ),
+    )
+
+    scenario(
+      'an interface with an index, a call and a construct signature keeps all three members',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `interface Callable { [key: string]: number; <A>(self: A): A; new (x: string): Callable }`')(
+          'declarations',
+          () =>
+            Effect.succeed(
+              declarations([
+                ['index.d.ts', 'export interface Callable {\n  [key: string]: number\n  <A>(self: A): A\n  new (x: string): Callable\n}\n'],
+              ]),
+            ),
+        ),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the interface carries the index signature, the call signature and the construct signature as a `new` method')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Callable', 'interface')).toMatchObject({
+            kind: 'interface',
+            name: 'Callable',
+            members: [
+              { kind: 'property', name: '[key: string]', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
+              {
+                kind: 'call',
+                signature: {
+                  typeParameters: [{ name: 'A' }],
+                  parameters: [{ name: 'self', type: { kind: 'reference', name: 'A', args: [] }, optional: false, rest: false }],
+                  returns: { kind: 'reference', name: 'A', args: [] },
+                },
+              },
+              {
+                kind: 'method',
+                name: 'new',
+                optional: false,
+                signatures: [
+                  {
+                    typeParameters: [],
+                    parameters: [{ name: 'x', type: { kind: 'keyword', name: 'string' }, optional: false, rest: false }],
+                    returns: { kind: 'reference', name: 'Callable', args: [] },
+                  },
+                ],
+              },
+            ],
           })),
       ),
     )

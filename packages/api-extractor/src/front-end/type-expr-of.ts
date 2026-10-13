@@ -484,11 +484,6 @@ const literalExpr = (context: TypeContext, node: TSLiteralType): Effect.Effect<T
 
 export const TypeExprs: {
   readonly typeExprOf: (context: TypeContext, node: TSType) => Effect.Effect<TypeExpr, UnsupportedDeclaration>
-  readonly annotationTypeOrDefault: (
-    context: TypeContext,
-    annotation: TSTypeAnnotation | null | undefined,
-    fallback: KeywordName,
-  ) => Effect.Effect<TypeExpr, UnsupportedDeclaration>
   readonly typeParametersOf: (
     context: TypeContext,
     declaration: TSTypeParameterDeclaration | null | undefined,
@@ -499,7 +494,6 @@ export const TypeExprs: {
     params: ReadonlyArray<ParamPattern>,
     returnType: TSTypeAnnotation | null | undefined,
   ) => Effect.Effect<Signature, UnsupportedDeclaration>
-  readonly parametersOf: (context: TypeContext, params: ReadonlyArray<ParamPattern>) => Effect.Effect<ReadonlyArray<Parameter>, UnsupportedDeclaration>
   readonly referenceToExpression: (
     context: TypeContext,
     expression: Expression,
@@ -510,10 +504,8 @@ export const TypeExprs: {
   readonly classMembersOf: (context: TypeContext, elements: ReadonlyArray<ClassElement>) => Effect.Effect<ReadonlyArray<Member>, UnsupportedDeclaration>
 } = {
   typeExprOf: typeExprOf,
-  annotationTypeOrDefault: annotationTypeOrDefault,
   typeParametersOf: typeParametersOf,
   signatureOf: signatureOf,
-  parametersOf: parametersOf,
   referenceToExpression: referenceToExpression,
   heritageOf: heritageOf,
   membersOf: membersOf,
