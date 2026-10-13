@@ -96,8 +96,11 @@ from the producer stamp (`producer.declarations`), which names the emitter that 
 
 The builder refuses a package with `UnsupportedDeclaration`, naming the file and the
 construct, when its declarations contain one of these constructs, which model schema
-version 2 cannot hold:
+version 2 cannot hold. The compiler fallback refuses the same way when a declaration it
+emitted imports a relative path that names no declaration file inside the package.
 
+- a destructuring declaration, a variable without a type, `import x = require(...)`,
+  `export as namespace` and `export default` of an expression
 - an entry point that re-exports a name from another package (`export { it } from 'vitest'`).
   The whole package is refused, not just that export.
 - `declare global` and module augmentation (`declare module 'vitest'`)
