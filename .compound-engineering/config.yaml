@@ -1,5 +1,5 @@
 packs:
   - source: https://github.com/systemfsoftware/systemfsoftware.git
-    ref: df908ddfe497e53c1c03b92519a96c913c441a58
+    ref: 8d071180798f9ea82ef5a4fd877152dacc02f6b6
     path: compound-packs
-    pack: [cell-architecture, boundary-testing, schema-laws, package-topology]
+    pack: [cell-architecture, boundary-testing, schema-laws, package-topology, ci-wall-clock]
