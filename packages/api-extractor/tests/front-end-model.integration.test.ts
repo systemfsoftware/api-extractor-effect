@@ -855,4 +855,29 @@ Feature('Building a package API model from its declaration text')
           })),
       ),
     )
+
+    scenario(
+      'a package with two entry points models each entry from its own file',
+      Gherkin.Do.pipe(
+        Given('a main entry and a `./util` entry, each declaring its own value')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['index.d.ts', 'export declare const main: string\n'],
+                ['util.d.ts', 'export declare const helper: number\n'],
+              ],
+              [
+                ['./util', 'util.d.ts'],
+                ['.', 'index.d.ts'],
+              ],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the model lists both entries in path order, each with only its own value')((scope, expect) =>
+          expect(scope.model.entryPoints.map((entry) => ({ path: entry.path, names: entry.items.map((item) => item.name) }))).toEqual([
+            { path: '.', names: ['main'] },
+            { path: './util', names: ['helper'] },
+          ])),
+      ),
+    )
   })

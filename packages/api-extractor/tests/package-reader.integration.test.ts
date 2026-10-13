@@ -190,4 +190,29 @@ Feature("A package's exports name its entry points")
         ),
       ),
     )
+
+    scenario(
+      'a caller may name another source condition, and the reader follows only that one',
+      Gherkin.Do.pipe(
+        Given('a package whose `.` entry names `./src/mod.ts` under the family condition and `./src/other.ts` under a `development` condition')(
+          'packageRoot',
+          () =>
+            packageOf(
+              { '.': { [condition]: './src/mod.ts', development: './src/other.ts' } },
+              { 'src/mod.ts': 'export const mod: number = 1\n', 'src/other.ts': 'export const other: number = 1\n' },
+            ),
+        ),
+        When('the package reader reads it once with the default condition and once with `development`')('entryPoints', (scope) =>
+          Effect.all({
+            family: entryPointsOf(scope.packageRoot),
+            development: Effect.map(FrontEnd.readPackage({ packageRoot: scope.packageRoot, sourceCondition: 'development' }), (source) => source.entryPoints),
+          })),
+        Then('each read takes the source its condition names')((scope, expect) =>
+          expect(scope.entryPoints).toEqual({
+            family: [{ exportPath: '.', sourceFile: 'src/mod.ts' }],
+            development: [{ exportPath: '.', sourceFile: 'src/other.ts' }],
+          })
+        ),
+      ),
+    )
   })
