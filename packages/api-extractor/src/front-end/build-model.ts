@@ -85,7 +85,7 @@ const assignNames = (exported: ReadonlyArray<string>, reachable: HashMap.HashMap
   ).assigned
 
 const replaceNames = (text: string, rename: HashMap.HashMap<string, string>): string =>
-  Arr.reduce(HashMap.toEntries(rename), text, (accumulated, [key, name]) => accumulated.replaceAll(key, name))
+  Arr.reduce(HashMap.toEntries(rename), text, (accumulated, [key, name]) => accumulated.replaceAll(key, () => name))
 
 const constraintField = (parameter: TypeParameter, rename: HashMap.HashMap<string, string>): Pick<TypeParameter, 'constraint'> =>
   Option.match(Option.fromNullishOr(parameter.constraint), { onNone: () => ({}), onSome: (constraint) => ({ constraint: renameType(constraint, rename) }) })
@@ -203,7 +203,7 @@ const localNameOf = (
   declarations: ReadonlyArray<Declaration>,
 ): Effect.Effect<string> =>
   Option.match(HashMap.get(exported, localKey(file, name)), {
-    onNone: () => (declaresTypeAlias(declarations) ? recordLocal(reachable, file, name, declarations) : Effect.succeed(name)),
+    onNone: () => recordLocal(reachable, file, name, declarations),
     onSome: (exportName) => Effect.succeed(exportName),
   })
 
@@ -598,7 +598,10 @@ const buildReachableLocals = (
     Effect.gen(function* () {
       const known = yield* Ref.get(reachable)
       const done = yield* Ref.get(built)
-      const pending = Arr.filter(HashMap.keys(known), (key) => !HashMap.has(done, key))
+      const pending = Arr.map(
+        Arr.filter(HashMap.values(known), (local) => declaresTypeAlias(local.declarations) && !HashMap.has(done, local.key)),
+        (local) => local.key,
+      )
       return yield* Arr.match(pending, {
         onEmpty: () => Effect.void,
         onNonEmpty: (keys) => Effect.flatMap(Effect.forEach(keys, (key) => buildOneLocal(contextFor, reachable, built, key)), () => drain()),

@@ -739,4 +739,120 @@ Feature('Building a package API model from its declaration text')
           })),
       ),
     )
+
+    scenario(
+      'a callback or constructable type nested in another type reads as the compiler writes it',
+      Gherkin.Do.pipe(
+        Given('an entry declaring a tuple of callback types beside a constructable type')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export declare const handlers: [cb: (x: number) => string, done?: () => void]\n' +
+                  'export declare type Build = new (x: number) => object\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each callback reads as an arrow and the constructable type as a `new` arrow')((scope, expect) =>
+          expect({
+            handlers: itemOf(scope.model, '.', 'handlers', 'variable'),
+            build: itemOf(scope.model, '.', 'Build', 'typeAlias'),
+          }).toMatchObject({
+            handlers: { type: { kind: 'text', text: '[cb: (x: number) => string, done?: () => void]' } },
+            build: { type: { kind: 'text', text: 'new (x: number) => object' } },
+          })),
+      ),
+    )
+
+    scenario(
+      'a local alias whose name contains dollar signs keeps its name where a text type names it',
+      Gherkin.Do.pipe(
+        Given('an entry whose text type names two aliases it reaches, their names containing dollar signs')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                "import type { T$$ as First, $$T as Second } from './a.js'\n" +
+                  'export declare type M = { readonly [P in keyof First]: Second }\n',
+              ],
+              ['a.d.ts', 'export type T$$ = { readonly a: string }\nexport type $$T = { readonly b: number }\n'],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the alias names inside the text are unchanged and match the locals')((scope, expect) =>
+          expect({
+            m: itemOf(scope.model, '.', 'M', 'typeAlias'),
+            locals: entryAt(scope.model, '.').locals.map((local) => local.name),
+          }).toMatchObject({
+            m: { kind: 'typeAlias', type: { kind: 'text', text: '{ readonly [P in keyof T$$]: $$T }' } },
+            locals: ['$$T', 'T$$'],
+          })),
+      ),
+    )
+
+    scenario(
+      'a declaration a file keeps hidden is a reference of its own, not the exported name',
+      Gherkin.Do.pipe(
+        Given('an entry re-exporting an interface and three functions whose result types name hidden declarations, two of them sharing a name')(
+          'declarations',
+          () =>
+            Effect.succeed(
+              declarations([
+                [
+                  'index.d.ts',
+                  "export { Item } from './item.js'\n" +
+                    "export { make } from './make.js'\n" +
+                    "export { a } from './a.js'\n" +
+                    "export { b } from './b.js'\n",
+                ],
+                ['item.d.ts', 'export interface Item { readonly id: string }\n'],
+                ['make.d.ts', 'interface Item { readonly other: number }\nexport declare function make(): Item\nexport {}\n'],
+                ['a.d.ts', 'interface Opts { readonly a: string }\nexport declare function a(): Opts\nexport {}\n'],
+                ['b.d.ts', 'interface Opts { readonly b: number }\nexport declare function b(): Opts\nexport {}\n'],
+              ]),
+            ),
+        ),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each hidden declaration becomes its own reference, distinct from the exported name')((scope, expect) =>
+          expect({
+            exported: itemOf(scope.model, '.', 'Item', 'interface'),
+            make: itemOf(scope.model, '.', 'make', 'function'),
+            a: itemOf(scope.model, '.', 'a', 'function'),
+            b: itemOf(scope.model, '.', 'b', 'function'),
+          }).toMatchObject({
+            exported: { kind: 'interface', name: 'Item' },
+            make: { signatures: [{ returns: { kind: 'reference', name: 'Item_2', args: [] } }] },
+            a: { signatures: [{ returns: { kind: 'reference', name: 'Opts', args: [] } }] },
+            b: { signatures: [{ returns: { kind: 'reference', name: 'Opts_2', args: [] } }] },
+          })),
+      ),
+    )
+
+    scenario(
+      'two files that re-export each other offer each other’s exports once',
+      Gherkin.Do.pipe(
+        Given('an entry whose file re-exports a file that re-exports it back, each file declaring one value')('declarations', () =>
+          Effect.succeed(
+            declarations(
+              [
+                ['a.d.ts', "export * from './b.js'\nexport declare const a: string\n"],
+                ['b.d.ts', "export * from './a.js'\nexport declare const b: number\n"],
+              ],
+              [['.', 'a.d.ts']],
+            ),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the entry offers each file’s own value, once')((scope, expect) =>
+          expect({
+            names: itemNames(scope.model, '.'),
+            a: itemOf(scope.model, '.', 'a', 'variable'),
+            b: itemOf(scope.model, '.', 'b', 'variable'),
+          }).toEqual({
+            names: ['a', 'b'],
+            a: { kind: 'variable', name: 'a', constant: true, type: { kind: 'keyword', name: 'string' } },
+            b: { kind: 'variable', name: 'b', constant: true, type: { kind: 'keyword', name: 'number' } },
+          })),
+      ),
+    )
   })

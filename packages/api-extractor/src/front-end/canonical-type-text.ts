@@ -277,19 +277,29 @@ const printMethodTail = (
     Match.orElse(() => Effect.map(printAnnotationOrDefault(context, returnType, 'any'), (type) => `: ${type}`)),
   )
 
+const printArrowTail = (
+  context: TypeContext,
+  returnType: TSTypeAnnotation | null,
+): Effect.Effect<string, UnsupportedDeclaration> =>
+  Effect.map(printAnnotationOrDefault(context, returnType, 'any'), (type) => ` => ${type}`)
+
+type ReturnTail = (context: TypeContext, returnType: TSTypeAnnotation | null) => Effect.Effect<string, UnsupportedDeclaration>
+
+const methodTail = (kind: TSMethodSignatureKind): ReturnTail => (context, returnType) => printMethodTail(context, kind, returnType)
+
 const printSignatureLike = (
   context: TypeContext,
   typeParameters: TSTypeParameterDeclaration | null,
   params: ReadonlyArray<ParamPattern>,
   returnType: TSTypeAnnotation | null,
-  kind: TSMethodSignatureKind,
+  tail: ReturnTail,
   decorate: (parts: { readonly typeParameters: string; readonly parameters: string; readonly returnType: string }) => string,
 ): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const inner = withTypeParameters(context, typeParameterNames(typeParameters))
     const printedTypeParameters = yield* printTypeParameters(inner, typeParameters)
     const printedParameters = yield* printParameters(inner, params)
-    const printedReturnType = yield* printMethodTail(inner, kind, returnType)
+    const printedReturnType = yield* tail(inner, returnType)
     return decorate({ typeParameters: printedTypeParameters, parameters: printedParameters, returnType: printedReturnType })
   })
 
@@ -305,7 +315,7 @@ const printMethodSignature = (context: TypeContext, member: TSMethodSignature): 
   Option.match(propertyKeyName(member.key), {
     onNone: () => refuse(context.file, `a ${member.key.type} method name`),
     onSome: (name) =>
-      printSignatureLike(context, member.typeParameters, member.params, member.returnType, member.kind, (parts) =>
+      printSignatureLike(context, member.typeParameters, member.params, member.returnType, methodTail(member.kind), (parts) =>
         `${methodPrefix(member.kind)}${name}${optionalMark(member.optional)}${parts.typeParameters}(${parts.parameters})${parts.returnType}`),
   })
 
@@ -317,11 +327,11 @@ const methodPrefix = (kind: TSMethodSignatureKind): string =>
   )
 
 const printCallSignature = (context: TypeContext, member: TSCallSignatureDeclaration): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, member.typeParameters, member.params, member.returnType, 'method', (parts) =>
+  printSignatureLike(context, member.typeParameters, member.params, member.returnType, methodTail('method'), (parts) =>
     `${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printConstructSignature = (context: TypeContext, member: TSConstructSignatureDeclaration): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, member.typeParameters, member.params, member.returnType, 'method', (parts) =>
+  printSignatureLike(context, member.typeParameters, member.params, member.returnType, methodTail('method'), (parts) =>
     `new ${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printIndexSignature = (context: TypeContext, member: TSIndexSignature): Effect.Effect<string, UnsupportedDeclaration> =>
@@ -374,12 +384,12 @@ const printTuple = (context: TypeContext, node: TSTupleType): Effect.Effect<stri
   Effect.map(Effect.forEach(node.elementTypes, (element) => printTupleElement(context, element)), (parts) => `[${parts.join(', ')}]`)
 
 const printFunctionType = (context: TypeContext, node: TSFunctionType): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, node.typeParameters, node.params, node.returnType, 'method', (parts) =>
-    `${parts.typeParameters}(${parts.parameters}) =>${parts.returnType}`)
+  printSignatureLike(context, node.typeParameters, node.params, node.returnType, printArrowTail, (parts) =>
+    `${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printConstructorType = (context: TypeContext, node: TSConstructorType): Effect.Effect<string, UnsupportedDeclaration> =>
-  printSignatureLike(context, node.typeParameters, node.params, node.returnType, 'method', (parts) =>
-    `${node.abstract ? 'abstract ' : ''}new ${parts.typeParameters}(${parts.parameters}) =>${parts.returnType}`)
+  printSignatureLike(context, node.typeParameters, node.params, node.returnType, printArrowTail, (parts) =>
+    `${node.abstract ? 'abstract ' : ''}new ${parts.typeParameters}(${parts.parameters})${parts.returnType}`)
 
 const printTypeReference = (context: TypeContext, node: TSTypeReference): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
