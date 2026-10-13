@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-2310-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-2333-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -451,7 +451,7 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Rulings, fixes** (each scenario fails at the commit named, unless marked as pinning existing behaviour):
   - H1 (correctness P2): a conditional type's `infer U` was resolved in the true branch like a declaration, so an imported `U` printed `import("pkg").U` and a hidden `V` printed `V_2`. Each file's conditionals record the names their `extends` clause binds, and the true branch prints with them in scope (`2dd44cb`). Builder scenario; fails at `a6300c7`.
   - H2 (DeepSeek delta P3): merged enum bodies that repeat a member name built a model `ApiModel.decode` rejects (`Expected enum members unique by key`, probed). The builder refuses it naming the member (`0e1d692`). Builder scenario; fails at `2dd44cb`.
-  - H3 (probe of the DeepSeek delta residual): a namespace or enum declared twice inside a namespace body stayed two items, while the top level merges them (U16 G2). Namespace bodies merge by name at every depth through the same item builders (`0e1d692`). Builder scenario; fails at `2dd44cb`. This package's own model bytes are unchanged (host digest `e4478f03…6da2`).
+  - H3 (probe of the DeepSeek delta residual): a namespace or enum declared twice inside a namespace body stayed two items, while the top level merges them (U16 G2). Namespace bodies merge by name at every depth through the same item builders (`0e1d692`). Builder scenario; fails at `2dd44cb`. Corrected by U18 I7: this package declares no namespace, so its own analysis is no evidence for the rewrite; U18 I1 records the statement form the rewrite dropped.
   - H4 (DeepSeek delta P3, api-contract P3): the README's refusal list now names every `UnsupportedDeclaration` cause in `src` (checked against each `refuse` call) and documents `readPackage`'s `sourceCondition` option (`0e1d692`).
   - H5 (testing P2, P3 and gap): pinning scenarios for the destructuring-parameter, dotted-namespace, unparseable-text and bare-import-type refusals (`0e1d692`), and for a bare-path or absent `exports` refused with `NoSourceEntry` (`68502ef`).
   - H6 (maintainability P3): one `refuse` helper (exported from `declaration-graph.ts`; the preset forbids a non-schema export from `front-end-error.schema.ts`) and one `directoryOf` (`0e1d692`).
@@ -471,6 +471,29 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
   - Security residuals and gaps (native parse of untrusted text, symlinked pattern directories, a symlinked package root, a tsconfig including files outside the package) and the DeepSeek and testing gaps above U16 assigned: unchanged owners and triggers.
 - **Preserved:** U11-U16 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `a6300c7..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U18. Rulings on the full-path review at `460f429`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `460f429` (run `20261013-233424-460f4299`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `a6300c7..460f429`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer accounted for all 52 pack rules and found none contradicted on an unsettled basis; its pre-existing ci-wall-clock rows (job timeouts below the backstop, the changeset check's dev shell, split gate jobs) concern `.github` files this branch does not change and stay with PR5. Project-standards, performance and api-contract reported no finding.
+- **Requirements:** R3, R6, R7, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at the commit named):
+  - I1 (testing P1, DeepSeek delta P1): `0e1d692` read an export-modified statement in a namespace body through the declaration-node path, which has no namespace arm, so `export namespace M` inside `N` was dropped. The exported declaration takes the same statement path as an unexported one (`e0790d6`). Builder scenario; fails at `460f429`.
+  - I2 (security residual, probed): the pattern walk used Node's recursive `readdir`, which follows a symlinked directory; on node v24.21.0 `src/loop -> .` listed `loop/a.ts`, `loop/loop/a.ts`, ... (82 names until `ELOOP`), so one loop added about 40 bogus entries and several loops made `readPackage` effectively never return. The walk lists one directory at a time and enters each real path once (`fef7fe8`). Reader scenario; fails at `e0790d6`.
+  - I3 (DeepSeek peer P3, probed): a reference inside a namespace body resolved against the file scope only, so with `import type { A } from 'pkg'` a function in `N` returning `N`'s own `A` modelled `A` from `pkg`. A body's declared names are in scope for its items, as type parameters are (`1f3d00c`). Builder scenario; fails at `e0790d6`.
+  - I4 (DeepSeek delta residual): `import X = M.Y` inside a namespace body was dropped silently; it is refused as at the top of a file (`1f3d00c`). Builder scenario; fails without the new arm.
+  - I5 (maintainability P3): the namespace-body grouping reuses `declaration-graph.ts`'s `grouped` (`1f3d00c`).
+  - I6 (correctness P3 and gap): the README names hand-written `.d.ts`, `.d.mts` and `.d.cts` entry files, and a reader scenario pins them (`fef7fe8`, existing behaviour).
+  - I7 (DeepSeek delta P3): U17 H3 cited the host digest, which samples generated models and never runs a front-end. The claim is corrected above. Measured instead: this package's `analyse` output (model and messages) has sha256 `cbcb540d…3b34` at `a6300c7`, at `2dd44cb` and with the U18 fixes; it declares no namespace, so this shows no collateral change only.
+- **Rulings, rejected:**
+  - Maintainability P2, seven per-kind extractors in `build-model.ts`: U12 A7 kept them.
+  - Reliability P3, the blanket `catchCause` at `typescript-7-compiler.ts:97` and `:230`: U15 rejected it with probe evidence.
+  - DeepSeek delta residual, an `infer` in the `extends` clause of a conditional nested inside another conditional's `extends` clause is bound by the inner conditional only: TypeScript binds an `infer` declaration to the nearest enclosing conditional whose `extends` clause holds it, which is the inner one.
+- **Follow-ups:**
+  - Adversarial P3 and residuals, and the correctness residual: the profile harness discovers entry sources from the manifest itself instead of `readPackage`, has no `.cts`/`.mts` import candidates, copies `analyse`'s routing, and compares TypeScript 7 with 5.9.3 rather than oxc with `tsc`; reliability residual, it drops an unreadable emitted file from its outputs. Owner: PR5. Trigger: PR5 moving the profile into its benchmark lane and re-recording it on `readPackage` and `analyse`.
+  - DeepSeek peer residual and gap, the resolver walks only a file's exported names and namespace aliases, so a member of a `declare namespace` body draws no analysis message; api-contract residual, `AnalysisMessage`'s `item` and `symbol` fields mean different things per message id and are not documented; testing gaps, the oracle compares only the first entry point and several refusal constructs (unsupported members, computed names, a qualified namespace name inside a body, a heritage expression, an unmatched oxc message as a `Note`) have no scenario. Owner: PR4. Trigger: PR4's differential lane against upstream 7.59.1 (KTD13's arbiter for resolver gaps), its adversarial corpus, and its renderer, which documents the message fields it reads.
+  - Security residuals (native parse of untrusted text, a symlinked source escaping the package, a symlinked package root) and the adversarial residual on the fallback's mirrored `node_modules` ancestry: unchanged owners and triggers (U16).
+- **Preserved:** U11-U17 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `460f429..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
 ---
 
@@ -494,7 +517,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U17 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U18 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
