@@ -117,7 +117,7 @@ const renameReference = (reference: TypeExpr & { readonly kind: 'reference' }, r
   const args = reference.args.map((argument) => renameType(argument, rename))
   return Option.match(Option.fromNullishOr(reference.module), {
     onSome: () => ({ ...reference, args }),
-    onNone: () => ({ ...reference, name: Option.getOrElse(HashMap.get(rename, reference.name), () => reference.name), args }),
+    onNone: () => ({ ...reference, name: replaceNames(reference.name, rename), args }),
   })
 }
 
@@ -179,9 +179,6 @@ const reverseIndex = (graph: DeclarationGraph, file: string, exported: ReadonlyA
           Match.orElse(() => index),
         ),
     }))
-
-const declaresTypeAlias = (declarations: ReadonlyArray<Declaration>): boolean =>
-  Arr.some(declarations, (declaration) => declaration.declared.kind === 'typeAlias')
 
 const recordLocal = (
   reachable: Ref.Ref<HashMap.HashMap<string, LocalDeclaration>>,
@@ -428,11 +425,11 @@ const enumItemOf = (
 ): Effect.Effect<Option.Option<ApiItem>, UnsupportedDeclaration> =>
   Arr.match(nodes, {
     onEmpty: () => Effect.succeedNone,
-    onNonEmpty: ([node]) =>
+    onNonEmpty: (present) =>
       Effect.asSome(
         Effect.map(
-          Effect.forEach(node.body.members, (member) => enumMemberOf(context, member)),
-          (members): ApiItem => ({ kind: 'enum', name, const: node.const, members }),
+          Effect.forEach(present.flatMap((node) => node.body.members), (member) => enumMemberOf(context, member)),
+          (members): ApiItem => ({ kind: 'enum', name, const: Arr.headNonEmpty(present).const, members }),
         ),
       ),
   })
@@ -444,8 +441,14 @@ const namespaceItemOf = (
 ): Effect.Effect<Option.Option<ApiItem>, UnsupportedDeclaration> =>
   Arr.match(nodes, {
     onEmpty: () => Effect.succeedNone,
-    onNonEmpty: ([node]) =>
-      Effect.asSome(Effect.map(namespaceBodyItems(context, node.body), (items): ApiItem => ({ kind: 'namespace', name, items }))),
+    onNonEmpty: (present) =>
+      Effect.asSome(
+        Effect.map(Effect.forEach(present, (node) => namespaceBodyItems(context, node.body)), (bodies): ApiItem => ({
+          kind: 'namespace',
+          name,
+          items: bodies.flat(),
+        })),
+      ),
   })
 
 const namespaceBodyItems = (context: TypeContext, body: TSModuleBlock | null): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
@@ -568,26 +571,17 @@ const itemsForExport = (
       ),
   })
 
+type PendingAlias = { readonly local: LocalDeclaration; readonly node: TSTypeAliasDeclaration }
+
+const pendingAliasOf = (done: HashMap.HashMap<string, TypeAliasItem>) => (local: LocalDeclaration): Option.Option<PendingAlias> =>
+  HashMap.has(done, local.key) ? Option.none() : Option.map(Arr.head(typeAliasesIn(local.declarations)), (node) => ({ local, node }))
+
 const buildOneLocal = (
   contextFor: (file: string) => TypeContext,
-  reachable: Ref.Ref<HashMap.HashMap<string, LocalDeclaration>>,
   built: Ref.Ref<HashMap.HashMap<string, TypeAliasItem>>,
-  key: string,
+  { local, node }: PendingAlias,
 ): Effect.Effect<void, UnsupportedDeclaration> =>
-  Effect.gen(function* () {
-    const known = yield* Ref.get(reachable)
-    return yield* Option.match(HashMap.get(known, key), {
-      onNone: () => Effect.void,
-      onSome: (local) =>
-        Effect.flatMap(
-          Arr.match(typeAliasesIn(local.declarations), {
-            onEmpty: () => refuse(local.file, `a local "${local.name}" that is not a type alias`),
-            onNonEmpty: ([node]) => typeAliasItem(contextFor(local.file), node, local.key),
-          }),
-          (item) => Ref.update(built, HashMap.set(key, item)),
-        ),
-    })
-  })
+  Effect.flatMap(typeAliasItem(contextFor(local.file), node, local.key), (item) => Ref.update(built, HashMap.set(local.key, item)))
 
 const buildReachableLocals = (
   contextFor: (file: string) => TypeContext,
@@ -598,13 +592,9 @@ const buildReachableLocals = (
     Effect.gen(function* () {
       const known = yield* Ref.get(reachable)
       const done = yield* Ref.get(built)
-      const pending = Arr.map(
-        Arr.filter(HashMap.values(known), (local) => declaresTypeAlias(local.declarations) && !HashMap.has(done, local.key)),
-        (local) => local.key,
-      )
-      return yield* Arr.match(pending, {
+      return yield* Arr.match(Arr.getSomes(Arr.fromIterable(HashMap.values(known)).map(pendingAliasOf(done))), {
         onEmpty: () => Effect.void,
-        onNonEmpty: (keys) => Effect.flatMap(Effect.forEach(keys, (key) => buildOneLocal(contextFor, reachable, built, key)), () => drain()),
+        onNonEmpty: (pending) => Effect.flatMap(Effect.forEach(pending, (alias) => buildOneLocal(contextFor, built, alias)), () => drain()),
       })
     })
   return drain()

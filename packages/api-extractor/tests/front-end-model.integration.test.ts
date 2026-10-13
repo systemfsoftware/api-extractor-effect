@@ -880,4 +880,50 @@ Feature('Building a package API model from its declaration text')
           ])),
       ),
     )
+
+    scenario(
+      'a namespace or enum declared twice is one item holding every member',
+      Gherkin.Do.pipe(
+        Given('an entry declaring namespace `N` twice and enum `E` twice, each declaration adding one member')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export declare namespace N { const a: number }\nexport declare namespace N { const b: string }\nexport declare enum E { A = 1 }\nexport declare enum E { B = 2 }\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the namespace holds both values and the enum both members')((scope, expect) =>
+          expect({ namespace: itemOf(scope.model, '.', 'N', 'namespace'), enumeration: itemOf(scope.model, '.', 'E', 'enum') }).toEqual({
+            namespace: {
+              kind: 'namespace',
+              name: 'N',
+              items: [
+                { kind: 'variable', name: 'a', constant: true, type: { kind: 'keyword', name: 'number' } },
+                { kind: 'variable', name: 'b', constant: true, type: { kind: 'keyword', name: 'string' } },
+              ],
+            },
+            enumeration: { kind: 'enum', name: 'E', const: false, members: [{ name: 'A', value: '1' }, { name: 'B', value: '2' }] },
+          })),
+      ),
+    )
+
+    scenario(
+      'a type reached through a namespace the file keeps hidden reads as the file writes it',
+      Gherkin.Do.pipe(
+        Given('an entry exporting `X = C.Inner`, where namespace `C` is declared but not exported')('declarations', () =>
+          Effect.succeed(
+            declarations([['index.d.ts', 'declare namespace C { interface Inner { readonly a: string } }\nexport type X = C.Inner\nexport {}\n']]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('`X` refers to `C.Inner`')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'X', 'typeAlias')).toEqual({
+            kind: 'typeAlias',
+            name: 'X',
+            typeParameters: [],
+            type: { kind: 'reference', name: 'C.Inner', args: [] },
+          })),
+      ),
+    )
   })
