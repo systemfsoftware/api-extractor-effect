@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
+    "@systemfsoftware/effect-schema-recursion-budget": "^2.0.0",
     "turbo": "catalog:"
   }
 }
