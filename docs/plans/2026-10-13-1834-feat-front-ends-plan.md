@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-1629-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-1737-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -304,8 +304,8 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
   - A10: an import whose specifier names no declaration file is no longer dropped. The fast path declines with `NotIsolated` naming the importing file and the specifier, so `tsc` decides; a compiler-emitted declaration whose import names no declaration is refused with `UnsupportedDeclaration`.
   - A11: `.cts` entries are read (`.ts`, `.tsx`, `.mts`, `.cts`).
   - A12: a subpath pattern export (`"./*"`) is expanded against the package's files under Node's rules: the `*` matches any substring, explicit subpaths win, and a longer pattern prefix wins.
-  - D1: an entry's recorded source is authoritative on both routes. `readPackage` refuses an export whose recorded source file is missing (`MissingSource`, naming the export and the file), so neither route models a sibling `.ts` in place of a deleted `.tsx`.
-  - D2: two entry points whose sources share a declaration path are declined by the fast path, and `tsc` refuses them (TS5056).
+  - D1: an entry's recorded source is authoritative on both routes. The fast path loads an entry declaration only from its recorded source and declines with `NotIsolated` when that file is missing or resolves outside the package (ruling #5 keeps that decline); the compiler adapter refuses the same entry with `CompilerRejected` before `tsc` runs. Neither route models a sibling `.ts` in place of a deleted `.tsx`. The reader does not refuse it, because a refusal there would bypass ruling #5's fast-path decline.
+  - D2: two entry points whose sources share a declaration path are declined by the fast path and refused by the compiler adapter before `tsc` runs. `tsc` 7.0.2 does not refuse them: it exits 0 and writes one declaration file for both.
   - B5: a named optional tuple member keeps its `?` in canonical text.
   - C5 and A16: one property-key resolver, shared by the builder and the printer; the private-name case is an explicit decision of each caller.
   - C7 and A17: the entry-point mapping lives once in the declaration graph; each emitter keeps only its own refusal.
@@ -333,6 +333,9 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
   - schema-laws/refusals-beside-generated-laws: not violated. The generated laws are retired on `main` (#9), the rule's refusal-law clause is superseded by #761, and after C3 no refined codec remains in the diff.
   - ci-wall-clock/flake-outputs-build-once-on-main: pre-existing (`ci.yml` is byte-identical to base) and outside this diff. Follow-up owned by the CI benchmark unit (PR5, origin U9), triggered when PR5 changes the `sfs-deps` job.
   - D3: KTD3's argument list now lives in the emit policy above, which includes `stripInternal: false`.
+- **Rulings, delta review** (DeepSeek, `openrouter/deepseek/deepseek-v4.1-flash`, over `2c13063..8efc442`):
+  - P2, D1 contract text: accepted. This plan corrects D1 and D2 to what the adapters do; the earlier text named a reader refusal (`MissingSource`) that would have reversed ruling #5.
+  - P3, the exit cause is dropped when the API also reports errors: rejected. Every reported diagnostic is a real `tsc` error and the package is refused either way; carrying `tsc`'s printed output in every refusal would put package-influenced text into all of them. A write failure the API cannot see still surfaces alone, through the exit diagnostic.
 - **Preserved:** the R2 property-by-property decisions of U11 stand as recorded at `2c13063`; C3 then deletes the codecs they were about. The PR1 counterexample (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`) is recorded and not re-run.
 - **Test expectation:** each fix above names its scenario; each scenario fails at `2c13063` and passes after its fix. e2e cases extend the existing refusal and equality journeys (KTD11 keeps four journeys).
 - **Verification:** the Verification Contract gates, a named DeepSeek delta review over the fix commits, and a fresh full-path receipt at the final head.
