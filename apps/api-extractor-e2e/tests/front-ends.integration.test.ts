@@ -85,6 +85,23 @@ const nodeModulesTypesPackage = fallingBackPackage(
   { ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, types: ['greeting/globals'] } },
 )
 
+const underNodeModulesPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'front-ends-under-node-modules-' })
+  const packageRoot = path.join(parent, 'node_modules', 'installed')
+  const files: Readonly<Record<string, string>> = {
+    'node_modules/greeting/package.json': JSON.stringify({ name: 'greeting', version: '1.0.0', exports: { './globals': { types: './globals.d.ts' } } }),
+    'node_modules/greeting/globals.d.ts': 'declare interface Greeting { readonly text: string }\n',
+    'node_modules/installed/package.json': manifestWith('installed', { '.': './src/mod.ts' }),
+    'node_modules/installed/tsconfig.json': JSON.stringify({ ...STANDALONE_TSCONFIG, compilerOptions: { ...STANDALONE_TSCONFIG.compilerOptions, types: ['greeting/globals'] } }),
+    'node_modules/installed/src/mod.ts': 'export const greeting: Greeting = { text: "hi" }\n',
+  }
+  yield* Effect.forEach(Object.entries(files), ([file, text]) =>
+    Effect.andThen(fileSystem.makeDirectory(path.dirname(path.join(parent, file)), { recursive: true }), fileSystem.writeFileString(path.join(parent, file), text)))
+  return yield* FrontEnd.readPackage({ packageRoot })
+})
+
 const defaultIncludePackage = fallingBackPackage(
   'default-include',
   { '.': './src/mod.ts' },
@@ -200,7 +217,7 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files, and wherever the package is installed',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
@@ -208,6 +225,7 @@ Feature('Both front-ends reduce a package to one model')
         Given('a package whose tsconfig sends declarations to `declarationDir: "types"`')('declarationDir', () => declarationDirPackage),
         Given('a package whose tsconfig names a global type from its own `typeRoots: ["./types"]`')('typeRoots', () => declaredTypeRootsPackage),
         Given('a package whose tsconfig names a global type from a dependency in its own node_modules, `types: ["greeting/globals"]`')('nodeModulesTypes', () => nodeModulesTypesPackage),
+        Given('a package installed under a `node_modules` directory whose tsconfig names a global type from a sibling dependency')('underNodeModules', () => underNodeModulesPackage),
         Given('a package whose tsconfig names no `include`, so every file under it is compiled')('defaultInclude', () => defaultIncludePackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
@@ -217,6 +235,7 @@ Feature('Both front-ends reduce a package to one model')
             declarationDir: throughBothRoutes(scope.declarationDir),
             typeRoots: throughBothRoutes(scope.typeRoots),
             nodeModulesTypes: throughBothRoutes(scope.nodeModulesTypes),
+            underNodeModules: throughBothRoutes(scope.underNodeModules),
             defaultInclude: throughBothRoutes(scope.defaultInclude),
             wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
           })
@@ -231,6 +250,7 @@ Feature('Both front-ends reduce a package to one model')
             declarationDir: scope.analyses.declarationDir.compiled,
             typeRoots: scope.analyses.typeRoots.compiled,
             nodeModulesTypes: scope.analyses.nodeModulesTypes.compiled,
+            underNodeModules: scope.analyses.underNodeModules.compiled,
             defaultInclude: scope.analyses.defaultInclude.compiled,
             wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
@@ -242,6 +262,7 @@ Feature('Both front-ends reduce a package to one model')
             declarationDir: scope.analyses.declarationDir.isolated,
             typeRoots: scope.analyses.typeRoots.isolated,
             nodeModulesTypes: scope.analyses.nodeModulesTypes.isolated,
+            underNodeModules: scope.analyses.underNodeModules.isolated,
             defaultInclude: scope.analyses.defaultInclude.isolated,
             wroteIntoPackage: false,
           })

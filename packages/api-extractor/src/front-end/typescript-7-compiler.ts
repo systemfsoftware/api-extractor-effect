@@ -66,17 +66,28 @@ const ancestorsOf = (path: Path.Path, directory: string): ReadonlyArray<string> 
   return parent === directory ? [directory] : [directory, ...ancestorsOf(path, parent)]
 }
 
+const NODE_MODULES = 'node_modules'
+
+const MIRRORED_NODE_MODULES_SEGMENT = 'node_modules.mirrored'
+
+const mirroredSegment = (segment: string): string => (segment === NODE_MODULES ? MIRRORED_NODE_MODULES_SEGMENT : segment)
+
 const mirroredDirectory = (path: Path.Path, mirrorRoot: string, directory: string): string =>
-  path.join(mirrorRoot, path.relative(path.parse(directory).root, directory))
+  path.join(mirrorRoot, ...path.relative(path.parse(directory).root, directory).split(path.sep).map(mirroredSegment))
+
+const looksUpNodeModules = (path: Path.Path, directory: string): boolean => path.basename(directory) !== NODE_MODULES
 
 const mirrorNodeModules = (mirrorRoot: string, directory: string): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const mirrored = mirroredDirectory(path, mirrorRoot, directory)
-    const nodeModules = path.join(directory, 'node_modules')
+    const nodeModules = path.join(directory, NODE_MODULES)
     yield* fileSystem.makeDirectory(mirrored, { recursive: true })
-    yield* Effect.when(fileSystem.symlink(nodeModules, path.join(mirrored, 'node_modules')), fileSystem.exists(nodeModules))
+    yield* Effect.when(
+      fileSystem.symlink(nodeModules, path.join(mirrored, NODE_MODULES)),
+      Effect.map(fileSystem.exists(nodeModules), (exists) => exists && looksUpNodeModules(path, directory)),
+    )
   })
 
 const packageFileNames = (packageRoot: string, tsconfigPath: string): Effect.Effect<Option.Option<ReadonlyArray<string>>> =>
