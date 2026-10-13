@@ -78,7 +78,7 @@ export const declarationCandidates: {
   Option.match(normalisedPath(joinedSpecifier(fromDeclaration, specifier)), { onNone: () => [], onSome: candidatesForBase }))
 
 export const declarationPathOf = (sourceFile: string): string =>
-  sourceFile.replace(/\.([mc]?)tsx?$/, (_, flavour: string) => declarationExtensionOf(flavour))
+  DECLARATION_EXTENSION.test(sourceFile) ? sourceFile : sourceFile.replace(/\.([mc]?)tsx?$/, (_, flavour: string) => declarationExtensionOf(flavour))
 
 export type EntryDeclaration = {
   readonly exportPath: string

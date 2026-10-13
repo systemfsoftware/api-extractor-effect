@@ -286,6 +286,9 @@ const declarationsOf = (
       }),
   )
 
+const compilerEntryDeclarations = (entryPoints: ReadonlyArray<SourceEntryPoint>): ReadonlyArray<EntryDeclaration> =>
+  entryPointDeclarations(entryPoints.filter((entry) => !isDeclarationFile(entry.sourceFile)))
+
 const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
   Effect.gen(function* () {
     const path = yield* Path.Path
@@ -298,7 +301,8 @@ const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
       ),
     )
     const entryPoints = entryPointDeclarations(source.entryPoints)
-    return yield* Arr.match(missingEntryDeclarations(HashSet.fromIterable(HashMap.keys(emitted)), entryPoints.map((entry) => entry.declarationFile)), {
+    const emittedEntries = compilerEntryDeclarations(source.entryPoints).map((entry) => entry.declarationFile)
+    return yield* Arr.match(missingEntryDeclarations(HashSet.fromIterable(HashMap.keys(emitted)), emittedEntries), {
       onEmpty: () => Effect.flatMap(fileSystem.realPath(source.packageRoot), (realRoot) => declarationsOf(source, entryPoints, handWrittenOr(source, realRoot, emitted))),
       onNonEmpty: (missing) => Effect.fail(new CompilerRejected({ diagnostics: missing.map(missingEntryDiagnostic) })),
     })

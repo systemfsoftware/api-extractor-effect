@@ -119,6 +119,13 @@ const handWrittenDeclarationPackage = fallingBackPackage(
   STANDALONE_TSCONFIG,
 )
 
+const handWrittenEntryPackage = fallingBackPackage(
+  'hand-written-entry',
+  { '.': './src/index.d.ts' },
+  { 'src/index.d.ts': 'export declare const a: number;\n' },
+  STANDALONE_TSCONFIG,
+)
+
 const forgedCodesPackage = packageWith(
   'forged-codes',
   [
@@ -218,6 +225,7 @@ const analysedThrough = <E, Id>(emitter: Effect.Effect<FrontEnd.DeclarationEmitt
       exports: model.entryPoints.flatMap((entry) => entry.items.map((item) => item.name)),
       messages: yield* FrontEnd.resolveMessages(declarations),
       files: declarations.files.map((file) => file.path),
+      entries: declarations.entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: entry.declarationFile })),
     }
   })
 
@@ -232,7 +240,7 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files, wherever the package is installed, and when a source imports a hand-written declaration file',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files, wherever the package is installed, and when a source or an entry point names a hand-written declaration file',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
@@ -243,6 +251,7 @@ Feature('Both front-ends reduce a package to one model')
         Given('a package installed under a `node_modules` directory whose tsconfig names a global type from a sibling dependency')('underNodeModules', () => underNodeModulesPackage),
         Given('a package whose tsconfig names no `include`, so every file under it is compiled')('defaultInclude', () => defaultIncludePackage),
         Given('a package whose source imports a type from a hand-written `shape.d.ts` beside it')('handWritten', () => handWrittenDeclarationPackage),
+        Given('a package whose entry point names a hand-written `index.d.ts` beside it')('handWrittenEntry', () => handWrittenEntryPackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
             ownPackage: throughBothRoutes(scope.source),
@@ -254,6 +263,7 @@ Feature('Both front-ends reduce a package to one model')
             underNodeModules: throughBothRoutes(scope.underNodeModules),
             defaultInclude: throughBothRoutes(scope.defaultInclude),
             handWritten: throughBothRoutes(scope.handWritten),
+            handWrittenEntry: throughBothRoutes(scope.handWrittenEntry),
             wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
           })
         ),
@@ -271,6 +281,9 @@ Feature('Both front-ends reduce a package to one model')
             defaultInclude: scope.analyses.defaultInclude.compiled,
             handWritten: scope.analyses.handWritten.compiled,
             handWrittenFiles: scope.analyses.handWritten.compiled.files,
+            handWrittenEntry: scope.analyses.handWrittenEntry.compiled,
+            handWrittenEntryEntries: scope.analyses.handWrittenEntry.compiled.entries,
+            handWrittenEntryExports: scope.analyses.handWrittenEntry.compiled.exports,
             wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
             ownPackage: scope.analyses.ownPackage.isolated,
@@ -285,6 +298,9 @@ Feature('Both front-ends reduce a package to one model')
             defaultInclude: scope.analyses.defaultInclude.isolated,
             handWritten: scope.analyses.handWritten.isolated,
             handWrittenFiles: ['src/mod.d.ts', 'src/shape.d.ts'],
+            handWrittenEntry: scope.analyses.handWrittenEntry.isolated,
+            handWrittenEntryEntries: [{ exportPath: '.', declarationFile: 'src/index.d.ts' }],
+            handWrittenEntryExports: ['a'],
             wroteIntoPackage: false,
           })
         ),
