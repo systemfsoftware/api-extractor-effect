@@ -19,7 +19,7 @@ The design and its requirements live in
 | systemfsoftware and stryker-js-effect packages from the flake (`.sfs-deps`) | in this repository |
 | Lint, typecheck, build and test on systemfsoftware's reusable checks; tsdown, vitest and lint presets | in this repository |
 | Releases: changesets and GitHub Releases through pnpm-release-management | in this repository |
-| Mutation testing on `main` | in this repository: systemfsoftware's reusable mutation workflow at `02bf965` (#735), incremental per push |
+| Mutation testing on `main` | in this repository: systemfsoftware's reusable mutation workflow at `02bf965` (#735), nightly and by manual dispatch on `main` |
 
 ## The verdict
 

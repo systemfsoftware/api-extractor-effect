@@ -21,8 +21,9 @@ verdict. Requirements and decisions: `docs/plans/2026-10-10-1146-feat-effect-api
 - The family lint preset is never overridden locally: no rule set to `off`, ignore
   pattern or disable comment (gate: review of `oxlint.config.ts` and source diffs). A rule
   that forbids correct code is reported upstream as a preset defect.
-- Mutation testing runs in CI only, never on pull requests: on every push to `main`, and
-  by manual dispatch (used to prove the lane on a branch).
+- Mutation testing runs in CI only, on `main`: nightly, and by manual dispatch on `main`.
+  Never per push or on pull requests (gate: `.github/workflows/mutation.yml`'s triggers
+  and its `refs/heads/main` job condition).
 
 ## Commands
 

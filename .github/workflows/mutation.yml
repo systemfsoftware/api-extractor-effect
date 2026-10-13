@@ -1,12 +1,17 @@
+# Cost: at least 25 runner-min/day for the one full run a night; a push to main starts no
+# run, so the 7-day merge rate (5 first-parent commits on main, 2026-10-06T06:00Z to
+# 2026-10-13T06:00Z) does not price it. Each manual dispatch costs one more such run.
+# Per run: 1,469 job-seconds over six jobs, run 38120830653, a floor: Stryker was killed
+# 960 s in with 63 of 1354 mutants done. The proof run's measurement replaces it.
 name: Mutation
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "47 14 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: mutation-${{ github.sha }}
+  group: mutation-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
@@ -14,6 +19,7 @@ permissions:
 
 jobs:
   mutation:
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       actions: write
