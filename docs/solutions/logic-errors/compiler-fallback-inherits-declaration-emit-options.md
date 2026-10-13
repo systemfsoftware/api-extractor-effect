@@ -105,6 +105,13 @@ instead. It did not cover `types` packages, and with it in place the mirror stil
 TS2688 for `vitest/globals`. `paths` needed nothing: a package declaring
 `paths: { "#lib/*": ["./lib/*"] }` compiled through the derived config.
 
+The mirror follows `tsc`'s walk exactly, including its one exception: `tsc` never looks for a
+`node_modules` inside a directory named `node_modules`. A mirrored ancestor named
+`node_modules` therefore gets no symlink, and the mirrored segment is renamed. Without the
+rename, a package installed at `<dir>/node_modules/<name>` made the mirror create
+`<dir>/node_modules` as a real directory and then fail to symlink the same path
+(`AlreadyExists`, reproduced through `CompilerEmitter`).
+
 `isolatedDeclarations` changes whether `tsc` refuses, not what it prints. The fast path
 declines a package with an unannotated export (`NotIsolated`, TS9010) and routes it to the
 fallback. A package whose own tsconfig sets `isolatedDeclarations: true` made the fallback's
@@ -141,14 +148,16 @@ derived at mirror(dirname(packageTsconfig)) = { extends: packageTsconfig, files:
 - A setting that resolves from the config file's directory resolves through the mirrored
   `node_modules` ancestry, and the root files are carried as `files`. Gates, in the same
   journey: the `types: ["greeting/globals"]` case refuses on the fallback when the derived
-  config sits outside the mirror, the `typeRoots: ["./types"]` case when a default chain
-  replaces the declared one, and the no-`include` case when `files` is not carried.
+  config sits outside the mirror, the package installed under `node_modules` fails with
+  `AlreadyExists` when a mirrored `node_modules` segment keeps its name, the
+  `typeRoots: ["./types"]` case refuses when a default chain replaces the declared one, and
+  the no-`include` case when `files` is not carried.
 - Pin every option that makes `tsc` refuse what the fast path routes to it. Gate: the e2e
   scenario "an export with an inferred type routes to the compiler" analyses a package that
   sets `isolatedDeclarations: true` and refuses on the fallback when the option is not pinned.
 
 ## Related
 
-- `docs/plans/2026-10-13-1956-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy; U13 #4 and the mirrored `node_modules` ancestry)
+- `docs/plans/2026-10-13-2019-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy; U13 #4, the mirrored `node_modules` ancestry and its delta ruling)
 - `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md`: a law passes
   vacuously when its corpus lacks the triggering shape
