@@ -126,6 +126,6 @@ derived = { extends: packageTsconfig, files: packageFileNames, compilerOptions: 
 
 ## Related
 
-- `docs/plans/2026-10-13-1737-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy)
+- `docs/plans/2026-10-13-1834-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy)
 - `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md`: a law passes
   vacuously when its corpus lacks the triggering shape
