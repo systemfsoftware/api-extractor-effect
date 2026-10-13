@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-1956-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-2019-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -321,7 +321,7 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
   - C8 and A9: builder scenarios for `declare global`, `declare module "x"` and an external re-export refusal.
   - A8: a builder scenario asserting an interface item's and a class item's full shape.
   - B9: an oracle scenario asserting the full message array, order and de-duplication included.
-  - A18: the upstream comparison also compares each message's entry point and item.
+  - A18: the upstream comparison also compares each forgotten export's entry point; upstream exposes no item, so `item` is asserted by the hand-written scenarios (corrected in U14).
 - **Rulings, rejected:**
   - C2: re-raises ruling #4 (rejected): `tsc` 7.0.2 imports a non-exported interface from an import-bearing `.d.ts`, and adding `export {}` makes the same import TS2459.
   - A7 (six extractors repeating one discriminator): the `2b2e595` validator rejected the same claim at four sites. Each extractor is behaviourally correct and the generic replacement adds a type-level dispatch without removing a defect.
@@ -364,6 +364,35 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Test expectation:** each fix above names its scenario and the commit it fails at. The e2e cases extend the existing routing, refusal and equality journeys (KTD11 keeps four journeys).
 - **Verification:** the Verification Contract gates, a named DeepSeek delta review over `e5ec09d..` the final head, and a fresh full-path receipt at the final head.
 
+### U14. Rulings on the full-path review at `a98496e`, then `main` at `942ac81`
+
+- **Goal:** every finding of the full-path `ce-code-review` at `a98496e` (run `20261013-202026-a98496e3`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer `openrouter/deepseek/deepseek-v4.1-flash`), its anchor-50 suppressions, the orchestrator's export-set evidence and both open pack rows has a ruling: fixed with a public-boundary test that fails before the fix, rejected with a reason, or a follow-up with an owner and a trigger. `main` at `942ac814e7` is then merged plainly, and the review evidence is taken again at the merged head.
+- **Requirements:** R3, R5, R6, R9, R10, R16; KTD5, KTD6, KTD7, KTD8.
+- **The 13:15 decision, already applied in U12:** `2c13063` #1 alias rename (C1, `5a862ac`); #3 forged line (C3, `7520eae`); #4 code-0 rendering (C4, `25d0ef9`); earlier #10 unreadable import (A10, `3e81954`); #11 `.cts` entry and #12 pattern subpath (A11, A12, `fa1f695`); #2 rejected as a re-raise of ruling #4 (C2). Its two pack rows, `arbitrary-filter-floors` and `tagged-unions-over-state-by-presence` in `compiler-output.schema.ts`, were fixed by deleting that file (`7520eae`).
+- **Rulings, fixes:**
+  - E1 (#1, P1, correctness): an anonymous `export default function` or `export default class` is declared under `default`, the name its importer uses. Builder scenario.
+  - E2 (orchestrator, beside #1): the implicit exports of a module declaration file follow `tsc` 7.0.2. A file exports its non-exported declarations only when it has no export declaration (`export {…}`, `export {…} from`, `export * from`) and no export assignment (`export default <expression>`). The local name of `export default class X`, `function X` or `interface X` is never exported (TS2614). Ruling #4 stands: implicit exports exist, and `export {}` stops them. Builder scenarios.
+  - E3 (#8, P2, DeepSeek peer, promoted by reproduction against upstream): release tags are read with `@microsoft/tsdoc`, the parser upstream uses, so a tag word inside a code span or fence is not a tag. Oracle scenario against upstream 7.59.1.
+  - E4 (#2, P2, testing): a builder scenario builds an interface with an index, a call and a construct signature.
+  - E5 (#3, P3, maintainability): `TypeExprs` loses the two members no caller reads.
+  - E6 (#5, P3, api-contract): an undecodable `package.json` is refused with `ManifestRejected` naming the package root; `readPackage`'s error channel no longer carries `Schema.SchemaError`. Reader scenario.
+  - E7 (#6, P3, testing): the e2e TS9010 routing scenario asserts the fallback's `TYPESCRIPT_PRODUCER` stamp.
+  - E8 (DeepSeek anchor-50 note, reproduced): a hand-written `.d.ts` that an emitted declaration imports is read verbatim on both routes, because `tsc` emits nothing for a declaration input. At `a98496e` the fast path declined and the fallback refused the whole package. Equality-journey package.
+  - E9 (pack row schema-laws/rich-type-over-foreign-encoded): `package.json` export targets keep Node's shape as the Encoded side and decode into a tagged `ExportTarget` (path, conditions, fallbacks, excluded) in `package-source.schema.ts`; `read-package.ts` reads only the decoded union. Existing reader scenarios cover every case.
+- **Rulings, rejected:**
+  - #7 (P3, DeepSeek peer; rejected by the validator): upstream's `ExtractorMessage` has no item field, so the oracle cannot compare one. A18 is corrected here to what landed in `55eb06e`: the oracle compares message id, symbol and the entry point of a forgotten export, and `item` is asserted by the hand-written scenarios.
+  - Reliability anchor-50 note (an unreadable source aborts the fast path): a source that is present but unreadable is an environment fault, not a package shape. `tsc` cannot read it either, so declining would only trade the `PlatformError` naming the file for a `CompilerRejected` from the fallback. A missing source still declines (ruling #5), and a directory where a source is expected is skipped (orchestrator probe at `a98496e`: `src/a.ts` as a directory, the fast path read `src/a.tsx`). The failure is not reproducible as the root user, so no test can show it.
+  - Adversarial anchor-50 note (same-stem `.ts` and `.tsx`): `tsc` resolves `./a.js` to `a.ts` before `a.tsx`, and the fast path's candidate order matches. Both routes model `a: number` (orchestrator probe at `a98496e`).
+  - Project-standards anchor-50 note (profile JSON without `canonicalJson`): AGENTS.md's serialiser rule governs the tool's outputs, whose bytes R5 and R7 make host-independent. The profile is a private app's timing record (KTD10); its numbers differ on every run, and no locale API reaches it.
+  - Pack row cell-architecture/sandwich-phase-order: not a violation. The pack's cell is the product's decision, `judgeSurfaces`, run by `verdictCell` (`verdict.cell.ts:23-39`, KTD14). `analyse` is a capability operation over the emitter ports: its requirement channel is the two emitter services (`analyse.ts:38-41`, KTD1). It holds no command and no write phase, and its builder is a parser, not a complexity-1 `Workflow`. A front-end result is the Encoded side of the verdict cell's command (`verdict.cell.ts:12-16`).
+- **Follow-ups:**
+  - #4 (P3, maintainability), the profile harness's copies of the declaration-path, tsconfig and export-map rules. Owner: the CI benchmark unit (PR5, origin U9). Trigger: PR5 moving the profile into its benchmark lane, which re-records it. Changing the harness here would stop the three committed profiles reproducing from it (R13).
+  - ci-wall-clock/one-stuck-job-backstop and flake-outputs-build-once-on-main: pre-existing; `.github`, `flake.nix` and `flake.lock` equal `main`. Owner: PR5. Trigger: PR5 changing a job in `ci.yml`.
+- **Then:** plain-merge `origin/main` at `942ac814e7` (#6 changeset coverage from turbo's build hashes; #11 packs repinned to systemfsoftware `0923912eed`), re-run the gates, the delta lens and the full-path receipt at the merged head, with the packs at `0923912eed`.
+- **Preserved:** U11-U13 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Test expectation:** each fix names its scenario, at the public surface (`FrontEnd.*` or a spawned `tsc`), and fails at `a98496e`. e2e cases extend the existing journeys (KTD11 keeps four).
+- **Verification:** the Verification Contract gates, a named DeepSeek delta lens over the fixing commits, and a fresh full-path receipt at the final head.
+
 ---
 
 ## Verification Contract
@@ -386,7 +415,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U13 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U14 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
