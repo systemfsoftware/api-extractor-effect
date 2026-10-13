@@ -88,6 +88,21 @@ export type EntryDeclaration = {
 export const entryPointDeclarations = (entryPoints: ReadonlyArray<SourceEntryPoint>): ReadonlyArray<EntryDeclaration> =>
   entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
 
+export type SharedDeclaration = {
+  readonly declarationFile: string
+  readonly exportPaths: ReadonlyArray<string>
+}
+
+const exportPathsSharing = (entryPoints: ReadonlyArray<EntryDeclaration>, declarationFile: string): ReadonlyArray<string> =>
+  Arr.sort(entryPoints.filter((entry) => entry.declarationFile === declarationFile).map((entry) => entry.exportPath), Order.String)
+
+export const sharedDeclarations = (entryPoints: ReadonlyArray<EntryDeclaration>): ReadonlyArray<SharedDeclaration> =>
+  Arr.sort(Arr.dedupe(entryPoints.map((entry) => entry.declarationFile)), Order.String).flatMap((declarationFile) =>
+    Option.match(Option.liftPredicate(exportPathsSharing(entryPoints, declarationFile), (exportPaths) => exportPaths.length > 1), {
+      onNone: () => [],
+      onSome: (exportPaths) => [{ declarationFile, exportPaths }],
+    }))
+
 export const missingEntryDeclarations: {
   (emitted: HashSet.HashSet<string>): (entryDeclarations: ReadonlyArray<string>) => ReadonlyArray<string>
   (emitted: HashSet.HashSet<string>, entryDeclarations: ReadonlyArray<string>): ReadonlyArray<string>

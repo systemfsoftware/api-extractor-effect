@@ -2,7 +2,7 @@ import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Orde
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
-import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, sourceCandidatesOf, type ClosureResult, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, sharedDeclarations, sourceCandidatesOf, type ClosureResult, type SharedDeclaration, type UnresolvedImport } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
 import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
 import { NotIsolated, type UnsupportedDeclaration } from './front-end-error.schema.ts'
@@ -84,21 +84,10 @@ const everyEntryEmitted = (files: ReadonlyArray<DeclarationFile>, entryDeclarati
     onNonEmpty: (missing) => Effect.fail(new NotIsolated({ diagnostics: missing.map(missingEntryDiagnostic) })),
   })
 
-const sharedDeclarationDiagnostic = (declarationFile: string, exportPaths: ReadonlyArray<string>): Diagnostic => ({
-  file: declarationFile,
-  message: `two entry points share one declaration file: ${exportPaths.map((exportPath) => `\`${exportPath}\``).join(' and ')}`,
+const sharedDeclarationDiagnostic = (shared: SharedDeclaration): Diagnostic => ({
+  file: shared.declarationFile,
+  message: `two entry points share one declaration file: ${shared.exportPaths.map((exportPath) => `\`${exportPath}\``).join(' and ')}`,
 })
-
-const sharedDeclarationOwners = (entryPoints: ReadonlyArray<EntryDeclaration>, declarationFile: string): ReadonlyArray<string> =>
-  Arr.sort(Arr.map(Arr.filter(entryPoints, (entry) => entry.declarationFile === declarationFile), (entry) => entry.exportPath), Order.String)
-
-const sharedDeclarationDiagnostics = (entryPoints: ReadonlyArray<EntryDeclaration>): ReadonlyArray<Diagnostic> =>
-  Arr.dedupe(entryPoints.map((entry) => entry.declarationFile)).flatMap((declarationFile) =>
-    Option.match(Option.liftPredicate(sharedDeclarationOwners(entryPoints, declarationFile), (exportPaths) => exportPaths.length > 1), {
-      onNone: () => [],
-      onSome: (exportPaths) => [sharedDeclarationDiagnostic(declarationFile, exportPaths)],
-    }),
-  )
 
 const recordedSourceFirst = (recorded: HashMap.HashMap<string, string>) => (declarationFile: string): ReadonlyArray<string> =>
   Option.match(HashMap.get(recorded, declarationFile), {
@@ -113,7 +102,7 @@ const emit = (source: PackageSource) =>
     const emission: Emission = { source, realRoot, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
     const entryPoints = entryPointDeclarations(source.entryPoints)
     const entryDeclarations = entryPoints.map((entry) => entry.declarationFile)
-    yield* Arr.match(sharedDeclarationDiagnostics(entryPoints), {
+    yield* Arr.match(sharedDeclarations(entryPoints).map(sharedDeclarationDiagnostic), {
       onEmpty: () => Effect.void,
       onNonEmpty: (diagnostics) => Effect.fail(new NotIsolated({ diagnostics })),
     })

@@ -6,7 +6,7 @@ const DECLARATION_FILE = /\.d\.[cm]?ts$/
 
 export const isDeclarationFile = (file: string): boolean => DECLARATION_FILE.test(file)
 
-const isAbsent = (error: PlatformError): boolean =>
+export const isAbsent = (error: PlatformError): boolean =>
   Match.value(error.reason).pipe(
     Match.tag('NotFound', 'BadResource', () => true),
     Match.orElse(() => false),

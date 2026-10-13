@@ -3,6 +3,7 @@ import type { PlatformError } from 'effect/PlatformError'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { relativeWithin } from './declaration-graph.ts'
 import { ManifestRejected, NoSourceEntry } from './front-end-error.schema.ts'
+import { isAbsent } from './package-file.ts'
 import { type ExportTarget, PackageManifest } from './package-source.schema.ts'
 
 export const FAMILY_SOURCE_CONDITION = '@systemfsoftware/source'
@@ -84,12 +85,6 @@ const directoryOf = (relative: string): string => {
 
 const joinRelative = (path: Path.Path, relative: string, name: string): string => path.join(relative, name).split(path.sep).join('/')
 
-const absent = (error: PlatformError): boolean =>
-  Match.value(error.reason).pipe(
-    Match.tag('NotFound', 'BadResource', () => true),
-    Match.orElse(() => false),
-  )
-
 const withinRoot = (path: Path.Path, root: string, candidate: string): Option.Option<string> =>
   Option.orElse(relativeWithin(path, root, candidate), () => Option.liftPredicate(path.relative(root, candidate), (relative) => relative === ''))
 
@@ -103,7 +98,7 @@ const walkDirectory = (root: string, directory: string): Effect.Effect<ReadonlyA
       onNone: () => Effect.succeed<ReadonlyArray<string>>([]),
       onSome: (relative) =>
         fileSystem.readDirectory(path.join(root, relative), { recursive: true }).pipe(
-          Effect.catchIf(absent, () => Effect.succeed<ReadonlyArray<string>>([])),
+          Effect.catchIf(isAbsent, () => Effect.succeed<ReadonlyArray<string>>([])),
           Effect.map((names) => names.map((name) => joinRelative(path, relative, name))),
         ),
     })

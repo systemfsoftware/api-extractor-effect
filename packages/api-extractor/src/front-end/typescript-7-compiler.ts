@@ -1,9 +1,9 @@
-import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Order, Path, type Scope, Stream } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Path, type Scope, Stream } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { API, DiagnosticCategory, type Diagnostic as ApiDiagnostic, type Program } from 'typescript/unstable/async'
 import typescriptManifest from 'typescript/package.json' with { type: 'json' }
-import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, relativeWithin, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
+import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, relativeWithin, sharedDeclarations, type EntryDeclaration, type SharedDeclaration, type UnresolvedImport } from './declaration-graph.ts'
 import { CompilerEmitter, type CompilerEmitterId, type DeclarationEmitter } from './declaration-emitter.service.ts'
 import type { Declarations, Diagnostic, PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { CompilerRejected, UnsupportedDeclaration } from './front-end-error.schema.ts'
@@ -336,29 +336,17 @@ const entryProblem = (source: PackageSource) =>
       })
     })
 
-const sharingEntries = (entries: ReadonlyArray<EntryDeclaration>, declarationFile: string): ReadonlyArray<EntryDeclaration> =>
-  entries.filter((entry) => entry.declarationFile === declarationFile)
-
-const sharedDeclarationDiagnostic = (declarationFile: string, entries: ReadonlyArray<EntryDeclaration>): Diagnostic => ({
-  file: declarationFile,
-  message: `the entry points ${entries.map((entry) => entry.exportPath).join(ENTRY_SEPARATOR)} share the declaration file ${declarationFile}`,
+const sharedDeclarationDiagnostic = (shared: SharedDeclaration): Diagnostic => ({
+  file: shared.declarationFile,
+  message: `the entry points ${shared.exportPaths.join(ENTRY_SEPARATOR)} share the declaration file ${shared.declarationFile}`,
 })
-
-const sharedDeclaration = (entries: ReadonlyArray<EntryDeclaration>): Option.Option<Diagnostic> =>
-  Option.flatMap(
-    Arr.findFirst(
-      Arr.sort(Arr.fromIterable(HashSet.fromIterable(entries.map((entry) => entry.declarationFile))), Order.String),
-      (declarationFile) => sharingEntries(entries, declarationFile).length > 1,
-    ),
-    (declarationFile) => Option.some(sharedDeclarationDiagnostic(declarationFile, sharingEntries(entries, declarationFile))),
-  )
 
 const checked = (source: PackageSource): Effect.Effect<void, CompilerRejected | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const problems = Arr.getSomes(yield* Effect.forEach(source.entryPoints, entryProblem(source)))
     return yield* Arr.match(problems, {
       onEmpty: () =>
-        Option.match(sharedDeclaration(entryPointDeclarations(source.entryPoints)), {
+        Option.match(Option.map(Arr.head(sharedDeclarations(entryPointDeclarations(source.entryPoints))), sharedDeclarationDiagnostic), {
           onNone: () => Effect.void,
           onSome: (diagnostic) => Effect.fail(new CompilerRejected({ diagnostics: [diagnostic] })),
         }),
