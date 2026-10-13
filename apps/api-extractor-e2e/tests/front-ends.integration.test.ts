@@ -122,7 +122,7 @@ const handWrittenDeclarationPackage = fallingBackPackage(
 const handWrittenEntryPackage = fallingBackPackage(
   'hand-written-entry',
   { '.': './src/index.d.ts' },
-  { 'src/index.d.ts': 'export declare const a: number;\n' },
+  { 'src/index.d.ts': 'export declare const a: string;\n', 'src/index.ts': 'export const a: number = 1\n' },
   STANDALONE_TSCONFIG,
 )
 
@@ -258,7 +258,7 @@ Feature('Both front-ends reduce a package to one model')
         Given('a package installed under a `node_modules` directory whose tsconfig names a global type from a sibling dependency')('underNodeModules', () => underNodeModulesPackage),
         Given('a package whose tsconfig names no `include`, so every file under it is compiled')('defaultInclude', () => defaultIncludePackage),
         Given('a package whose source imports a type from a hand-written `shape.d.ts` beside it')('handWritten', () => handWrittenDeclarationPackage),
-        Given('a package whose entry point names a hand-written `index.d.ts` beside it')('handWrittenEntry', () => handWrittenEntryPackage),
+        Given('a package whose entry point names a hand-written `index.d.ts` beside an `index.ts` the compiler also compiles')('handWrittenEntry', () => handWrittenEntryPackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
             ownPackage: throughBothRoutes(scope.source),

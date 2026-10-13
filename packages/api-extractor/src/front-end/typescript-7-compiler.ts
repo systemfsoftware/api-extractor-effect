@@ -257,7 +257,7 @@ const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
 })
 
 const unsupportedImport = (unresolved: UnresolvedImport): UnsupportedDeclaration =>
-  new UnsupportedDeclaration({ file: unresolved.file, construct: `the import \`${unresolved.specifier}\` names no declaration file` })
+  new UnsupportedDeclaration({ file: unresolved.file, construct: `the import \`${unresolved.specifier}\` names no declaration file inside the package` })
 
 const handWrittenOr = (source: PackageSource, realRoot: string, emitted: HashMap.HashMap<string, string>) => (declarationFile: string) =>
   Option.match(HashMap.get(emitted, declarationFile), {
@@ -288,6 +288,9 @@ const declarationsOf = (
       }),
   )
 
+const handWrittenEntries = (entryPoints: ReadonlyArray<SourceEntryPoint>): HashSet.HashSet<string> =>
+  HashSet.fromIterable(entryPoints.filter((entry) => isDeclarationFile(entry.sourceFile)).map((entry) => entry.sourceFile))
+
 const compilerEntryDeclarations = (entryPoints: ReadonlyArray<SourceEntryPoint>): ReadonlyArray<EntryDeclaration> =>
   entryPointDeclarations(entryPoints.filter((entry) => !isDeclarationFile(entry.sourceFile)))
 
@@ -297,10 +300,14 @@ const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
     const fileSystem = yield* FileSystem.FileSystem
     const declaredRoot = path.join(run.outDir, path.relative(source.workspaceRoot, source.packageRoot))
     const declared = yield* emittedDeclarationFiles(path, fileSystem, run.outDir, declaredRoot)
-    const emitted = HashMap.fromIterable(
-      yield* Effect.forEach(declared, (declaration) =>
-        Effect.map(fileSystem.readFileString(declaration.emittedFile), (text) => [declaration.declared, text] as const),
+    const handWritten = handWrittenEntries(source.entryPoints)
+    const emitted = HashMap.filter(
+      HashMap.fromIterable(
+        yield* Effect.forEach(declared, (declaration) =>
+          Effect.map(fileSystem.readFileString(declaration.emittedFile), (text) => [declaration.declared, text] as const),
+        ),
       ),
+      (_text, declarationFile) => !HashSet.has(handWritten, declarationFile),
     )
     const entryPoints = entryPointDeclarations(source.entryPoints)
     const emittedEntries = compilerEntryDeclarations(source.entryPoints).map((entry) => entry.declarationFile)
