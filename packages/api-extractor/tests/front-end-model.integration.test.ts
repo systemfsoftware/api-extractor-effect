@@ -101,6 +101,42 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a number spelled two ways by two emitters is one value',
+      Gherkin.Do.pipe(
+        Given('an entry emitted by oxc from `1_000` and `0x10`, and one spelled `1000` and `16` as tsc prints them')('declarations', () =>
+          Effect.sync(() => {
+            const emitted = isolatedDeclarationSync(
+              'numbers.ts',
+              'export enum E { B = 1_000 }\nexport const u = 1_000\nexport type T = 0x10\nexport type K = { 0x10: string }\n',
+            )
+            return declarations(
+              [
+                ['emitted.d.ts', emitted.code],
+                ['printed.d.ts', 'export declare enum E { B = 1000 }\nexport declare const u = 1000;\nexport type T = 16;\nexport type K = { 16: string };\n'],
+              ],
+              [
+                ['.', 'emitted.d.ts'],
+                ['./printed', 'printed.d.ts'],
+              ],
+            )
+          })),
+        When('both are built')('model', (scope) => builtOf(scope.declarations)),
+        Then('both entries hold the same items, each number written as its value')((scope, expect) =>
+          expect({
+            printed: entryAt(scope.model, './printed').items,
+            E: itemOf(scope.model, '.', 'E', 'enum'),
+            u: itemOf(scope.model, '.', 'u', 'variable'),
+            T: itemOf(scope.model, '.', 'T', 'typeAlias'),
+          }).toMatchObject({
+            printed: entryAt(scope.model, '.').items,
+            E: { members: [{ name: 'B', value: '1000' }] },
+            u: { type: { kind: 'literal', text: '1000' } },
+            T: { type: { kind: 'literal', text: '16' } },
+          })),
+      ),
+    )
+
+    scenario(
       'a file re-exported under a namespace becomes a namespace item',
       Gherkin.Do.pipe(
         Given('an entry re-exporting one of its files under a namespace')('declarations', () =>

@@ -117,8 +117,8 @@ const keywordName = (nodeType: KeywordNodeName): KeywordName => Option.getOrThro
 export const literalTextOf = (node: Expression | TSLiteral): Option.Option<string> =>
   Match.value(node).pipe(
     Match.when({ type: 'Literal', value: Match.string }, (literal) => Option.some(JSON.stringify(literal.value))),
-    Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(literal.raw ?? String(literal.value))),
-    Match.when({ type: 'Literal', value: Match.bigint }, (literal) => Option.some(literal.raw ?? `${literal.value}n`)),
+    Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(String(literal.value))),
+    Match.when({ type: 'Literal', value: Match.bigint }, (literal) => Option.some(`${literal.value}n`)),
     Match.when({ type: 'Literal', value: Match.boolean }, (literal) => Option.some(literal.raw ?? String(literal.value))),
     Match.when({ type: 'TemplateLiteral', expressions: [] }, (literal) => Option.map(Arr.head(literal.quasis), (quasi) => `\`${quasi.value.raw}\``)),
     Match.when({ type: 'UnaryExpression', operator: '-' }, (unary) => Option.map(literalTextOf(unary.argument), (text) => `-${text}`)),
@@ -138,7 +138,7 @@ const propertyKeyName = (key: PropertyKey): Option.Option<string> =>
   Match.value(key).pipe(
     Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
     Match.when({ type: 'Literal', value: Match.string }, (literal) => Option.some(JSON.stringify(literal.value))),
-    Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(literal.raw ?? String(literal.value))),
+    Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(String(literal.value))),
     Match.when({ type: 'PrivateIdentifier' }, (identifier) => Option.some(`#${identifier.name}`)),
     Match.when({ type: 'MemberExpression', computed: false, property: { type: 'Identifier' } }, (member) =>
       Option.map(expressionPath(member.object), (base) => `[${[...base, member.property.name].join('.')}]`)),
