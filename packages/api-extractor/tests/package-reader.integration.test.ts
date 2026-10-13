@@ -75,6 +75,21 @@ const suffixlessPatternPackage = packageOf(
   { 'src/mod.ts': '', 'src/data.json': '{}\n', 'src/sub/x.ts': '' },
 )
 
+const dotSegmentPatternPackage = packageOf(
+  { '.': { [condition]: './entry.ts' }, './*': { [condition]: './src/*.ts' } },
+  { 'entry.ts': '', 'src/a.ts': '', 'src/..ts': '', 'src/...ts': '' },
+)
+
+const starlessPatternTargetPackage = packageOf(
+  { '.': { [condition]: './entry.ts' }, './*': { [condition]: './src/plain.ts' } },
+  { 'entry.ts': '', 'src/plain.ts': '' },
+)
+
+const twoStarPatternTargetPackage = packageOf(
+  { '.': { [condition]: './entry.ts' }, './*': { [condition]: './src/*/*.ts' } },
+  { 'entry.ts': '', 'src/a/b.ts': '' },
+)
+
 Feature("A package's exports name its entry points")
   .withLayer(NodeServices.layer)
   .live('the package reader reads real files from disk')
@@ -211,6 +226,31 @@ Feature("A package's exports name its entry points")
           expect(scope.entryPoints).toEqual({
             family: [{ exportPath: '.', sourceFile: 'src/mod.ts' }],
             development: [{ exportPath: '.', sourceFile: 'src/other.ts' }],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'a pattern export whose matched name holds a dot segment, or whose target is not a single-star pattern, names no entry point',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./entry.ts` at `.` and, through `"./*"`, every `./src/<name>.ts` beside files whose names leave a `.` and a `..` export-name segment')(
+          'dotSegment',
+          () => dotSegmentPatternPackage,
+        ),
+        Given('a package whose `"./*"` target `./src/plain.ts` holds no `*`')('starlessTarget', () => starlessPatternTargetPackage),
+        Given('a package whose `"./*"` target `./src/*/*.ts` holds two `*`')('twoStarTarget', () => twoStarPatternTargetPackage),
+        When('the package reader reads all three')('entryPoints', (scope) =>
+          Effect.all({
+            dotSegment: entryPointsOf(scope.dotSegment),
+            starlessTarget: entryPointsOf(scope.starlessTarget),
+            twoStarTarget: entryPointsOf(scope.twoStarTarget),
+          })),
+        Then('each reads only the entries whose export name is one real path segment')((scope, expect) =>
+          expect(scope.entryPoints).toEqual({
+            dotSegment: [{ exportPath: '.', sourceFile: 'entry.ts' }, { exportPath: './a', sourceFile: 'src/a.ts' }],
+            starlessTarget: [{ exportPath: '.', sourceFile: 'entry.ts' }],
+            twoStarTarget: [{ exportPath: '.', sourceFile: 'entry.ts' }],
           })
         ),
       ),

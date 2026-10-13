@@ -291,6 +291,39 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      'Each entry point of a package carries the notes its own file causes, under its own path',
+      Gherkin.Do.pipe(
+        Given('a package whose `.` entry exports one public value and whose `./util` entry exports an untagged function returning a type its file declares but does not export')(
+          'declarations',
+          () =>
+            Effect.sync((): FrontEnd.Declarations => ({
+              producer: 'fixture',
+              package: { name: 'fixture', version: '1.0.0' },
+              entryPoints: [
+                { exportPath: '.', declarationFile: 'index.d.ts' },
+                { exportPath: './util', declarationFile: 'util.d.ts' },
+              ],
+              files: [
+                { path: 'index.d.ts', text: '/** @public */\nexport declare const main: string\n' },
+                { path: 'util.d.ts', text: 'interface Hidden { readonly a: string }\nexport declare function helper(): Hidden\nexport {}\n' },
+              ],
+            }))),
+        When('the notes for each entry point are derived')('messages', (scope) => FrontEnd.resolveMessages(scope.declarations)),
+        Then('the notes naming the util function are reported under `./util` and none under `.`')((scope, expect) =>
+          expect({
+            messages: scope.messages,
+            underMain: scope.messages.filter((message) => message.entryPoint === '.'),
+          }).toEqual({
+            messages: [
+              { messageId: 'ae-forgotten-export', entryPoint: './util', item: 'helper', symbol: 'Hidden' },
+              { messageId: 'ae-missing-release-tag', entryPoint: './util', item: 'helper', symbol: 'helper' },
+            ],
+            underMain: [],
+          })),
+      ),
+    )
+
+    scenario(
       'Every note for this package matches the ones api-extractor derives for it',
       Gherkin.Do.pipe(
         Given('this repository package')('source', () => Effect.flatMap(packageRoot, (root) => FrontEnd.readPackage({ packageRoot: root }))),
