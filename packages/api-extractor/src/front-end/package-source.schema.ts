@@ -1,8 +1,13 @@
 import { Schema } from 'effect'
 
-export const ExportTarget: Schema.Union<readonly [Schema.String, Schema.$Record<Schema.String, Schema.Codec<Schema.Json>>]> = Schema.Union([
+export const ConditionMap: Schema.$Record<Schema.String, Schema.Codec<Schema.Json>> = Schema.Record(Schema.String, Schema.Json)
+export type ConditionMap = typeof ConditionMap.Type
+
+export const ExportTarget: Schema.Union<readonly [Schema.String, Schema.Null, Schema.$Array<Schema.Codec<Schema.Json>>, typeof ConditionMap]> = Schema.Union([
   Schema.String,
-  Schema.Record(Schema.String, Schema.Json),
+  Schema.Null,
+  Schema.Array(Schema.Json),
+  ConditionMap,
 ])
 export type ExportTarget = typeof ExportTarget.Type
 

@@ -3,7 +3,7 @@ import type { PlatformError } from 'effect/PlatformError'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { relativeWithin } from './declaration-graph.ts'
 import { NoSourceEntry } from './front-end-error.schema.ts'
-import { type ExportTarget, PackageManifest } from './package-source.schema.ts'
+import { ConditionMap, type ExportTarget, PackageManifest } from './package-source.schema.ts'
 
 export const FAMILY_SOURCE_CONDITION = '@systemfsoftware/source'
 
@@ -22,8 +22,10 @@ const isString = (value: unknown): value is string => typeof value === 'string'
 
 const stripRelativePrefix = (value: string): string => value.replace(/^\.\//, '')
 
+const isConditionMap = Schema.is(ConditionMap)
+
 const conditionValue = (target: ExportTarget, condition: string): Option.Option<string> =>
-  typeof target === 'string' ? Option.none() : Option.flatMap(Option.fromNullishOr(target[condition]), (value) => Option.liftPredicate(value, isString))
+  Option.flatMap(Option.liftPredicate(target, isConditionMap), (conditions) => Option.liftPredicate(conditions[condition], isString))
 
 const entryPointOf = (condition: string) =>
   ([exportPath, target]: readonly [string, ExportTarget]): Option.Option<SourceEntryPoint> =>
@@ -55,9 +57,13 @@ const matchedSubstring = (prefix: string, suffix: string, candidate: string): Op
     (value) => value.slice(prefix.length, value.length - suffix.length),
   )
 
+const INVALID_SEGMENT = /^(?:|\.|\.\.|node_modules)$/i
+
+const isValidPatternMatch = (substring: string): boolean => !substring.split(/[/\\]/).some((segment) => INVALID_SEGMENT.test(segment))
+
 const patternEntryOf = (key: string, prefix: string, suffix: string) =>
   (candidate: string): Option.Option<PatternEntry> =>
-    Option.map(matchedSubstring(prefix, suffix, candidate), (substring) => ({
+    Option.map(Option.filter(matchedSubstring(prefix, suffix, candidate), isValidPatternMatch), (substring) => ({
       entry: { exportPath: key.replace('*', substring), sourceFile: candidate },
       key,
     }))
@@ -125,7 +131,7 @@ const expandPattern = (root: string, condition: string, key: string, target: Exp
         onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
         onSome: (parts) =>
           Effect.map(walkDirectory(root, directoryOf(stripRelativePrefix(parts.prefix))), (candidates) =>
-            Arr.getSomes(candidates.map(patternEntryOf(key, stripRelativePrefix(parts.prefix), parts.suffix))),
+            Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, stripRelativePrefix(parts.prefix), parts.suffix))),
           ),
       }),
   })

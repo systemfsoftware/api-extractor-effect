@@ -49,6 +49,21 @@ const nestedPatternPackage = packageOf(
   { 'src/x/y.ts': '', 'lib/y.ts': '' },
 )
 
+const excludedTargetPackage = packageOf(
+  { '.': { [condition]: './src/mod.ts' }, './internal/*': null, './legacy': ['./dist/legacy.js'] },
+  { 'src/mod.ts': 'export const mod: number = 1\n' },
+)
+
+const rootPatternPackage = packageOf(
+  { './*': { [condition]: './*.ts' } },
+  { 'mod.ts': '', 'node_modules/dep/index.ts': '' },
+)
+
+const suffixlessPatternPackage = packageOf(
+  { './*': { [condition]: './src/*' } },
+  { 'src/mod.ts': '', 'src/data.json': '{}\n', 'src/sub/x.ts': '' },
+)
+
 Feature("A package's exports name its entry points")
   .withLayer(NodeServices.layer)
   .live('the package reader reads real files from disk')
@@ -115,6 +130,33 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('the shared `./x/y` entry reads from the longer-prefixed pattern')((scope, expect) =>
           expect(scope.entryPoints).toEqual([{ exportPath: './x/y', sourceFile: 'lib/y.ts' }])
+        ),
+      ),
+    )
+
+    scenario(
+      'a null or array export target is skipped, and the package is still read',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./src/mod.ts` at `.`, excluding `./internal/*` with null and listing `./legacy` as a fallback array')('packageRoot', () => excludedTargetPackage),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only the `.` entry is read')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])
+        ),
+      ),
+    )
+
+    scenario(
+      'a pattern export reads only TypeScript sources, and never a match through node_modules',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./<name>.ts` through `"./*"` with a `node_modules` dependency inside it')('rootPattern', () => rootPatternPackage),
+        Given('a package exporting every `./src/<name>` through `"./*"` beside a JSON file and a directory')('suffixless', () => suffixlessPatternPackage),
+        When('the package reader reads both')('entryPoints', (scope) =>
+          Effect.all({ rootPattern: entryPointsOf(scope.rootPattern), suffixless: entryPointsOf(scope.suffixless) })),
+        Then('each reads only its TypeScript sources inside the package')((scope, expect) =>
+          expect(scope.entryPoints).toEqual({
+            rootPattern: [{ exportPath: './mod', sourceFile: 'mod.ts' }],
+            suffixless: [{ exportPath: './mod.ts', sourceFile: 'src/mod.ts' }, { exportPath: './sub/x.ts', sourceFile: 'src/sub/x.ts' }],
+          })
         ),
       ),
     )
