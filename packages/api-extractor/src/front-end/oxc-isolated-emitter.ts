@@ -1,11 +1,12 @@
-import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Option, Order, Path, Ref, Result } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Option, Order, Path, Ref, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
-import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, relativeWithin, sourceCandidatesOf, type ClosureResult, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, sourceCandidatesOf, type ClosureResult, type EntryDeclaration, type UnresolvedImport } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
 import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
 import { NotIsolated, type UnsupportedDeclaration } from './front-end-error.schema.ts'
+import { isDeclarationFile, readPackageFile } from './package-file.ts'
 
 export const OXC_TRANSFORM_PRODUCER: string = `oxc-transform@${oxcTransformManifest.version}`
 
@@ -23,36 +24,11 @@ const diagnosticOrder: Order.Order<Diagnostic> = Order.combineAll([
   Order.mapInput(Order.String, (diagnostic: Diagnostic) => diagnostic.message),
 ])
 
-const isAbsent = (error: PlatformError): boolean =>
-  Match.value(error.reason).pipe(
-    Match.tag('NotFound', 'BadResource', () => true),
-    Match.orElse(() => false),
-  )
-
 type Emission = {
   readonly source: PackageSource
   readonly realRoot: string
   readonly diagnostics: Ref.Ref<ReadonlyArray<Diagnostic>>
 }
-
-const readSource = (emission: Emission, sourceFile: string) =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const real = yield* Effect.option(fileSystem.realPath(path.resolve(emission.source.packageRoot, sourceFile)))
-    return yield* Option.match(real, {
-      onNone: () => Effect.succeedNone,
-      onSome: (realFile) =>
-        Option.match(relativeWithin(path, emission.realRoot, realFile), {
-          onNone: () => Effect.succeedNone,
-          onSome: () =>
-            fileSystem.readFileString(realFile).pipe(
-              Effect.asSome,
-              Effect.catchIf(isAbsent, () => Effect.succeedNone),
-            ),
-        }),
-    })
-  })
 
 const declare = (emission: Emission, sourceFile: string, text: string) =>
   Effect.gen(function* () {
@@ -68,10 +44,10 @@ const firstSource = (
   Arr.match(candidates, {
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: ([sourceFile, ...rest]) =>
-      Effect.flatMap(readSource(emission, sourceFile), (text) =>
+      Effect.flatMap(readPackageFile({ packageRoot: emission.source.packageRoot, realRoot: emission.realRoot, file: sourceFile }), (text) =>
         Option.match(text, {
           onNone: () => firstSource(emission, rest),
-          onSome: (value) => Effect.asSome(declare(emission, sourceFile, value)),
+          onSome: (value) => (isDeclarationFile(sourceFile) ? Effect.succeedSome(value) : Effect.asSome(declare(emission, sourceFile, value))),
         })),
   })
 
@@ -126,7 +102,7 @@ const sharedDeclarationDiagnostics = (entryPoints: ReadonlyArray<EntryDeclaratio
 
 const recordedSourceFirst = (recorded: HashMap.HashMap<string, string>) => (declarationFile: string): ReadonlyArray<string> =>
   Option.match(HashMap.get(recorded, declarationFile), {
-    onNone: () => sourceCandidatesOf(declarationFile),
+    onNone: () => [...sourceCandidatesOf(declarationFile), declarationFile],
     onSome: (sourceFile) => [sourceFile],
   })
 

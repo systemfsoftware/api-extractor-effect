@@ -7,6 +7,7 @@ import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, re
 import { CompilerEmitter, type CompilerEmitterId, type DeclarationEmitter } from './declaration-emitter.service.ts'
 import type { Declarations, Diagnostic, PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { CompilerRejected, UnsupportedDeclaration } from './front-end-error.schema.ts'
+import { isDeclarationFile, readPackageFile } from './package-file.ts'
 
 export const TYPESCRIPT_PRODUCER: string = `typescript@${typescriptManifest.version}`
 
@@ -15,8 +16,6 @@ const TYPESCRIPT_MANIFEST_URL: string = import.meta.resolve('typescript/package.
 const TSC_SCRIPT: string = typescriptManifest.bin.tsc
 
 const DERIVED_CONFIG_NAME = 'tsconfig.json'
-
-const DECLARATION_FILE = /\.d\.[cm]?ts$/
 
 const KEY_SEPARATOR = '\u0000'
 
@@ -247,7 +246,7 @@ const emittedDeclarationFiles = (path: Path.Path, fileSystem: FileSystem.FileSys
   Effect.map(
     fileSystem.readDirectory(outDir, { recursive: true }),
     (names): ReadonlyArray<EmittedDeclaration> =>
-      Arr.getSomes(names.map((name) => path.join(outDir, name)).filter((file) => DECLARATION_FILE.test(file)).map((file) => packageDeclarationOf(path, declaredRoot, file))),
+      Arr.getSomes(names.map((name) => path.join(outDir, name)).filter(isDeclarationFile).map((file) => packageDeclarationOf(path, declaredRoot, file))),
   )
 
 const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
@@ -258,19 +257,25 @@ const missingEntryDiagnostic = (declarationFile: string): Diagnostic => ({
 const unsupportedImport = (unresolved: UnresolvedImport): UnsupportedDeclaration =>
   new UnsupportedDeclaration({ file: unresolved.file, construct: `the import \`${unresolved.specifier}\` names no declaration file` })
 
+const handWrittenOr = (source: PackageSource, realRoot: string, emitted: HashMap.HashMap<string, string>) => (declarationFile: string) =>
+  Option.match(HashMap.get(emitted, declarationFile), {
+    onNone: () => readPackageFile({ packageRoot: source.packageRoot, realRoot, file: declarationFile }),
+    onSome: Effect.succeedSome,
+  })
+
 const declarationsOf = (
   source: PackageSource,
   entryPoints: ReadonlyArray<EntryDeclaration>,
-  emitted: HashMap.HashMap<string, string>,
-): Effect.Effect<Declarations, UnsupportedDeclaration> =>
+  load: (declarationFile: string) => Effect.Effect<Option.Option<string>, PlatformError, FileSystem.FileSystem | Path.Path>,
+): Effect.Effect<Declarations, UnsupportedDeclaration | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.flatMap(
     closeDeclarations({
       entryDeclarations: entryPoints.map((entry) => entry.declarationFile),
-      load: (declarationFile) => Effect.succeed(HashMap.get(emitted, declarationFile)),
+      load,
     }),
     (report) =>
       Arr.match(report.unresolvedImports, {
-        onEmpty: (): Effect.Effect<Declarations, UnsupportedDeclaration> =>
+        onEmpty: (): Effect.Effect<Declarations, UnsupportedDeclaration | PlatformError, FileSystem.FileSystem | Path.Path> =>
           Effect.succeed({
             producer: TYPESCRIPT_PRODUCER,
             package: { name: source.name, version: source.version },
@@ -294,7 +299,7 @@ const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
     )
     const entryPoints = entryPointDeclarations(source.entryPoints)
     return yield* Arr.match(missingEntryDeclarations(HashSet.fromIterable(HashMap.keys(emitted)), entryPoints.map((entry) => entry.declarationFile)), {
-      onEmpty: () => declarationsOf(source, entryPoints, emitted),
+      onEmpty: () => Effect.flatMap(fileSystem.realPath(source.packageRoot), (realRoot) => declarationsOf(source, entryPoints, handWrittenOr(source, realRoot, emitted))),
       onNonEmpty: (missing) => Effect.fail(new CompilerRejected({ diagnostics: missing.map(missingEntryDiagnostic) })),
     })
   })

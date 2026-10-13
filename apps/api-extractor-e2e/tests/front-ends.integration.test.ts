@@ -109,6 +109,16 @@ const defaultIncludePackage = fallingBackPackage(
   { compilerOptions: STANDALONE_TSCONFIG.compilerOptions },
 )
 
+const handWrittenDeclarationPackage = fallingBackPackage(
+  'hand-written-declaration',
+  { '.': './src/mod.ts' },
+  {
+    'src/mod.ts': "import type { Shape } from './shape.js'\nexport const unit: Shape = { side: 1 }\n",
+    'src/shape.d.ts': 'export interface Shape {\n\treadonly side: number;\n}\n',
+  },
+  STANDALONE_TSCONFIG,
+)
+
 const forgedCodesPackage = packageWith(
   'forged-codes',
   [
@@ -172,10 +182,15 @@ const refusalOf = (error: Refused) => {
   }
 }
 
-const routedAs = (analysis: FrontEnd.Analysis) => ({ route: analysis.route, items: analysis.model.entryPoints.flatMap((entry) => entry.items) })
+const routedAs = (analysis: FrontEnd.Analysis) => ({
+  route: analysis.route,
+  declarations: analysis.model.producer.declarations,
+  items: analysis.model.entryPoints.flatMap((entry) => entry.items),
+})
 
 const STRING_ARRAY_FALLBACK = {
   route: { _tag: 'Fallback', diagnostics: [{ file: 'src/mod.ts', code: 9010 }] },
+  declarations: FrontEnd.TYPESCRIPT_PRODUCER,
   items: [{ kind: 'variable', name: 'ids', constant: true, type: { kind: 'array', element: { kind: 'keyword', name: 'string' } } }],
 }
 
@@ -217,7 +232,7 @@ Feature('Both front-ends reduce a package to one model')
   .live('the compiler fallback runs the TypeScript 7 tsc of this package as a real child process')
   .body(({ scenario }) => {
     scenario(
-      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files, and wherever the package is installed',
+      'the fast path and the compiler fallback give the same model and messages, whatever the package tsconfig says about @internal, comments, declarationDir, type roots, types or included files, wherever the package is installed, and when a source imports a hand-written declaration file',
       Gherkin.Do.pipe(
         Given('this isolatedDeclarations-clean package')('source', () => thisPackage),
         Given('a package whose tsconfig strips @internal and which exports an @internal constant')('internal', () => internalExportPackage),
@@ -227,6 +242,7 @@ Feature('Both front-ends reduce a package to one model')
         Given('a package whose tsconfig names a global type from a dependency in its own node_modules, `types: ["greeting/globals"]`')('nodeModulesTypes', () => nodeModulesTypesPackage),
         Given('a package installed under a `node_modules` directory whose tsconfig names a global type from a sibling dependency')('underNodeModules', () => underNodeModulesPackage),
         Given('a package whose tsconfig names no `include`, so every file under it is compiled')('defaultInclude', () => defaultIncludePackage),
+        Given('a package whose source imports a type from a hand-written `shape.d.ts` beside it')('handWritten', () => handWrittenDeclarationPackage),
         When('each is analysed through the isolated emitter and through the compiler')('analyses', (scope) =>
           Effect.all({
             ownPackage: throughBothRoutes(scope.source),
@@ -237,6 +253,7 @@ Feature('Both front-ends reduce a package to one model')
             nodeModulesTypes: throughBothRoutes(scope.nodeModulesTypes),
             underNodeModules: throughBothRoutes(scope.underNodeModules),
             defaultInclude: throughBothRoutes(scope.defaultInclude),
+            handWritten: throughBothRoutes(scope.handWritten),
             wroteIntoPackage: writtenInto(scope.declarationDir, 'types'),
           })
         ),
@@ -252,6 +269,8 @@ Feature('Both front-ends reduce a package to one model')
             nodeModulesTypes: scope.analyses.nodeModulesTypes.compiled,
             underNodeModules: scope.analyses.underNodeModules.compiled,
             defaultInclude: scope.analyses.defaultInclude.compiled,
+            handWritten: scope.analyses.handWritten.compiled,
+            handWrittenFiles: scope.analyses.handWritten.compiled.files,
             wroteIntoPackage: scope.analyses.wroteIntoPackage,
           }).toEqual({
             ownPackage: scope.analyses.ownPackage.isolated,
@@ -264,6 +283,8 @@ Feature('Both front-ends reduce a package to one model')
             nodeModulesTypes: scope.analyses.nodeModulesTypes.isolated,
             underNodeModules: scope.analyses.underNodeModules.isolated,
             defaultInclude: scope.analyses.defaultInclude.isolated,
+            handWritten: scope.analyses.handWritten.isolated,
+            handWrittenFiles: ['src/mod.d.ts', 'src/shape.d.ts'],
             wroteIntoPackage: false,
           })
         ),
@@ -279,7 +300,7 @@ Feature('Both front-ends reduce a package to one model')
           packageWith('inferred-export-isolated', 'export const ids = [1, 2].map(String)\n', { isolatedDeclarations: true })),
         When('the engine analyses each')('analyses', (scope) =>
           Effect.all({ plain: FrontEnd.analyse(scope.source), declaresIsolated: FrontEnd.analyse(scope.declaresIsolated) })),
-        Then('both took the fallback for TS9010 on `ids` and modelled `ids` as a string array')((scope, expect) =>
+        Then('both took the fallback for TS9010 on `ids`, stamped by the TypeScript 7 compiler, and modelled `ids` as a string array')((scope, expect) =>
           expect({ plain: routedAs(scope.analyses.plain), declaresIsolated: routedAs(scope.analyses.declaresIsolated) }).toMatchObject({
             plain: STRING_ARRAY_FALLBACK,
             declaresIsolated: STRING_ARRAY_FALLBACK,
