@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-12-2048-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-1629-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -118,6 +118,7 @@ Product Contract preservation: Product Contract unchanged.
 - KTD1. **One emitter port, two service tags, adapters as parameterised layers.** `src/front-end/declaration-emitter.service.ts` holds the `DeclarationEmitter` shape (`emit(source) -> Declarations`) and two `Context.Service` tags, `IsolatedEmitter` and `CompilerEmitter`, with no driver imports (pack: cell-architecture, ports-separate-from-layers.md; pack: cell-architecture, service-and-layer-boundaries.md). Each adapter module exports a `layer` (the compiler's takes options); no `*Live` identifier exists. A TypeScript 7.1 API adapter provides `CompilerEmitter` the same way; 7.0.2's `typescript/unstable/sync` API has no declaration-emit request, so the process adapter is the only 7.0 route. Governs R4.
 - KTD2. **The fast-path emitter is chosen by a pre-registered rule over the committed profile.** Candidates: `oxc-transform` 0.150.0 `isolatedDeclarationSync` and TypeScript 5.9.3 `transpileDeclaration` (5.9.3 is already in the lockfile through `@microsoft/api-extractor`, and TypeScript 7 has no JavaScript emit API). The declaration parser follows the emitter's family: `oxc-parser` 0.150.0 or TypeScript 5.9.3 `createSourceFile`. Rule, in order: (1) the candidate's clean-or-not verdict matches TypeScript 7 `tsc --isolatedDeclarations` on every corpus package; (2) the lower corpus total of median warm emit plus parse time wins; (3) within 10%, the smaller runtime dependency wins. The choice and the numbers it rests on are recorded in a `Decision` section of `docs/profiles/2026-10-12-front-end-phases.md`, in a commit after the one that adds the profile. Governs R12, R14.
 - KTD3. **The fallback runs the `tsc` of this package's own `typescript@7.0.2` dependency as a child process.** `typescript` moves from `devDependencies` to `dependencies` so the stamp `typescript@7.0.2` names what ran. The adapter runs `-p <tsconfig> --noEmit false --declaration --emitDeclarationOnly --declarationMap false --sourceMap false --incremental false --composite false --tsBuildInfoFile null --rootDir <workspace root> --outDir <scoped temp dir> --listEmittedFiles --pretty false` through effect's `ChildProcessSpawner`. Its `TSFILE:` lines and diagnostics are decoded with schemas (pack: cell-architecture, decode-never-cast.md). Any `error TS` line or non-zero exit is `CompilerRejected` with the diagnostics (R5). The workspace root is the nearest ancestor holding `pnpm-workspace.yaml`, else the package root, because family packages resolve sibling sources through `@systemfsoftware/source` and TypeScript 7 refuses files outside `rootDir`. The adapter keeps only the emitted files under the package root that the entry declarations reach through relative specifiers, the same closure the isolated adapter walks, so both `Declarations` hold the same file set (R3). Governs R2, R3, R4, R5.
+  - **Amended by U12.** `tsc`'s stdout is package-influenced text: a module specifier or file name containing a newline puts a well-formed `error TS…` or `file(l,c): error TS…` line on stdout (reproduced on 7.0.2, run `20261013-163200-2c130632` #3), so no line grammar can tell a real diagnostic from a forged one. The adapter therefore reads no stdout. It writes one derived config into its scoped temp directory, `{ "extends": <package tsconfig>, "compilerOptions": <emit policy> }`, where the emit policy is one exported record (`noEmit: false`, `declaration`, `emitDeclarationOnly`, `declarationMap: false`, `sourceMap: false`, `stripInternal: false`, `removeComments: false`, `incremental: false`, `composite: false`, `tsBuildInfoFile: null`, `rootDir: <workspace root>`, `outDir` and `declarationDir: <scoped temp dir>`), and runs `tsc -p <derived config>`. Emitted declarations are the `.d.ts` files found under the scoped directory. A non-zero exit is `CompilerRejected`; its diagnostics come from TypeScript 7.0.2's `typescript/unstable/async` API opened on the same derived config, following `tsc`'s reporting order (config and syntactic; else program and global; else semantic; then declaration), errors only, de-duplicated. The API runs only on a refusal, so a clean package pays nothing for it. If the API reports no error for a failed run, the refusal carries one diagnostic without a code naming the exit status and stderr. `references` are not carried into the derived config: without `--build`, `tsc -p` uses them only to redirect imports to referenced projects' built output, and the model reads only this package's declarations. The profile harness imports the same emit policy (U12).
 - KTD4. **The route is a tagged union built from the isolated emitter's outcome.** `Route` is `FastPath` or `Fallback { diagnostics }`; `NotIsolated { diagnostics }` from `IsolatedEmitter` is the only thing that selects the fallback (pack: schema-laws, tagged-unions-over-state-by-presence.md; pack: boundary-testing, staged-protocol-evidence.md). A package without a TypeScript source entry never reaches routing: `readPackage` fails with `NoSourceEntry`, since neither route can produce a model for it (R16). Governs R1, R2, R16.
 - KTD5. **`Declarations` is the meeting point of every front-end.** It holds the producer stamp, the declaration files as package-relative POSIX paths with their text in code-unit order, and each entry point's declaration file. Entry points come from `package.json` `exports`, reading each export's `@systemfsoftware/source` condition (the family's convention, an option of the package reader); `./package.json` and non-TypeScript targets are skipped. The tsconfig is `tsconfig.build.json` when present, else `tsconfig.json`. Governs R3, R6.
 - KTD6. **The builder walks a syntactic module graph and maps type nodes onto the existing `TypeExpr` AST.** Relative specifiers resolve by swapping `.js`, `.ts`, `.mjs` or no extension for `.d.ts`, then `/index.d.ts`. A reference's `name` is the qualified name as written (`Effect.Effect`), and `module` is the bare specifier its leftmost identifier was imported from; `import("x").Y` becomes the same reference, and a relative `import("./y").Z` becomes a local one (R7). Keywords, literals, references, unions, intersections, arrays, plain tuples, function types, and object literals of properties, methods and call signatures decompose. Every other node becomes `text`, printed from the AST by one canonical printer, so formatting never reaches the model (R8). Items follow the model's kinds: `export * as ns` and `declare namespace` become namespaces, overloads group into one function, `export default` is an item named `default`. `locals` holds every type alias reachable from an export and not exported. Two distinct locals sharing a name take upstream's `_2`, `_3` suffixes in code-unit order of their file paths, and references follow the rename. `export =` and `declare global` are refused with `UnsupportedDeclaration`, naming the construct and file. Governs R6, R7, R8.
@@ -175,7 +176,7 @@ Radical alternative considered: skip declaration emit on the fast path and build
 
 ### Sequencing
 
-U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → U7 → U8 → U9. U4's builder can start on TypeScript 7 output before U3 lands only once KTD2's parser is known, so U3 precedes it.
+U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → U7 → U8 → U9 → U10 → U11 → U12. U4's builder can start on TypeScript 7 output before U3 lands only once KTD2's parser is known, so U3 precedes it.
 
 ---
 
@@ -291,6 +292,53 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 
 ---
 
+
+### U12. Rulings on every open finding (review of `2c13063` and earlier rounds)
+
+- **Goal:** every finding from the full-path reviews at `fd4ad93`, `a2fe1eb`, `2b2e595` and `2c13063`, the delta passes, the anchor-50 suppressions and the pack-rule rows has a ruling: fixed by a named commit with a test that fails before the fix and passes after, rejected with a reason, or converted to a follow-up with an owner and a trigger. Nothing stays open for the root.
+- **Requirements:** R1-R7, R10, R16; KTD3 (amended), KTD5, KTD6, KTD7, KTD11.
+- **Rulings, fixes:**
+  - C1 (`2c13063` #1, P1): a local alias key is a prefix of another (`a.d.ts\0Opt` inside `a.d.ts\0Options`), so `replaceNames` corrupts text types. Local keys gain a start and an end delimiter, so one key can never occur inside another. Builder scenario with a prefix pair.
+  - C3 (#3, P2): forged diagnostics. KTD3 amendment above; `compiler-output.schema.ts` is deleted. e2e refusal journey: sourceless and filed forged lines stay inside the TS2882 messages.
+  - C4 (#4) and B7: a synthetic diagnostic has no TypeScript code. `Diagnostic.code` becomes optional and, when present, a positive integer; messages print `TS<code>` only for a real code.
+  - A10: an import whose specifier names no declaration file is no longer dropped. The fast path declines with `NotIsolated` naming the importing file and the specifier, so `tsc` decides; a compiler-emitted declaration whose import names no declaration is refused with `UnsupportedDeclaration`.
+  - A11: `.cts` entries are read (`.ts`, `.tsx`, `.mts`, `.cts`).
+  - A12: a subpath pattern export (`"./*"`) is expanded against the package's files under Node's rules: the `*` matches any substring, explicit subpaths win, and a longer pattern prefix wins.
+  - D1: an entry's recorded source is authoritative on both routes. `readPackage` refuses an export whose recorded source file is missing (`MissingSource`, naming the export and the file), so neither route models a sibling `.ts` in place of a deleted `.tsx`.
+  - D2: two entry points whose sources share a declaration path are declined by the fast path, and `tsc` refuses them (TS5056).
+  - B5: a named optional tuple member keeps its `?` in canonical text.
+  - C5 and A16: one property-key resolver, shared by the builder and the printer; the private-name case is an explicit decision of each caller.
+  - C7 and A17: the entry-point mapping lives once in the declaration graph; each emitter keeps only its own refusal.
+  - C9: the keyword vocabulary is one ordered list.
+  - C10: `TYPESCRIPT_PRODUCER` is exported from `FrontEnd` beside `OXC_TRANSFORM_PRODUCER`.
+  - C11: the README and the changeset say both routes give the same model apart from the producer stamp.
+  - B2 and A6: the profile harness imports the adapter's emit policy instead of copying it, and re-records nothing (its numbers were measured before the choice and stay the record).
+  - A15 (also the `2c13063` anchor-50 reliability note): the profile harness fails on a failed `git` instead of reading an empty corpus.
+  - S3 (`2c13063` anchor-50 security note): the fast path compares real paths, so a symlink inside the package that points outside it is not read.
+  - S1 (`2c13063` anchor-50 adversarial note): a type parameter's name only shadows within its own declaration, so it no longer hides a forgotten export of the same name elsewhere in the file.
+- **Rulings, tests for gaps:**
+  - C6, A13 and B10: the e2e refusal journey covers a non-zero `tsc` exit (a package with no tsconfig), an entry excluded from the tsconfig (`the compiler emitted no declaration`), and the escaping entry through `CompilerEmitter`.
+  - C8 and A9: builder scenarios for `declare global`, `declare module "x"` and an external re-export refusal.
+  - A8: a builder scenario asserting an interface item's and a class item's full shape.
+  - B9: an oracle scenario asserting the full message array, order and de-duplication included.
+  - A18: the upstream comparison also compares each message's entry point and item.
+- **Rulings, rejected:**
+  - C2: re-raises ruling #4 (rejected): `tsc` 7.0.2 imports a non-exported interface from an import-bearing `.d.ts`, and adding `export {}` makes the same import TS2459.
+  - A7 (six extractors repeating one discriminator): the `2b2e595` validator rejected the same claim at four sites. Each extractor is behaviourally correct and the generic replacement adds a type-level dispatch without removing a defect.
+  - The `2b2e595` anchor-50 notes: compiler fallback without a deadline (ruling #13, rejected); `Declarations` without a version discriminator (an in-process port value, never serialised; the model carries `schemaVersion`). The setter `: any` note is checked by a builder scenario and fixed if it reproduces.
+  - Rejected rows of earlier rounds keep their validator reasons.
+- **Rulings, pack rows:**
+  - schema-laws/arbitrary-filter-floors (`MessageText` lookahead) and schema-laws/tagged-unions-over-state-by-presence (`UNPARSED_FILED_LINE` sentinel): fixed by deleting `compiler-output.schema.ts` (C3).
+  - schema-laws/invariants-as-refinements (`Diagnostic.code` as bare `Schema.Finite`): fixed by C4.
+  - schema-laws/refusals-beside-generated-laws: not violated. The generated laws are retired on `main` (#9), the rule's refusal-law clause is superseded by #761, and after C3 no refined codec remains in the diff.
+  - ci-wall-clock/flake-outputs-build-once-on-main: pre-existing (`ci.yml` is byte-identical to base) and outside this diff. Follow-up owned by the CI benchmark unit (PR5, origin U9), triggered when PR5 changes the `sfs-deps` job.
+  - D3: KTD3's argument list now lives in the emit policy above, which includes `stripInternal: false`.
+- **Preserved:** the R2 property-by-property decisions of U11 stand as recorded at `2c13063`; C3 then deletes the codecs they were about. The PR1 counterexample (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`) is recorded and not re-run.
+- **Test expectation:** each fix above names its scenario; each scenario fails at `2c13063` and passes after its fix. e2e cases extend the existing refusal and equality journeys (KTD11 keeps four journeys).
+- **Verification:** the Verification Contract gates, a named DeepSeek delta review over the fix commits, and a fresh full-path receipt at the final head.
+
+---
+
 ## Verification Contract
 
 | Gate | Command or evidence | Proves |
@@ -311,7 +359,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U10 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U12 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
