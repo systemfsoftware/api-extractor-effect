@@ -143,6 +143,34 @@ export const specifiersOf = (program: Program): ReadonlyArray<string> => {
   return found
 }
 
+type InferenceFrame = {
+  readonly at: number
+  readonly from: number
+  readonly to: number
+  readonly names: Array<string>
+}
+
+const spansInfer = (frame: InferenceFrame, from: number, to: number): boolean => from >= frame.from && to <= frame.to
+
+const recordInfer = (frames: ReadonlyArray<InferenceFrame>, from: number, to: number, name: string): void =>
+  Arr.forEach(Arr.filter(Option.toArray(Arr.last(frames)), (frame) => spansInfer(frame, from, to)), (frame) => frame.names.push(name))
+
+const closeInference = (frames: Array<InferenceFrame>, collected: Array<readonly [number, ReadonlyArray<string>]>): void => {
+  Arr.forEach(Option.toArray(Arr.last(frames)), (frame) => void collected.push([frame.at, frame.names]))
+  void frames.pop()
+}
+
+const conditionalInferencesOf = (program: Program): HashMap.HashMap<number, ReadonlyArray<string>> => {
+  const frames: Array<InferenceFrame> = []
+  const collected: Array<readonly [number, ReadonlyArray<string>]> = []
+  new Visitor({
+    TSConditionalType: (node) => void frames.push({ at: node.start, from: node.extendsType.start, to: node.extendsType.end, names: [] }),
+    'TSConditionalType:exit': () => closeInference(frames, collected),
+    TSInferType: (node) => recordInfer(frames, node.start, node.end, node.typeParameter.name.name),
+  }).visit(program)
+  return HashMap.fromIterable(collected)
+}
+
 type Loaded = HashMap.HashMap<string, string>
 
 type Loader<E, R> = (declarationFile: string) => Effect.Effect<Option.Option<string>, E, R>
@@ -282,6 +310,7 @@ export type FileScope = {
   readonly text: string
   readonly program: Program
   readonly comments: ReadonlyArray<Comment>
+  readonly conditionalInferences: HashMap.HashMap<number, ReadonlyArray<string>>
   readonly declarations: HashMap.HashMap<string, ReadonlyArray<Declaration>>
   readonly imports: HashMap.HashMap<string, ImportBinding>
   readonly exports: HashMap.HashMap<string, ExportBinding>
@@ -456,6 +485,7 @@ const scopeOf = (file: DeclarationFile): Effect.Effect<FileScope, UnsupportedDec
       text: file.text,
       program,
       comments,
+      conditionalInferences: conditionalInferencesOf(program),
       declarations: grouped(parts.flatMap((part) => part.declarations)),
       imports: HashMap.fromIterable(parts.flatMap((part) => part.imports)),
       exports: HashMap.fromIterable([...implicitExports(program, parts), ...parts.flatMap((part) => part.exports)]),

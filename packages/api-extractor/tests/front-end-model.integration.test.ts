@@ -996,4 +996,35 @@ Feature('Building a package API model from its declaration text')
           })),
       ),
     )
+
+    scenario(
+      'an inferred name inside a conditional type reads as the name it binds, not the import or declaration it shadows',
+      Gherkin.Do.pipe(
+        Given(
+          'an entry importing type `U` from another package, keeping an interface `V` to itself and re-exporting a different `V` from another file, with aliases `Elem<T>` and `Pick2<T>` binding `U` and `V` by `infer`',
+        )('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                "import type { U } from 'pkg'\n" +
+                  'interface V { readonly hidden: string }\n' +
+                  'export type Elem<T> = T extends Array<infer U> ? U : never\n' +
+                  'export type Pick2<T> = T extends Map<infer V, infer W> ? [V, W] : never\n' +
+                  "export { V } from './v.js'\n",
+              ],
+              ['v.d.ts', 'export interface V { readonly exported: string }\n'],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each alias reads with the names its conditional binds, untouched by the import or the hidden interface')((scope, expect) =>
+          expect({
+            elem: itemOf(scope.model, '.', 'Elem', 'typeAlias'),
+            pick2: itemOf(scope.model, '.', 'Pick2', 'typeAlias'),
+          }).toMatchObject({
+            elem: { kind: 'typeAlias', type: { kind: 'text', text: 'T extends Array<infer U> ? U : never' } },
+            pick2: { kind: 'typeAlias', type: { kind: 'text', text: 'T extends Map<infer V, infer W> ? [V, W] : never' } },
+          })),
+      ),
+    )
   })

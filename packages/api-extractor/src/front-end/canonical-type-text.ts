@@ -441,11 +441,17 @@ const printMappedType = (context: TypeContext, node: TSMappedType): Effect.Effec
     return `{ ${mappedReadonlyPrefix(node.readonly)}[${node.key.name} in ${constraint}${nameType}]${mappedOptionalSuffix(node.optional)}${value} }`
   })
 
+const inferNamesFor = (context: TypeContext, node: TSConditionalType): ReadonlyArray<string> =>
+  Option.match(HashMap.get(context.graph.files, context.file), {
+    onNone: () => [],
+    onSome: (scope) => Option.getOrElse(HashMap.get(scope.conditionalInferences, node.start), (): ReadonlyArray<string> => []),
+  })
+
 const printConditional = (context: TypeContext, node: TSConditionalType): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const check = yield* canonicalTypeText(context, node.checkType)
     const extending = yield* canonicalTypeText(context, node.extendsType)
-    const consequent = yield* canonicalTypeText(context, node.trueType)
+    const consequent = yield* canonicalTypeText(withTypeParameters(context, inferNamesFor(context, node)), node.trueType)
     const alternate = yield* canonicalTypeText(context, node.falseType)
     return `${check} extends ${extending} ? ${consequent} : ${alternate}`
   })
