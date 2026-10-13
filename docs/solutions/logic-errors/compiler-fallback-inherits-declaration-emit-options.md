@@ -149,6 +149,6 @@ derived at mirror(dirname(packageTsconfig)) = { extends: packageTsconfig, files:
 
 ## Related
 
-- `docs/plans/2026-10-13-1834-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy; U13 #4)
+- `docs/plans/2026-10-13-1956-feat-front-ends-plan.md` (R3; U10 disposition #6; U12 emit policy; U13 #4 and the mirrored `node_modules` ancestry)
 - `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md`: a law passes
   vacuously when its corpus lacks the triggering shape
