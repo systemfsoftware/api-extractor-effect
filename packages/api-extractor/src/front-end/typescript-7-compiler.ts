@@ -38,6 +38,8 @@ const compilerArguments = (source: PackageSource, outDir: string): ReadonlyArray
   'false',
   '--stripInternal',
   'false',
+  '--removeComments',
+  'false',
   '--incremental',
   'false',
   '--composite',

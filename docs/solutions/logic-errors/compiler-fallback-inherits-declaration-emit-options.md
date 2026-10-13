@@ -65,6 +65,12 @@ its temp `outDir`, and refused the package. The same journey now analyses a pack
 tsconfig sets `declarationDir: "types"`. It asserts byte equality between the routes and that
 no `types` directory appears in the package.
 
+`removeComments` is the second text-changing option found the same way. With it set, `tsc`
+drops the `/** @public */` comment the message resolver reads its release tag from, so the
+fallback reported `ae-missing-release-tag` for an export the fast path saw as tagged. The
+adapter passes `--removeComments false`, and the journey analyses a package whose tsconfig
+sets `removeComments: true` and asserts both routes give the same notes, and none.
+
 ## Architectural invariant
 
 **Single emit policy.** The fast path's options are the declaration-emit policy. The

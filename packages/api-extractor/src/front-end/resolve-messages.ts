@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, HashMap, HashSet, Match, Option, Order } from 'effect'
+import { Array as Arr, Effect, HashMap, HashSet, Match, Option, Order, Predicate } from 'effect'
 import {
   type Class,
   type Comment,
@@ -32,8 +32,13 @@ const tagOfComment = (comment: string): Option.Option<ReleaseTag> =>
 
 const isDocComment = (comment: Comment): boolean => comment.type === 'Block' && comment.value.startsWith('*')
 
+const precedingEndOf = (scope: FileScope, statementStart: number): number =>
+  Arr.reduce(scope.program.body, 0, (end, statement) => (statement.end <= statementStart ? Math.max(end, statement.end) : end))
+
+const isBetween = (floor: number, ceiling: number) => (comment: Comment): boolean => comment.start >= floor && comment.end <= ceiling
+
 const leadingCommentOf = (scope: FileScope, statementStart: number): Option.Option<Comment> =>
-  Arr.findLast(scope.comments, (comment) => isDocComment(comment) && comment.end <= statementStart)
+  Arr.findLast(scope.comments, Predicate.and(isDocComment, isBetween(precedingEndOf(scope, statementStart), statementStart)))
 
 const declaredTagOf = (scope: FileScope, declaration: Declaration): Option.Option<ReleaseTag> =>
   Option.flatMap(leadingCommentOf(scope, declaration.statementStart), (comment) => tagOfComment(comment.value))
@@ -177,9 +182,11 @@ const missingTagMessages = (graph: DeclarationGraph, entry: EntryPoint, item: Ex
 
 const needsUnderscore = (maxTag: ReleaseTag, item: ExportedItem): boolean => maxTag === 'internal' && !item.namePath.includes('.')
 
+const lacksUnderscore = (name: string): boolean => !name.startsWith('_')
+
 const underscoreMessages = (maxTag: ReleaseTag, entry: EntryPoint, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
   needsUnderscore(maxTag, item)
-    ? Arr.map(item.exportNames, (name) => analysisMessage('ae-internal-missing-underscore', entry.exportPath, item.namePath, name))
+    ? Arr.map(Arr.filter(item.exportNames, lacksUnderscore), (name) => analysisMessage('ae-internal-missing-underscore', entry.exportPath, item.namePath, name))
     : []
 
 const allTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean => Arr.every(tags, (tag) => tag === maxTag)

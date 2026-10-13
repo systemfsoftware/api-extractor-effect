@@ -88,6 +88,33 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      "A release tag belongs to its own declaration, not to the one after it",
+      Gherkin.Do.pipe(
+        Given('a package where a tagged value and an interface member\'s doc comment precede untagged values')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: entry([
+                '/** @internal */',
+                'export declare const _hidden: string',
+                'export declare const shown: string',
+                'export interface I {',
+                '  /** @beta */',
+                '  readonly x: string',
+                '}',
+                'export declare const after: string',
+              ]),
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('both note the untagged values as untagged')((scope, expect) =>
+          expect({
+            notes: reviewed(scope.both.messages),
+            shownUntaggedUpstream: sorted(scope.both.upstream).some(([id, symbol]) => id === 'ae-missing-release-tag' && symbol === 'shown'),
+          }).toEqual({ notes: sorted(scope.both.upstream), shownUntaggedUpstream: true })),
+      ),
+    )
+
+    scenario(
       'A public function using a beta type is noted as incompatible',
       Gherkin.Do.pipe(
         Given('a package whose public function uses a beta type')('declarations', () =>
