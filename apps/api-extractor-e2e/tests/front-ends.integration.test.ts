@@ -335,8 +335,11 @@ Feature('Both front-ends reduce a package to one model')
     scenario(
       'a package the compiler rejects is refused with the diagnostics tsc reported and no model',
       Gherkin.Do.pipe(
-        Given('a package that needs the fallback and assigns a string to a number')('source', () =>
-          packageWith('type-error', "export const ids = [1, 2].map(String)\nexport const count: number = 'one'\n")),
+        Given('a package that needs the fallback, assigns a string to a number and a callback taking a string to one taking a number')('source', () =>
+          packageWith(
+            'type-error',
+            "export const ids = [1, 2].map(String)\nexport const count: number = 'one'\nexport const callback: (x: number) => void = (x: string) => {}\n",
+          )),
         Given('a package that needs the fallback and whose unresolved imports make the compiler print a zero-padded, a ten-digit, a sourceless and a filed line')(
           'forged',
           () => forgedCodesPackage,
@@ -377,7 +380,13 @@ Feature('Both front-ends reduce a package to one model')
               shared: scope.refusals.shared.codes,
             },
           }).toMatchObject({
-            typeError: { _tag: 'CompilerRejected', diagnostics: [{ _tag: 'Reported', file: 'src/mod.ts', code: 2322 }] },
+            typeError: {
+              _tag: 'CompilerRejected',
+              diagnostics: [
+                { _tag: 'Reported', file: 'src/mod.ts', code: 2322 },
+                { _tag: 'Reported', file: 'src/mod.ts', code: 2322, message: expect.stringContaining("\n  Types of parameters 'x' and 'x' are incompatible.") },
+              ],
+            },
             forged: {
               _tag: 'CompilerRejected',
               diagnostics: [
