@@ -451,7 +451,7 @@ const statementParts = (statement: Directive | Statement, file: string): Effect.
     Match.orElse((node) => Effect.map(declaredOf(node, file), (declared) => declarationsPart(declared, node.start))),
   )
 
-const grouped = <A>(entries: ReadonlyArray<readonly [string, A]>): HashMap.HashMap<string, ReadonlyArray<A>> =>
+export const grouped = <A>(entries: ReadonlyArray<readonly [string, A]>): HashMap.HashMap<string, ReadonlyArray<A>> =>
   Arr.reduce(entries, HashMap.empty<string, ReadonlyArray<A>>(), (groups, [key, value]) =>
     HashMap.set(groups, key, [...Option.getOrElse(HashMap.get(groups, key), (): ReadonlyArray<A> => []), value]))
 

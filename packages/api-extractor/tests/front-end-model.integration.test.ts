@@ -1083,6 +1083,55 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a name declared in a namespace body refers to that declaration inside the body, not to an import of the same name',
+      Gherkin.Do.pipe(
+        Given('an entry importing `A` from `pkg` and declaring namespace `N` with its own `A` and a function `f` returning `A`')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                "import type { A } from 'pkg'\n" +
+                  'export declare namespace N { interface A { y: number } function f(): A }\n' +
+                  'export declare const g: A\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then("`N.f` returns the namespace's own `A`, while `g` keeps the imported one")((scope, expect) =>
+          expect({ n: itemOf(scope.model, '.', 'N', 'namespace'), g: itemOf(scope.model, '.', 'g', 'variable') }).toEqual({
+            n: {
+              kind: 'namespace',
+              name: 'N',
+              items: [
+                {
+                  kind: 'interface',
+                  name: 'A',
+                  typeParameters: [],
+                  extends: [],
+                  members: [{ kind: 'property', name: 'y', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } }],
+                },
+                { kind: 'function', name: 'f', signatures: [{ typeParameters: [], parameters: [], returns: { kind: 'reference', name: 'A', args: [] } }] },
+              ],
+            },
+            g: { kind: 'variable', name: 'g', constant: true, type: { kind: 'reference', name: 'A', module: 'pkg', args: [] } },
+          })),
+      ),
+    )
+
+    scenario(
+      'an import alias inside a namespace body is refused, as it is at the top of a file',
+      Gherkin.Do.pipe(
+        Given('an entry whose namespace `N` writes `import X = M.Y`')('declarations', () =>
+          Effect.succeed(
+            declarations([['index.d.ts', 'export declare namespace N { import X = M.Y; const a: X }\ndeclare namespace M { type Y = string }\nexport {}\n']]),
+          )),
+        When('the model is built')('refusal', (scope) => Effect.flip(builtOf(scope.declarations))),
+        Then('it is refused naming the file and `import =`')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`import =`' })),
+      ),
+    )
+
+    scenario(
       'a type reached through a namespace the file keeps hidden reads as the file writes it',
       Gherkin.Do.pipe(
         Given('an entry exporting `X = C.Inner`, where namespace `C` is declared but not exported')('declarations', () =>

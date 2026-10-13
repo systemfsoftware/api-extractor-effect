@@ -33,7 +33,7 @@ import {
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
-import { declarationGraph, exportedNames, exportedSymbol, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
+import { declarationGraph, exportedNames, exportedSymbol, grouped, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
@@ -474,16 +474,23 @@ const namespaceItemOf = (
       ),
   })
 
+const byGroupName: Order.Order<readonly [string, ReadonlyArray<Declaration>]> = Order.mapInput(Order.String, ([name]) => name)
+
+const itemsOfGroups = (
+  context: TypeContext,
+  groups: HashMap.HashMap<string, ReadonlyArray<Declaration>>,
+): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
+  Effect.map(
+    Effect.forEach(Arr.sort(HashMap.toEntries(groups), byGroupName), ([name, declarations]) => itemsOfDeclarations(context, declarations, name)),
+    (items) => items.flat(),
+  )
+
 const namespaceBodyItems = (
   context: TypeContext,
   bodies: ReadonlyArray<TSModuleBlock | null>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Effect.map(
-    Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
-      Effect.forEach(Arr.sort(HashMap.keys(groups), Order.String), (name) =>
-        itemsOfDeclarations(context, Option.getOrThrow(HashMap.get(groups, name)), name))),
-    (items) => items.flat(),
-  )
+  Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
+    itemsOfGroups(withTypeParameters(context, Arr.fromIterable(HashMap.keys(groups))), groups))
 
 const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
   bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
@@ -494,14 +501,8 @@ const bodyDeclarations = (
 ): Effect.Effect<HashMap.HashMap<string, ReadonlyArray<Declaration>>, UnsupportedDeclaration> =>
   Effect.map(
     Effect.forEach(bodyStatements(bodies), (statement) => statementDeclarations(context, statement)),
-    (all) => groupDeclarations(all.flat()),
+    (all) => grouped(all.flat().map((declaration) => [declaration.declared.name, declaration] as const)),
   )
-
-const groupDeclarations = (declarations: ReadonlyArray<Declaration>): HashMap.HashMap<string, ReadonlyArray<Declaration>> =>
-  Arr.reduce(declarations, HashMap.empty<string, ReadonlyArray<Declaration>>(), (groups, declaration) => {
-    const name = declaration.declared.name
-    return HashMap.set(groups, name, [...Option.getOrElse(HashMap.get(groups, name), (): ReadonlyArray<Declaration> => []), declaration])
-  })
 
 const declaredEntry = (declared: Declared, statementStart: number): Declaration => ({ declared, statementStart })
 
@@ -561,6 +562,7 @@ const statementDeclarations = (
     Match.when({ type: Match.is('VariableDeclaration', 'FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSEnumDeclaration') }, (node) =>
       Effect.succeed(nodeDeclarations(node))),
     Match.when({ type: 'TSModuleDeclaration', global: false }, (module) => namespaceDeclarations(context, module)),
+    Match.when({ type: 'TSImportEqualsDeclaration' }, () => refuse(context.file, '`import =`')),
     Match.orElse(() => Effect.succeed<ReadonlyArray<Declaration>>([])),
   )
 
