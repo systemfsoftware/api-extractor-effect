@@ -74,7 +74,7 @@ const isValidPatternMatch = (substring: string): boolean => !substring.split(/[/
 const patternEntryOf = (key: string, prefix: string, suffix: string) =>
   (candidate: string): Option.Option<PatternEntry> =>
     Option.map(Option.filter(matchedSubstring(prefix, suffix, candidate), isValidPatternMatch), (substring) => ({
-      entry: { exportPath: key.replace('*', substring), sourceFile: candidate },
+      entry: { exportPath: key.replace('*', () => substring), sourceFile: candidate },
       key,
     }))
 

@@ -255,4 +255,19 @@ Feature("A package's exports name its entry points")
         ),
       ),
     )
+
+    scenario(
+      'a pattern export names a file whose name holds dollar signs exactly as the file is named',
+      Gherkin.Do.pipe(
+        Given('a package exporting every `./src/<name>.ts` through `"./*"`, with files `a$$b.ts` and `c$&d.ts`')('packageRoot', () =>
+          packageOf({ './*': { [condition]: './src/*.ts' } }, { 'src/a$$b.ts': '', 'src/c$&d.ts': '' })),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('each export name is the file name, dollar signs and all')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([
+            { exportPath: './a$$b', sourceFile: 'src/a$$b.ts' },
+            { exportPath: './c$&d', sourceFile: 'src/c$&d.ts' },
+          ])
+        ),
+      ),
+    )
   })
