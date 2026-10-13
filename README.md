@@ -66,16 +66,26 @@ process.stdout.write(ApiModel.serialise(analysis.model))
 ```
 
 `readPackage` takes each export whose `@systemfsoftware/source` condition names a
-TypeScript file as an entry point; a package with none is refused with `NoSourceEntry`.
+`.ts`, `.tsx`, `.mts` or `.cts` file as an entry point. A subpath pattern (`"./*"`)
+expands to one entry per matching source under Node's `exports` rules, and an explicit
+subpath wins over a pattern. A package with no such export is refused with `NoSourceEntry`.
 `analyse` first emits declarations with `oxc-transform`'s isolated-declarations emitter,
 which never type-checks. If any source an entry point reaches needs the checker (an
-unannotated export, TS9xxx), the package takes the fallback: this package's own
-TypeScript 7 `tsc` runs as a process, and `route` is `Fallback` with the diagnostics that
-sent it there. A `tsc` that reports an error refuses the package with `CompilerRejected`.
+unannotated export, TS9xxx), or an entry cannot be proven from its own file (its source is
+missing, lies outside the package, or shares a declaration path with another entry, or an
+import names no file), the package takes the fallback. This package's own TypeScript 7
+`tsc` runs as a process on a config that extends the package's tsconfig with a fixed emit
+policy (`FrontEnd.compilerEmitPolicy`), and `route` is `Fallback` with the diagnostics that
+sent it there. A `tsc` that fails refuses the package with `CompilerRejected`, whose
+diagnostics come from the TypeScript 7 API, never from `tsc`'s printed output, which a
+package's own file names and import specifiers can spell. A diagnostic no compiler reported
+(a missing entry, say) carries no TypeScript code.
 Both routes meet at declaration text: one syntactic builder makes the model and one
 resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and
-`ae-internal-mixed-release-tag`, so both routes give the same model and messages.
+`ae-internal-mixed-release-tag`, so both routes give the same model and messages, apart
+from the producer stamp (`producer.declarations`), which names the emitter that ran
+(`FrontEnd.OXC_TRANSFORM_PRODUCER` or `FrontEnd.TYPESCRIPT_PRODUCER`).
 
 The builder refuses a package with `UnsupportedDeclaration`, naming the file and the
 construct, when its declarations contain one of these constructs, which model schema
