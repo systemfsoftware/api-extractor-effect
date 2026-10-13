@@ -1051,6 +1051,38 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a namespace exported from inside a namespace body is an item of it, merged when declared twice',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `N` twice, each body exporting a `namespace M` that holds one value')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export declare namespace N { export namespace M { const a: number } }\n' +
+                  'export declare namespace N { export namespace M { const b: string } }\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the namespace `N` holds one `M` with both values')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toEqual({
+            kind: 'namespace',
+            name: 'N',
+            items: [
+              {
+                kind: 'namespace',
+                name: 'M',
+                items: [
+                  { kind: 'variable', name: 'a', constant: true, type: { kind: 'keyword', name: 'number' } },
+                  { kind: 'variable', name: 'b', constant: true, type: { kind: 'keyword', name: 'string' } },
+                ],
+              },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
       'a type reached through a namespace the file keeps hidden reads as the file writes it',
       Gherkin.Do.pipe(
         Given('an entry exporting `X = C.Inner`, where namespace `C` is declared but not exported')('declarations', () =>

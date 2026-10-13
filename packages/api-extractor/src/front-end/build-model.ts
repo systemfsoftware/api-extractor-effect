@@ -556,7 +556,7 @@ const statementDeclarations = (
     Match.when({ type: 'ExportNamedDeclaration' }, (declaration) =>
       Option.match(Option.fromNullishOr(declaration.declaration), {
         onNone: () => Effect.succeed<ReadonlyArray<Declaration>>([]),
-        onSome: (inner) => Effect.succeed(nodeDeclarations(inner)),
+        onSome: (inner) => statementDeclarations(context, inner),
       })),
     Match.when({ type: Match.is('VariableDeclaration', 'FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSEnumDeclaration') }, (node) =>
       Effect.succeed(nodeDeclarations(node))),
