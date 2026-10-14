@@ -77,6 +77,11 @@ const explicitOverridePackage = packageOf(
 
 const outsidePatternPackage = packageOf({ './*': { [condition]: './src/*.ts' } }, { 'src/a.ts': '', 'other/b.ts': '' })
 
+const missingPatternDirectoryPackage = packageOf(
+  { '.': { [condition]: './src/index.ts' }, './*': { [condition]: './missing/*.ts' } },
+  { 'src/index.ts': 'export const main: number = 1\n' },
+)
+
 const nestedPatternPackage = packageOf(
   { './*': { [condition]: './src/*.ts' }, './x/*': { [condition]: './lib/*.ts' } },
   { 'src/x/y.ts': '', 'lib/y.ts': '' },
@@ -277,6 +282,18 @@ Feature("A package's exports name its entry points")
             { exportPath: './b', sourceFile: 'src/b.ts' },
             { exportPath: './special', sourceFile: 'src/b.ts' },
           ])
+        ),
+      ),
+    )
+
+    scenario(
+      'a pattern export whose target directory does not exist adds no entry beside an explicit one',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./src/index.ts` at `.` and every `./missing/<name>.ts` through `"./*"`, where `./missing` does not exist')('packageRoot', () =>
+          missingPatternDirectoryPackage),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only the explicit `.` entry is read')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/index.ts' }])
         ),
       ),
     )

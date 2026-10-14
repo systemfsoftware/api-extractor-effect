@@ -450,6 +450,43 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a class keeps its static field, its auto-accessor and its accessor pair exactly, and holds nothing for a private field or a static block',
+      Gherkin.Do.pipe(
+        Given('an entry declaring a class with a static field, a private field, an auto-accessor, a get/set pair and a static block')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export declare class C {\n' +
+                  '  static s: number\n' +
+                  '  private q: string\n' +
+                  '  accessor a: number\n' +
+                  '  get g(): number\n' +
+                  '  set g(v: number)\n' +
+                  '  static {}\n' +
+                  '}\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the class carries the static field, the auto-accessor and the accessor pair, in source order, and no member for the private field or the static block')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'C', 'class')).toEqual({
+            kind: 'class',
+            name: 'C',
+            abstract: false,
+            typeParameters: [],
+            extends: [],
+            implements: [],
+            members: [
+              { kind: 'property', name: 'static s', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
+              { kind: 'property', name: 'a', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
+              { kind: 'property', name: 'g', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
       'a set accessor models as a writable property and prints without a return type',
       Gherkin.Do.pipe(
         Given('an interface, a class and a mapped value each declaring `set value(input: string)`')('declarations', () =>
@@ -692,6 +729,46 @@ Feature('Building a package API model from its declaration text')
           }).toMatchObject({
             handlers: { type: { kind: 'text', text: '[cb: (x: number) => string, done?: () => void]' } },
             build: { type: { kind: 'text', text: 'new (x: number) => object' } },
+          })),
+      ),
+    )
+
+    scenario(
+      'a type the structure does not decompose keeps canonical text, a predicate keeping the meaning of its own syntax',
+      Gherkin.Do.pipe(
+        Given('an entry declaring a template literal, a predicate, an assertion, an indexed access, an abstract construct type and object literals holding a construct or index signature beside a property')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              [
+                'index.d.ts',
+                'export type Template = `a${string}`\n' +
+                  'export type Predicate = (x: unknown) => x is string\n' +
+                  'export type Assertion = (x: unknown) => asserts x is string\n' +
+                  "export type Indexed = A['b']\n" +
+                  'export type AbstractConstruct = abstract new () => object\n' +
+                  'export type ConstructBesideProperty = { new (): object; p: number }\n' +
+                  'export type IndexBesideProperty = { [k: string]: number; p: number }\n',
+              ],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('each alias carries the canonical form of its own syntax')((scope, expect) =>
+          expect({
+            template: itemOf(scope.model, '.', 'Template', 'typeAlias'),
+            predicate: itemOf(scope.model, '.', 'Predicate', 'typeAlias'),
+            assertion: itemOf(scope.model, '.', 'Assertion', 'typeAlias'),
+            indexed: itemOf(scope.model, '.', 'Indexed', 'typeAlias'),
+            abstractConstruct: itemOf(scope.model, '.', 'AbstractConstruct', 'typeAlias'),
+            constructBesideProperty: itemOf(scope.model, '.', 'ConstructBesideProperty', 'typeAlias'),
+            indexBesideProperty: itemOf(scope.model, '.', 'IndexBesideProperty', 'typeAlias'),
+          }).toMatchObject({
+            template: { kind: 'typeAlias', type: { kind: 'text', text: '`a${string}`' } },
+            predicate: { type: { kind: 'function', signature: { typeParameters: [], parameters: [{ name: 'x', type: { kind: 'keyword', name: 'unknown' }, optional: false, rest: false }], returns: { kind: 'text', text: 'x is string' } } } },
+            assertion: { type: { kind: 'function', signature: { typeParameters: [], parameters: [{ name: 'x', type: { kind: 'keyword', name: 'unknown' }, optional: false, rest: false }], returns: { kind: 'text', text: 'asserts x is string' } } } },
+            indexed: { type: { kind: 'text', text: 'A["b"]' } },
+            abstractConstruct: { type: { kind: 'text', text: 'abstract new () => object' } },
+            constructBesideProperty: { type: { kind: 'text', text: '{ new (): object; p: number }' } },
+            indexBesideProperty: { type: { kind: 'text', text: '{ [key: string]: number; p: number }' } },
           })),
       ),
     )
