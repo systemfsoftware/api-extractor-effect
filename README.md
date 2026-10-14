@@ -75,7 +75,10 @@ subpath wins over a pattern. The condition is read where the family writes it, d
 under an export path; a target that nests it under another condition, or lists targets in
 an array, names no entry. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
-refuses — is refused with `ManifestRejected`, naming the package root. A `package.json`
+refuses — is refused with `ManifestRejected`, naming the package root. So is a pattern
+export whose walk lists more than 4096 directories, which symlinked aliases of a
+directory can reach by fanning out; a symlink back to an ancestor is never entered.
+A `package.json`
 that is missing or cannot be read fails with the file system's `PlatformError`, as every
 operation here does on an I/O fault.
 `analyse` first emits declarations with `oxc-transform`'s isolated-declarations emitter,

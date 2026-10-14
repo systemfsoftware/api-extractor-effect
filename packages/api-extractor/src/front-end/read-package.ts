@@ -108,50 +108,66 @@ const directoryRealPath = (childPath: string): Effect.Effect<Option.Option<strin
       : Effect.succeed(Option.none<string>())
   })
 
-const walkStep = (root: string, relative: string, ancestors: HashSet.HashSet<string>): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+const MAX_PATTERN_DIRECTORIES = 4096
+
+type Walk = { readonly names: ReadonlyArray<string>; readonly listed: number }
+
+type WalkPattern = { readonly root: string; readonly key: string }
+
+type WalkError = PlatformError | ManifestRejected
+
+const overBudget = (pattern: WalkPattern): ManifestRejected =>
+  new ManifestRejected({
+    packageRoot: pattern.root,
+    issue: `the pattern export "${pattern.key}" reaches more than ${MAX_PATTERN_DIRECTORIES} directories`,
+  })
+
+const walkStep = (pattern: WalkPattern, relative: string, ancestors: HashSet.HashSet<string>, walk: Walk): Effect.Effect<Walk, WalkError, Platform> =>
   Effect.gen(function* () {
     const path = yield* Path.Path
-    const names = yield* listNames(path.join(root, relative))
-    return yield* Effect.reduce(Arr.sort(names, Order.String), Arr.empty<string>, stepChild(root, relative, ancestors))
+    const listed = walk.listed + 1
+    const names = yield* (listed > MAX_PATTERN_DIRECTORIES
+      ? Effect.fail(overBudget(pattern))
+      : listNames(path.join(pattern.root, relative)))
+    return yield* Effect.reduce(Arr.sort(names, Order.String), () => ({ names: walk.names, listed }), stepChild(pattern, relative, ancestors))
   })
 
 const enterDirectory = (
-  root: string,
+  pattern: WalkPattern,
   relative: string,
-  names: ReadonlyArray<string>,
   ancestors: HashSet.HashSet<string>,
+  walk: Walk,
   realPath: string,
-): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
-  HashSet.has(ancestors, realPath)
-    ? Effect.succeed(names)
-    : Effect.map(walkStep(root, relative, HashSet.add(ancestors, realPath)), (walked) => Arr.appendAll(names, walked))
+): Effect.Effect<Walk, WalkError, Platform> =>
+  HashSet.has(ancestors, realPath) ? Effect.succeed(walk) : walkStep(pattern, relative, HashSet.add(ancestors, realPath), walk)
 
-const stepChild = (root: string, relative: string, ancestors: HashSet.HashSet<string>) =>
-  (names: ReadonlyArray<string>, name: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+const stepChild = (pattern: WalkPattern, relative: string, ancestors: HashSet.HashSet<string>) =>
+  (walk: Walk, name: string): Effect.Effect<Walk, WalkError, Platform> =>
     Effect.gen(function* () {
       const path = yield* Path.Path
       const childRelative = joinRelative(path, relative, name)
-      return yield* Option.match(yield* directoryRealPath(path.join(root, relative, name)), {
-        onNone: () => Effect.succeed(Arr.append(names, childRelative)),
-        onSome: (realPath) => enterDirectory(root, childRelative, names, ancestors, realPath),
+      return yield* Option.match(yield* directoryRealPath(path.join(pattern.root, relative, name)), {
+        onNone: () => Effect.succeed({ names: Arr.append(walk.names, childRelative), listed: walk.listed }),
+        onSome: (realPath) => enterDirectory(pattern, childRelative, ancestors, walk, realPath),
       })
     })
 
-const walkRelative = (root: string, relative: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+const walkRelative = (pattern: WalkPattern, relative: string): Effect.Effect<ReadonlyArray<string>, WalkError, Platform> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const absolute = path.join(root, relative)
+    const absolute = path.join(pattern.root, relative)
     const seed = yield* fileSystem.realPath(absolute).pipe(Effect.catchIf(isAbsent, () => Effect.succeed(absolute)))
-    return yield* walkStep(root, relative, HashSet.make(seed))
+    const walk = yield* walkStep(pattern, relative, HashSet.make(seed), { names: [], listed: 0 })
+    return walk.names
   })
 
-const walkDirectory = (root: string, directory: string): Effect.Effect<ReadonlyArray<string>, PlatformError, Platform> =>
+const walkDirectory = (pattern: WalkPattern, directory: string): Effect.Effect<ReadonlyArray<string>, WalkError, Platform> =>
   Effect.gen(function* () {
     const path = yield* Path.Path
-    return yield* Option.match(withinRoot(path, root, path.resolve(root, directory)), {
+    return yield* Option.match(withinRoot(path, pattern.root, path.resolve(pattern.root, directory)), {
       onNone: () => Effect.succeed<ReadonlyArray<string>>([]),
-      onSome: (relative) => walkRelative(root, relative),
+      onSome: (relative) => walkRelative(pattern, relative),
     })
   })
 
@@ -178,20 +194,20 @@ const bestPerPath = (items: ReadonlyArray<PatternEntry>): ReadonlyArray<PatternE
     ),
   )
 
-const expandPattern = (root: string, condition: string, key: string, target: ExportTarget): Effect.Effect<ReadonlyArray<PatternEntry>, PlatformError, Platform> =>
+const expandPattern = (root: string, condition: string, key: string, target: ExportTarget): Effect.Effect<ReadonlyArray<PatternEntry>, WalkError, Platform> =>
   Option.match(conditionValue(target, condition), {
     onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
     onSome: (targetText) =>
       Option.match(patternPartsOf(targetText), {
         onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
         onSome: (parts) =>
-          Effect.map(walkDirectory(root, directoryOf(stripRelativePrefix(parts.prefix))), (candidates) =>
+          Effect.map(walkDirectory({ root, key }, directoryOf(stripRelativePrefix(parts.prefix))), (candidates) =>
             Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, stripRelativePrefix(parts.prefix), parts.suffix))),
           ),
       }),
   })
 
-const entryPointsOf = (root: string, manifest: PackageManifest, condition: string): Effect.Effect<ReadonlyArray<SourceEntryPoint>, PlatformError, Platform> =>
+const entryPointsOf = (root: string, manifest: PackageManifest, condition: string): Effect.Effect<ReadonlyArray<SourceEntryPoint>, WalkError, Platform> =>
   Effect.gen(function* () {
     const entries = exportMapOf(manifest.exports)
     const explicit = entries.filter(([exportPath]) => !isPatternKey(exportPath))

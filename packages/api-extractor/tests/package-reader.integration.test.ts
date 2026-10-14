@@ -114,6 +114,22 @@ const aliasedSiblingPatternPackage = Effect.gen(function* () {
   return root
 })
 
+const ALIAS_DEPTH = 12
+
+const aliasFanOutPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'package-reader-' })
+  yield* fileSystem.writeFileString(
+    path.join(root, 'package.json'),
+    JSON.stringify({ name: 'fixture', version: '1.0.0', exports: { './*': { [condition]: './src/*.ts' } } }),
+  )
+  const levels = Array.from({ length: ALIAS_DEPTH }, (_, depth) => path.join(root, 'src', ...Array.from({ length: depth }, () => 'a')))
+  yield* Effect.forEach(levels, (level) =>
+    Effect.andThen(fileSystem.makeDirectory(path.join(level, 'a'), { recursive: true }), fileSystem.symlink('a', path.join(level, 'b'))), { discard: true })
+  return root
+})
+
 const escapingPatternPackage = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -318,6 +334,23 @@ Feature("A package's exports name its entry points")
               missingManifest: { _tag: 'PlatformError' },
             }),
         ),
+      ),
+    )
+
+    scenario(
+      'a pattern export whose symlinked aliases fan out past the walk bound is refused, naming the export',
+      Gherkin.Do.pipe(
+        Given(`a package exporting every \`./src/<name>.ts\` through \`"./*"\`, where each of ${ALIAS_DEPTH} nested directories holds \`a\` and a symlink \`b\` to it`)(
+          'packageRoot',
+          () => aliasFanOutPackage,
+        ),
+        When('the package reader reads it')('refusal', (scope) => refusalOfReading(scope.packageRoot)),
+        Then('it is refused as a rejected manifest naming the package root and the `./*` export')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({
+            _tag: 'ManifestRejected',
+            packageRoot: scope.packageRoot,
+            issue: 'the pattern export "./*" reaches more than 4096 directories',
+          })),
       ),
     )
 
