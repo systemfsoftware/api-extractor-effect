@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-14-0008-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0042-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -545,6 +545,35 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U19 rulings, except K8, which drops J1's sort as unobservable; the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `681efe3..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U21. Rulings on the full-path review at `5d32c3f`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `5d32c3f` (run `20261014-004546-5d32c3fa`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `681efe3..5d32c3f`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (14 honored, 38 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, testing, maintainability, performance, reliability, security and project-standards reported no finding.
+- **Requirements:** R3, R6, R9, R10, R16; KTD5, KTD6, KTD7.
+- **Rulings, fixes** (each scenario fails at `5d32c3f`, unless marked as pinning existing behaviour):
+  - L1 (adversarial P2, DeepSeek delta P2 and gaps): the resolver scoped a namespace block with its own names only, so with `N` declared twice and an imported `A`, a reference to `A` in the second block was reported as a forgotten export while `tsc` and the builder bind it to `N.A`. One pass per file maps each namespace path (`N`, `N.M`) to all its blocks, and a block is scoped with their union (`aea9874`). Analysis scenarios for a top-level and a nested merge agree with upstream.
+  - L2 (correctness residual and gap): an export list naming no declaration (`export { present, Missing }` in a hand-written entry) gave a model silently missing `Missing`. It is refused with `UnsupportedDeclaration` naming the file and the export (`e5db940`). Refusals scenario. The README lists the cause.
+  - L3 (DeepSeek peer P2 and residual): an export path found under a wide key (`./*` -> `./src/*.ts`) kept its entry when a narrower key (`./a/*` -> `./vendor/*.ts`) wins it in Node and names no file. A pattern entry is kept only when its key is the one Node's pattern-key order picks for its export path, which also leaves out a path whose winning key is `null` (`688e85d`). Reader scenario.
+  - L4 (DeepSeek peer P3): a key with two stars produced export paths holding a literal star; only single-star keys are patterns, and other starred keys name no entry (`688e85d`). Reader scenario.
+  - L5 (DeepSeek delta P3): a star inside a file name (`./src*.ts`) walked the package root, `node_modules` included, and tripped the walk bound. The walk enters only directories the target prefix can lead to (`688e85d`). Reader scenario. The README states L3-L5.
+  - L6 (DeepSeek delta P3): U20 K1's `node_modules` scenario at depth 10 passes at `3016e54`, whose bound was 4096; the recorded failure there used depth 13. At the head the committed depth-10 scenario fails once the pruning is removed (2049 listings past 1024). Recorded here; no code change.
+  - L7 (testing gap, adversarial gap, correctness and maintainability gaps): pins for a merged namespace whose class and enum are read from the other block in both spaces (`c9fc383`) and a `node_modules` fan-out nested under the pattern prefix (`e5db940`). Both pass at `5d32c3f`.
+  - L8 (api-contract P3): the release note names the new runtime dependencies (`c9fc383`).
+- **Rulings, rejected:**
+  - Adversarial residual, the `node_modules` prune misses `src/node_modules` under a `src/` prefix: refuted by L7's pin, which lists 2049 directories without the prune and is read at the head.
+  - Adversarial residual, cross-file namespace merging: every declaration file the builder reads is a module, whose namespaces merge only within the file.
+  - api-contract gaps and residual, a third-party emitter returning repeated export paths: KTD1's planned third adapter is TypeScript 7.1's; the shipped adapters take export paths from the manifest's keys, which are unique. Owner: the unit adding a third adapter. Trigger: that adapter.
+  - api-contract gap, canonical bytes for models differing only in the producer: R3 sets the producer equal by design and `serialise.integration.test.ts` pins canonical bytes.
+  - Security gap, a manifest naming a source outside the package: U12 D1 and ruling #5, pinned by the routing and e2e refusals.
+  - DeepSeek delta gap, a type test for the fixture's entry-list arity: a test of a test helper certifies nothing a consumer sees.
+  - Correctness residuals (NUL-delimited local keys, the namespace-body statement start, the resolver's unresolved names): C1 keeps keys disjoint; no consumer reads a namespace-body `statementStart`; after L2 a name that resolves nowhere refuses the model before messages are read through `analyse`.
+  - Maintainability residuals: the pruning rule is now named (`leadsToPrefix`, `isInvalidInsideMatch`); the two export-unwrapping frames are U20 K9's one-classifier ruling.
+- **Follow-ups:**
+  - Testing gap, `tsc`'s non-empty exit text when the API reports no error: owner PR4, with U19's empty-output gap. Trigger: PR4's adversarial corpus, which drives `tsc` write failures.
+  - Security and performance residuals (closure size, accumulated names, host paths in refusal text, route integrity on unauthored packages): unchanged owners and triggers (U16, U19, U20).
+  - Learnings residual, `condition-branch-agreement` on built `dist`: the CI `build · attw` lane runs it on every head.
+- **Preserved:** U11-U20 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `5d32c3f..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -567,7 +596,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U20 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U21 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
