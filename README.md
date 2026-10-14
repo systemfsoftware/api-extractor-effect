@@ -71,9 +71,13 @@ file, as an entry point; `readPackage({ packageRoot,
 sourceCondition })` reads another condition instead, for example `types` for a package
 whose sources are not under the family's condition. A subpath pattern (`"./*"`)
 expands to one entry per matching source under Node's `exports` rules, and an explicit
-subpath wins over a pattern. A package with no such export is refused with `NoSourceEntry`.
+subpath wins over a pattern. The condition is read where the family writes it, directly
+under an export path; a target that nests it under another condition, or lists targets in
+an array, names no entry. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
-refuses — is refused with `ManifestRejected`, naming the package root.
+refuses — is refused with `ManifestRejected`, naming the package root. A `package.json`
+that is missing or cannot be read fails with the file system's `PlatformError`, as every
+operation here does on an I/O fault.
 `analyse` first emits declarations with `oxc-transform`'s isolated-declarations emitter,
 which never type-checks. If any source an entry point reaches needs the checker (an
 unannotated export, TS9xxx), or an entry cannot be proven from its own file (its source is
