@@ -39,7 +39,15 @@ import type {
   TemplateElement,
 } from 'oxc-parser'
 import type { KeywordName } from '../model/type-expr.schema.ts'
-import { type Declaration, type DeclarationGraph, isRelativeSpecifier, refuse, resolveFile, resolveName } from './declaration-graph.ts'
+import {
+  type Declaration,
+  type DeclarationGraph,
+  isRelativeSpecifier,
+  type NamespaceSpaces,
+  refuse,
+  resolveFile,
+  resolveName,
+} from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 export type ReferenceTarget = {
@@ -56,12 +64,20 @@ export type TypeContext = {
   readonly file: string
   readonly naming: Naming
   readonly namesInScope: HashSet.HashSet<string>
+  readonly valuesInScope: HashSet.HashSet<string>
 }
 
 const withNamesInScope = (context: TypeContext, names: ReadonlyArray<string>): TypeContext => ({
   ...context,
   namesInScope: HashSet.union(context.namesInScope, HashSet.fromIterable(names)),
 })
+
+const withNamespaceScope = (context: TypeContext, spaces: NamespaceSpaces): TypeContext => ({
+  ...withNamesInScope(context, spaces.types),
+  valuesInScope: HashSet.union(context.valuesInScope, HashSet.fromIterable(spaces.values)),
+})
+
+const inValueSpace = (context: TypeContext): TypeContext => ({ ...context, namesInScope: context.valuesInScope })
 
 const KEYWORD_ENTRIES = [
   ['TSAnyKeyword', 'any'],
@@ -149,7 +165,7 @@ const plainTarget = (segments: ReadonlyArray<string>): ReferenceTarget => ({ nam
 const qualify = (name: string, rest: ReadonlyArray<string>): string =>
   Arr.match(rest, { onEmpty: () => name, onNonEmpty: (parts) => `${name}.${parts.join('.')}` })
 
-const inOtherFile = (context: TypeContext): TypeContext => ({ ...context, namesInScope: HashSet.empty() })
+const inOtherFile = (context: TypeContext): TypeContext => ({ ...context, namesInScope: HashSet.empty(), valuesInScope: HashSet.empty() })
 
 const targetOf = (context: TypeContext, file: string, segments: ReadonlyArray<string>): Effect.Effect<ReferenceTarget> =>
   Arr.match(segments, {
@@ -412,7 +428,7 @@ const printQuery = (context: TypeContext, node: TSTypeQuery): Effect.Effect<stri
   Match.value(node.exprName).pipe(
     Match.when({ type: 'TSImportType' }, (imported) => Effect.map(printImportType(context, imported), (text) => `typeof ${text}`)),
     Match.orElse((name) =>
-      Effect.map(referenceTargetFor(context, nameSegments(name), Option.none()), (target) => `typeof ${printReference(target, '')}`)),
+      Effect.map(referenceTargetFor(inValueSpace(context), nameSegments(name), Option.none()), (target) => `typeof ${printReference(target, '')}`)),
   )
 
 const mappedReadonlyPrefix = (readonly: TSMappedType['readonly']): string =>
@@ -540,10 +556,14 @@ export const TypePrinting: {
     source: Option.Option<string>,
   ) => Effect.Effect<ReferenceTarget>
   readonly withNamesInScope: (context: TypeContext, names: ReadonlyArray<string>) => TypeContext
+  readonly withNamespaceScope: (context: TypeContext, spaces: NamespaceSpaces) => TypeContext
+  readonly inValueSpace: (context: TypeContext) => TypeContext
   readonly bindingName: (pattern: BindingPattern) => string
 } = {
   canonicalTypeText: canonicalTypeText,
   referenceTargetFor: referenceTargetFor,
   withNamesInScope: withNamesInScope,
+  withNamespaceScope: withNamespaceScope,
+  inValueSpace: inValueSpace,
   bindingName: bindingName,
 }

@@ -38,9 +38,9 @@ import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
 
-const { withNamesInScope } = TypePrinting
+const { withNamesInScope, withNamespaceScope } = TypePrinting
 
-const { classMembersOf, heritageOf, membersOf, referenceToExpression, signatureOf, typeExprOf, typeParametersOf } = TypeExprs
+const { classMembersOf, heritageOf, membersOf, superClassOf, signatureOf, typeExprOf, typeParametersOf } = TypeExprs
 
 type LocalDeclaration = {
   readonly key: string
@@ -322,7 +322,7 @@ const implementedClauses = (context: TypeContext, node: Class) =>
 const extendsOf = (context: TypeContext, node: Class): Effect.Effect<ReadonlyArray<TypeExpr>, UnsupportedDeclaration> =>
   Option.match(Option.fromNullishOr(node.superClass), {
     onNone: () => Effect.succeed<ReadonlyArray<TypeExpr>>([]),
-    onSome: (superClass) => Effect.map(referenceToExpression(context, superClass, node.superTypeArguments), (extended) => [extended]),
+    onSome: (superClass) => Effect.map(superClassOf(context, superClass, node.superTypeArguments), (extended) => [extended]),
   })
 
 const classItemOf = (
@@ -490,7 +490,7 @@ const namespaceBodyItems = (
   bodies: ReadonlyArray<TSModuleBlock | null>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
-    itemsOfGroups(withNamesInScope(context, namespaceSpacesOf(bodies).types), groups))
+    itemsOfGroups(withNamespaceScope(context, namespaceSpacesOf(bodies)), groups))
 
 const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
   bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
@@ -655,7 +655,7 @@ const buildEntry = (graph: DeclarationGraph, entry: EntryFile): Effect.Effect<En
     const reachable = yield* Ref.make(HashMap.empty<string, LocalDeclaration>())
     const built = yield* Ref.make(HashMap.empty<string, TypeAliasItem>())
     const naming: Naming = { localNameOf: (at, name, declarations) => localNameOf(reachable, index, at, name, declarations) }
-    const contextFor = (at: string): TypeContext => ({ graph, file: at, naming, namesInScope: HashSet.empty() })
+    const contextFor = (at: string): TypeContext => ({ graph, file: at, naming, namesInScope: HashSet.empty(), valuesInScope: HashSet.empty() })
     const items = yield* Effect.forEach(exported, (name) => itemsForExport(graph, contextFor, file, name, HashSet.empty()))
     yield* buildReachableLocals(contextFor, reachable, built)
     const rename = assignNames(exported, yield* Ref.get(reachable))

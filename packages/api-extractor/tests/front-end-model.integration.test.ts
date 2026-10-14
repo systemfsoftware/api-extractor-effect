@@ -1015,6 +1015,29 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a typeof query and a class heritage read the names a namespace body declares as values',
+      Gherkin.Do.pipe(
+        Given('an entry importing `A` and `B` from `pkg`, with `N` declaring a value `A`, an interface `B`, `typeof A`, `typeof B` and a class extending `A`')(
+          'declarations',
+          () =>
+            Effect.succeed(declarations([[
+              'index.d.ts',
+              "import { A, B } from 'pkg'\nexport declare namespace N {\n  const A: new () => object\n  interface B { b: string }\n  type OfA = typeof A\n  type OfB = typeof B\n  class C extends A {}\n}\n",
+            ]])),
+        ),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then("`typeof A` and `C`'s base read `N`'s value `A`, while `typeof B` reads the imported value `B`")((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
+            items: expect.arrayContaining([
+              { kind: 'typeAlias', name: 'OfA', typeParameters: [], type: { kind: 'text', text: 'typeof A' } },
+              { kind: 'typeAlias', name: 'OfB', typeParameters: [], type: { kind: 'text', text: 'typeof import("pkg").B' } },
+              expect.objectContaining({ kind: 'class', name: 'C', extends: [{ kind: 'reference', name: 'A', args: [] }] }),
+            ]),
+          })),
+      ),
+    )
+
+    scenario(
       'a namespace body value does not shadow an imported type of the same name',
       Gherkin.Do.pipe(
         Given('an entry importing type `A` from `pkg` and declaring namespace `N` with a value `A` and a function `f` returning `A`')('declarations', () =>

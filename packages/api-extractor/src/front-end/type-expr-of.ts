@@ -42,7 +42,7 @@ import {
 import { refuse } from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
-const { bindingName, canonicalTypeText, referenceTargetFor, withNamesInScope } = TypePrinting
+const { bindingName, canonicalTypeText, inValueSpace, referenceTargetFor, withNamesInScope } = TypePrinting
 
 const unknownKeyword: TypeExpr = { kind: 'keyword', name: 'unknown' }
 
@@ -74,14 +74,19 @@ const typeArgumentsOf = (
     onSome: (present) => Effect.forEach(present.params, (param) => typeExprOf(context, param)),
   })
 
+type ReferenceRequest = {
+  readonly targetContext: TypeContext
+  readonly segments: ReadonlyArray<string>
+  readonly source: Option.Option<string>
+}
+
 const referenceTypeOf = (
   context: TypeContext,
-  segments: ReadonlyArray<string>,
-  source: Option.Option<string>,
+  request: ReferenceRequest,
   typeArguments: TSTypeParameterInstantiation | null | undefined,
 ): Effect.Effect<TypeExpr, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const target = yield* referenceTargetFor(context, segments, source)
+    const target = yield* referenceTargetFor(request.targetContext, request.segments, request.source)
     const args = yield* typeArgumentsOf(context, typeArguments)
     return referenceExpr(target.name, target.module, args)
   })
@@ -166,16 +171,23 @@ const signatureOf = (
 
 const referenceToExpression = (
   context: TypeContext,
+  targetContext: TypeContext,
   expression: Expression,
   typeArguments: TSTypeParameterInstantiation | null | undefined,
 ): Effect.Effect<TypeExpr, UnsupportedDeclaration> =>
   Option.match(expressionPath(expression), {
     onNone: () => refuse(context.file, `a ${expression.type} heritage clause`),
-    onSome: (segments) => referenceTypeOf(context, segments, Option.none(), typeArguments),
+    onSome: (segments) => referenceTypeOf(context, { targetContext, segments, source: Option.none() }, typeArguments),
   })
 
 const heritageOf = (context: TypeContext, heritage: TSInterfaceHeritage | TSClassImplements): Effect.Effect<TypeExpr, UnsupportedDeclaration> =>
-  referenceToExpression(context, heritage.expression, heritage.typeArguments)
+  referenceToExpression(context, context, heritage.expression, heritage.typeArguments)
+
+const superClassOf = (
+  context: TypeContext,
+  expression: Expression,
+  typeArguments: TSTypeParameterInstantiation | null | undefined,
+): Effect.Effect<TypeExpr, UnsupportedDeclaration> => referenceToExpression(context, inValueSpace(context), expression, typeArguments)
 
 type DraftMethod = {
   readonly kind: 'method'
@@ -459,11 +471,13 @@ const typeExprOf = (context: TypeContext, node: TSType): Effect.Effect<TypeExpr,
       Effect.succeed<TypeExpr>({ kind: 'keyword', name: Option.getOrThrow(keywordNameOf(keyword.type)) })),
     Match.when({ type: 'TSThisType' }, () => Effect.succeed(referenceExpr('this', Option.none(), []))),
     Match.when({ type: 'TSLiteralType' }, (literal) => literalExpr(context, literal)),
-    Match.when({ type: 'TSTypeReference' }, (reference) => referenceTypeOf(context, nameSegments(reference.typeName), Option.none(), reference.typeArguments)),
+    Match.when({ type: 'TSTypeReference' }, (reference) =>
+      referenceTypeOf(context, { targetContext: context, segments: nameSegments(reference.typeName), source: Option.none() }, reference.typeArguments)),
     Match.when({ type: 'TSImportType' }, (imported) =>
       Arr.match(importSegments(imported.qualifier), {
         onEmpty: () => textExpr(context, imported),
-        onNonEmpty: (segments) => referenceTypeOf(context, segments, Option.some(imported.source.value), imported.typeArguments),
+        onNonEmpty: (segments) =>
+          referenceTypeOf(context, { targetContext: context, segments, source: Option.some(imported.source.value) }, imported.typeArguments),
       })),
     Match.when({ type: 'TSUnionType' }, (union) => unionExpr(context, 'union', union.types)),
     Match.when({ type: 'TSIntersectionType' }, (intersection) => unionExpr(context, 'intersection', intersection.types)),
@@ -501,7 +515,7 @@ export const TypeExprs: {
     params: ReadonlyArray<ParamPattern>,
     returnType: TSTypeAnnotation | null | undefined,
   ) => Effect.Effect<Signature, UnsupportedDeclaration>
-  readonly referenceToExpression: (
+  readonly superClassOf: (
     context: TypeContext,
     expression: Expression,
     typeArguments: TSTypeParameterInstantiation | null | undefined,
@@ -513,7 +527,7 @@ export const TypeExprs: {
   typeExprOf: typeExprOf,
   typeParametersOf: typeParametersOf,
   signatureOf: signatureOf,
-  referenceToExpression: referenceToExpression,
+  superClassOf: superClassOf,
   heritageOf: heritageOf,
   membersOf: membersOf,
   classMembersOf: classMembersOf,
