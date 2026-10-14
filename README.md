@@ -72,8 +72,9 @@ sourceCondition })` reads another condition instead, for example `types` for a p
 whose sources are not under the family's condition. A subpath pattern (`"./*"`, one
 star) expands to one entry per matching source under Node's `exports` rules: an explicit
 subpath wins over a pattern, and an export path belongs to the pattern key Node picks for
-it, so it names no entry when that key's target has no source or is `null`. A key with two
-stars names no entry. The condition is read where the family writes it, directly
+it, so it names no entry when that key's target has no source or is `null`. A key or a
+target with two stars names no entry. The condition is read where the family writes it,
+directly
 under an export path, and its value is the source's path; a target that nests it under
 another condition, lists targets in an array, or gives the condition anything but a path
 names no entry. A package with no such export is refused with `NoSourceEntry`.

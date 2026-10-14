@@ -456,10 +456,13 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
-      'an export key holding two stars names no entry point',
+      'an export key or target holding two stars names no entry point',
       Gherkin.Do.pipe(
-        Given('a package exporting `./src/mod.ts` at `.` and `./src/*.ts` at `"./*/*.ts"`, with `src/b.ts`')('packageRoot', () =>
-          packageOf({ '.': { [condition]: './src/mod.ts' }, './*/*.ts': { [condition]: './src/*.ts' } }, { 'src/mod.ts': '', 'src/b.ts': '' })),
+        Given('a package exporting `./src/mod.ts` at `.`, `./src/*.ts` at `"./*/*.ts"` and `./src/*/*.ts` at `"./lib/*"`, with `src/b.ts` and `src/c/c.ts`')('packageRoot', () =>
+          packageOf(
+            { '.': { [condition]: './src/mod.ts' }, './*/*.ts': { [condition]: './src/*.ts' }, './lib/*': { [condition]: './src/*/*.ts' } },
+            { 'src/mod.ts': '', 'src/b.ts': '', 'src/c/c.ts': '' },
+          )),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only `.` is an entry point, and no export path holds a star')((scope, expect) =>
           expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])),
