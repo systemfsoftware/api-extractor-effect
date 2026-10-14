@@ -128,14 +128,87 @@ type ModuleDeclaration = TSModuleDeclaration | TSGlobalDeclaration
 
 const moduleBlockOf = (node: ModuleDeclaration): Option.Option<TSModuleBlock> => Option.fromNullishOr(node.body)
 
-const openNamespaceScope = (scopes: Array<NameScope>, node: ModuleDeclaration): void =>
-  Option.match(moduleBlockOf(node), {
+const namespaceNameOf = (node: ModuleDeclaration): Option.Option<string> =>
+  Match.value(node.id).pipe(
+    Match.when({ type: 'Identifier' }, (id) => Option.some<string>(id.name)),
+    Match.orElse(() => Option.none<string>()),
+  )
+
+const namespaceBlocksOf = (node: ModuleDeclaration): ReadonlyArray<TSModuleBlock> => Option.toArray(moduleBlockOf(node))
+
+type MergedNamespaceBlocks = HashMap.HashMap<string, ReadonlyArray<TSModuleBlock>>
+
+type NamespaceBlockEntry = readonly [string, TSModuleBlock]
+
+const namespacePathOf = (namespacePath: ReadonlyArray<string>, name: string): string => [...namespacePath, name].join('.')
+
+const enterNamespacePath = (namespacePath: Array<string>, blocks: Array<NamespaceBlockEntry>, node: ModuleDeclaration): void =>
+  Option.match(namespaceNameOf(node), {
     onNone: () => undefined,
-    onSome: (block) => void scopes.push({ start: block.start, end: block.end, ...namespaceSpacesOf([block]) }),
+    onSome: (name) => {
+      namespacePath.push(name)
+      Option.match(moduleBlockOf(node), {
+        onNone: () => undefined,
+        onSome: (block) => void blocks.push([namespacePath.join('.'), block]),
+      })
+    },
   })
 
-const closeNamespaceScope = (scopes: Array<NameScope>, node: ModuleDeclaration): void =>
+const leaveNamespacePath = (namespacePath: Array<string>, node: ModuleDeclaration): void =>
+  Option.match(namespaceNameOf(node), { onNone: () => undefined, onSome: () => void namespacePath.pop() })
+
+const mergedBlockEntries = (program: Program): ReadonlyArray<NamespaceBlockEntry> => {
+  const namespacePath: Array<string> = []
+  const blocks: Array<NamespaceBlockEntry> = []
+  new Visitor({
+    TSModuleDeclaration: (node: ModuleDeclaration) => enterNamespacePath(namespacePath, blocks, node),
+    'TSModuleDeclaration:exit': (node: ModuleDeclaration) => leaveNamespacePath(namespacePath, node),
+  }).visit(program)
+  return blocks
+}
+
+const withBlock = (blocksByPath: MergedNamespaceBlocks, [path, block]: NamespaceBlockEntry): MergedNamespaceBlocks =>
+  HashMap.set(blocksByPath, path, Arr.append(Option.getOrElse(HashMap.get(blocksByPath, path), () => []), block))
+
+const mergedBlocksByPath = (program: Program): MergedNamespaceBlocks =>
+  Arr.reduce(mergedBlockEntries(program), HashMap.empty<string, ReadonlyArray<TSModuleBlock>>(), withBlock)
+
+const namespaceBlocksAt = (blocksByPath: MergedNamespaceBlocks, path: string, node: ModuleDeclaration): ReadonlyArray<TSModuleBlock> =>
+  Option.getOrElse(HashMap.get(blocksByPath, path), () => namespaceBlocksOf(node))
+
+const namespaceScopeOf = (block: TSModuleBlock, blocks: ReadonlyArray<TSModuleBlock>): NameScope => ({
+  start: block.start,
+  end: block.end,
+  ...namespaceSpacesOf(blocks),
+})
+
+const pushNamespaceScope = (scopes: Array<NameScope>, blocks: ReadonlyArray<TSModuleBlock>, node: ModuleDeclaration): void =>
+  Option.match(moduleBlockOf(node), {
+    onNone: () => undefined,
+    onSome: (block) => void scopes.push(namespaceScopeOf(block, blocks)),
+  })
+
+const popNamespaceScope = (scopes: Array<NameScope>, node: ModuleDeclaration): void =>
   Option.match(moduleBlockOf(node), { onNone: () => undefined, onSome: () => closeScope(scopes) })
+
+const openNamespaceScope = (scopes: Array<NameScope>, namespacePath: Array<string>, blocksByPath: MergedNamespaceBlocks, node: ModuleDeclaration): void =>
+  Option.match(namespaceNameOf(node), {
+    onNone: () => pushNamespaceScope(scopes, namespaceBlocksOf(node), node),
+    onSome: (name) => {
+      const path = namespacePathOf(namespacePath, name)
+      namespacePath.push(name)
+      pushNamespaceScope(scopes, namespaceBlocksAt(blocksByPath, path, node), node)
+    },
+  })
+
+const closeNamespaceScope = (scopes: Array<NameScope>, namespacePath: Array<string>, node: ModuleDeclaration): void =>
+  Option.match(namespaceNameOf(node), {
+    onNone: () => popNamespaceScope(scopes, node),
+    onSome: () => {
+      namespacePath.pop()
+      popNamespaceScope(scopes, node)
+    },
+  })
 
 type ConditionalScope = {
   readonly start: number
@@ -176,6 +249,8 @@ const scanOf = (program: Program): ReferenceScan => {
   const references: Array<Reference> = []
   const scopes: Array<NameScope> = []
   const conditionals: Array<ConditionalScope> = []
+  const namespacePath: Array<string> = []
+  const blocksByPath = mergedBlocksByPath(program)
   const record = (node: NameNode | null, start: number, space: NameSpace): void =>
     Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => addReference(references, scopes, name, start, space) })
   const enter = (node: ScopeCarrier): void => openScope(scopes, node)
@@ -216,8 +291,8 @@ const scanOf = (program: Program): ReferenceScan => {
     'TSFunctionType:exit': exit,
     TSConstructorType: enter,
     'TSConstructorType:exit': exit,
-    TSModuleDeclaration: (node: ModuleDeclaration) => openNamespaceScope(scopes, node),
-    'TSModuleDeclaration:exit': (node: ModuleDeclaration) => closeNamespaceScope(scopes, node),
+    TSModuleDeclaration: (node: ModuleDeclaration) => openNamespaceScope(scopes, namespacePath, blocksByPath, node),
+    'TSModuleDeclaration:exit': (node: ModuleDeclaration) => closeNamespaceScope(scopes, namespacePath, node),
     TSMappedType: (node: TSMappedType) => openNamedScope(scopes, node),
     'TSMappedType:exit': exit,
     TSConditionalType: (node: TSConditionalType) => openConditional(scopes, conditionals, node),

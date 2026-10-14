@@ -468,6 +468,86 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      'A reference in one block of a merged namespace is bound by a declaration in the other block',
+      Gherkin.Do.pipe(
+        Given('a package declaring a namespace twice, one block declaring an interface named like an imported type and the other referring to that name')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { A } from './a.js'",
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  interface A { y: number }',
+                    '}',
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  function f(): A',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport interface A { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('no note is derived for the name the merged namespace binds and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
+      'A reference in one block of merged nested namespaces is bound by a declaration in the other block of the inner namespace',
+      Gherkin.Do.pipe(
+        Given('a package declaring nested namespaces twice, one inner block declaring an interface named like an imported type and the other referring to that name')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { A } from './a.js'",
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  namespace M {',
+                    '    interface A { y: number }',
+                    '  }',
+                    '}',
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  namespace M {',
+                    '    function f(): A',
+                    '  }',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport interface A { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('no note is derived for the name the merged inner namespace binds and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
       'Every note for this package matches the ones api-extractor derives for it',
       Gherkin.Do.pipe(
         Given('this repository package')('source', () => Effect.flatMap(packageRoot, (root) => FrontEnd.readPackage({ packageRoot: root }))),
