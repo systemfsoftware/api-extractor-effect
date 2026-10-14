@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-14-0143-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0157-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -647,6 +647,30 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U23 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `fa6bca2..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U25. Rulings on the full-path review at `c25bf9a`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `c25bf9a` (run `20261014-020001-c25bf9ae`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `fa6bca2..c25bf9a`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (26 honored, 26 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, security, api-contract, project-standards and both DeepSeek lenses reported no finding.
+- **Requirements:** R1, R6, R16; KTD1, KTD5, KTD6.
+- **Rulings, fixes** (each pins existing behaviour unless marked):
+  - P1 (maintainability P2): the resolver's `typeParameterNamesOf` repeated `typeParameterNames`; it now calls the printer's helper (`5054d04`). Analysis scenarios unchanged.
+  - P2 (testing P3): the compiler's refusal of a missing entry source had no scenario beside its pinned sibling. The e2e refusal journey analyses a package whose entry names no file: the fast path declines and the compiler refuses with a `Note` naming `src/mod.ts` (`f701dc7`).
+  - P3 (reliability P2): `oxc-parser` and `oxc-transform` load their native bindings at import (probed: both throw `Cannot find native binding` without them), so importing this package fails without them. The README states it beside the TypeScript 7 platform-package paragraph (`9ae4420`). Moving the imports behind a lazy load is not taken: a front-end without its parser has no route, and the import failure names the cause.
+  - P4 (maintainability residual): the printer's keyword table is a record keyed by the model's `KeywordName`, and its entries are derived from `KeywordName.literals`, so a keyword the model gains and the printer lacks is a type error instead of a runtime refusal (`ce351e3`; probed: dropping `void` fails `tsc` with TS2339).
+  - P5 (reliability gap): a `.ts` candidate that is a directory is skipped for the `.tsx` source. The U14 ruling rested on an orchestrator probe; a routing scenario now pins it (`b22c2b5`).
+  - P6 (correctness residual): a pattern target with two stars names no entry; the README named only the two-star key. The README states both and the reader scenario pins both (`ccd067e`).
+- **Rulings, rejected:**
+  - Adversarial P3 (confidence 50), an unreadable source escapes as `PlatformError`: re-raises the U14 unreadable-source ruling (an environment fault, not a package shape; `tsc` cannot read it either).
+  - DeepSeek delta gap, the `direct` row of O1's scenario also passed at `fa6bca2`: the scenario's fail-before rests on its `behindUnresolved` row, as U24 records; the `direct` row pins the unchanged case.
+  - DeepSeek delta residual, the two refusal branches of `itemsForExport` name different files: U24 O1 rules it (the resolving file for an external re-export, the first listing file for a name that names no declaration).
+- **Follow-ups:**
+  - Performance P2, `replaceNames` scans the rename map once per reference: owner PR5 with the other performance residuals (U20); the committed profile puts `build:model` at 274.59 ms over 40 packages. Trigger: PR5's benchmark lane measuring a large synthetic package.
+  - DeepSeek peer residuals and gaps, a reference through a namespace import (`import * as NS`, `NS.Hidden`) draws no `ae-forgotten-export`, and a package addressing itself through `#imports` or `paths` reads as external: owner PR4 with the resolver's namespace-member residual (U18). Trigger: PR4's differential lane.
+  - Correctness gaps, route equality on a module with no export statement and hidden-name collisions with nested namespace items; adversarial gap, a closure import whose `.ts` and hand-written `.d.ts` share a stem: owner PR4. Trigger: PR4's adversarial corpus.
+  - Reliability residual, native bindings executed only on linux-x64-gnu: owner PR6 with the non-POSIX host lane (U16). Trigger: the consumer journey adding a host.
+  - Security, performance, api-contract and adversarial residuals: unchanged owners and triggers (U20, U22, U23, U24).
+- **Preserved:** U11-U24 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `c25bf9a..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -669,7 +693,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U24 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U25 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
