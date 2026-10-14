@@ -21,6 +21,7 @@ import {
   Visitor,
 } from 'oxc-parser'
 import type { AnalysisMessage, AnalysisMessageId } from './analysis-message.schema.ts'
+import { typeParameterNames } from './canonical-type-text.ts'
 import type { Declaration, DeclarationGraph, EntryDeclaration, FileScope, ResolvedSymbol } from './declaration-graph.ts'
 import { declarationGraph, exportedNames, exportedSymbol, namespaceSpacesOf, resolveName } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
@@ -107,9 +108,6 @@ const matchesName = (scope: NameScope, name: string, space: NameSpace): boolean 
 const shadowed = (scopes: ReadonlyArray<NameScope>, name: string, at: number, space: NameSpace): boolean =>
   Arr.some(scopes, (scope) => withinScope(scope, at) && matchesName(scope, name, space))
 
-const typeParameterNamesOf = (declaration: TSTypeParameterDeclaration | null): ReadonlyArray<string> =>
-  declaration === null ? [] : declaration.params.map((parameter) => parameter.name.name)
-
 const addReference = (references: Array<Reference>, scopes: ReadonlyArray<NameScope>, name: string, at: number, space: NameSpace): void => {
   if (!shadowed(scopes, name, at, space)) {
     references.push({ start: at, name })
@@ -117,7 +115,7 @@ const addReference = (references: Array<Reference>, scopes: ReadonlyArray<NameSc
 }
 
 const openScope = (scopes: Array<NameScope>, node: ScopeCarrier): void =>
-  void scopes.push({ start: node.start, end: node.end, types: typeParameterNamesOf(node.typeParameters ?? null), values: [] })
+  void scopes.push({ start: node.start, end: node.end, types: typeParameterNames(node.typeParameters), values: [] })
 
 const closeScope = (scopes: Array<NameScope>): void => void scopes.pop()
 
