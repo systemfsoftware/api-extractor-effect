@@ -362,7 +362,7 @@ const declarationsInStatement = (statement: Directive | Statement): ReadonlyArra
     Match.orElse((node) => namedDeclarationsOf(classifyDeclaration(node))),
   )
 
-const statementsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
+export const statementsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
   Arr.flatMap(bodies, (body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
 
 const declarationsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<NamedDeclaration> =>
@@ -637,6 +637,25 @@ export const exportedSymbol: {
   (file: string, name: string): (graph: DeclarationGraph) => Option.Option<ResolvedSymbol>
   (graph: DeclarationGraph, file: string, name: string): Option.Option<ResolvedSymbol>
 } = Fn.dual(3, (graph: DeclarationGraph, file: string, name: string) => exportedFrom(graph, file, name, HashSet.empty()))
+
+const starredOrigin = (graph: DeclarationGraph, scope: FileScope, name: string, seen: Seen): Option.Option<string> =>
+  Arr.findFirst(scope.starExports, (specifier) =>
+    Option.flatMap(resolveFile(graph, scope.path, specifier), (target) => exportOriginFrom(graph, target, name, seen)))
+
+const originInScope = (graph: DeclarationGraph, scope: FileScope, name: string, seen: Seen): Option.Option<string> =>
+  HashMap.has(scope.exports, name) ? Option.some(scope.path) : starredOrigin(graph, scope, name, seen)
+
+const exportOriginFrom = (graph: DeclarationGraph, file: string, name: string, seen: Seen): Option.Option<string> => {
+  const key = `${file}\u0000${name}`
+  return HashSet.has(seen, key)
+    ? Option.none()
+    : Option.flatMap(HashMap.get(graph.files, file), (scope) => originInScope(graph, scope, name, HashSet.add(seen, key)))
+}
+
+export const exportOrigin: {
+  (file: string, name: string): (graph: DeclarationGraph) => Option.Option<string>
+  (graph: DeclarationGraph, file: string, name: string): Option.Option<string>
+} = Fn.dual(3, (graph: DeclarationGraph, file: string, name: string) => exportOriginFrom(graph, file, name, HashSet.empty()))
 
 const starredNames = (graph: DeclarationGraph, scope: FileScope, seen: Seen): ReadonlyArray<string> =>
   scope.starExports.flatMap((specifier) =>

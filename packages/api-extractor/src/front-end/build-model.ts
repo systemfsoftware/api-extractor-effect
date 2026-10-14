@@ -28,7 +28,7 @@ import {
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
-import { declarationGraph, declaredOf, exportedNames, exportedSymbol, grouped, namespaceSpacesOf, refuse, type Declaration, type Declared, type DeclarationGraph, type EntryDeclaration } from './declaration-graph.ts'
+import { declarationGraph, declaredOf, exportedNames, exportedSymbol, exportOrigin, grouped, namespaceSpacesOf, refuse, statementsIn, type Declaration, type Declared, type DeclarationGraph, type EntryDeclaration } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
@@ -486,15 +486,12 @@ const namespaceBodyItems = (
   Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
     itemsOfGroups(withNamespaceScope(context, namespaceSpacesOf(bodies)), groups))
 
-const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
-  bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
-
 const bodyDeclarations = (
   context: TypeContext,
   bodies: ReadonlyArray<TSModuleBlock | null>,
 ): Effect.Effect<HashMap.HashMap<string, ReadonlyArray<Declaration>>, UnsupportedDeclaration> =>
   Effect.map(
-    Effect.forEach(bodyStatements(bodies), (statement) => statementDeclarations(context, statement)),
+    Effect.forEach(statementsIn(bodies), (statement) => statementDeclarations(context, statement)),
     (all) => grouped(all.flat().map((declaration) => [declaration.declared.name, declaration] as const)),
   )
 
@@ -549,7 +546,7 @@ const itemsForExport = (
   visited: HashSet.HashSet<string>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Option.match(exportedSymbol(graph, entryFile, name), {
-    onNone: () => refuse(entryFile, `\`export { ${name} }\`, which names no declaration`),
+    onNone: () => refuse(Option.getOrElse(exportOrigin(graph, entryFile, name), () => entryFile), `\`export { ${name} }\`, which names no declaration`),
     onSome: (symbol) =>
       Match.value(symbol).pipe(
         Match.when({ kind: 'external' }, (external) => refuse(entryFile, `re-export of "${name}" from "${external.module}"`)),
