@@ -83,6 +83,21 @@ Feature('Refusing declaration text the model cannot hold')
     )
 
     scenario(
+      'an export list naming a name with no declaration is refused naming the file and the export',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `present` and exporting `{ present, Missing }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'declare const present: number\nexport { present, Missing }\n']]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the unresolved export')((scope, expect) =>
+          expect({
+            _tag: scope.refusal._tag,
+            file: scope.refusal.file,
+            construct: scope.refusal.construct,
+          }).toEqual({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`export { Missing }`, which names no declaration' })),
+      ),
+    )
+
+    scenario(
       'an untyped constant, a non-literal initialiser, an import by assignment, an exported namespace name, an expression default export, a destructuring constant, a destructuring parameter, a dotted namespace declaration, an unparseable declaration body and a bare import type are each refused naming the file and the construct',
       Gherkin.Do.pipe(
         Given('a file declaring `declare const x;`')('noType', () =>

@@ -116,6 +116,8 @@ is the whole list:
   and `export default` of an expression
 - an entry point that re-exports a name from another package (`export { it } from 'vitest'`).
   The whole package is refused, not just that export.
+- an export list naming a name that no declaration holds (`export { present, Missing }` with
+  no `Missing`), which happens only with declaration text written by hand
 - `declare global`, module augmentation (`declare module 'vitest'`) and a dotted
   namespace (`declare namespace A.B`)
 - `export =`

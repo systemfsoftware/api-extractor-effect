@@ -549,7 +549,7 @@ const itemsForExport = (
   visited: HashSet.HashSet<string>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Option.match(exportedSymbol(graph, entryFile, name), {
-    onNone: () => Effect.succeed<ReadonlyArray<ApiItem>>([]),
+    onNone: () => refuse(entryFile, `\`export { ${name} }\`, which names no declaration`),
     onSome: (symbol) =>
       Match.value(symbol).pipe(
         Match.when({ kind: 'external' }, (external) => refuse(entryFile, `re-export of "${name}" from "${external.module}"`)),
