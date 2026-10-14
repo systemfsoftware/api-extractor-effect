@@ -118,6 +118,26 @@ Feature('Refusing declaration text the model cannot hold')
     )
 
     scenario(
+      'a re-export from another package reached through a star export is refused naming the file that re-exports it',
+      Gherkin.Do.pipe(
+        Given("an entry star-exporting a file holding `export { x } from 'lodash'`")('declarations', () =>
+          Effect.succeed(
+            declarations([
+              ['index.d.ts', "export * from './a.js'\n"],
+              ['a.d.ts', "export { x } from 'lodash'\n"],
+            ]),
+          )),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file holding the re-export')((scope, expect) =>
+          expect({
+            _tag: scope.refusal._tag,
+            file: scope.refusal.file,
+            construct: scope.refusal.construct,
+          }).toEqual({ _tag: 'UnsupportedDeclaration', file: 'a.d.ts', construct: 're-export of "x" from "lodash"' })),
+      ),
+    )
+
+    scenario(
       'an untyped constant, a non-literal initialiser, an import by assignment, an exported namespace name, an expression default export, a destructuring constant, a destructuring parameter, a dotted namespace declaration, an unparseable declaration body and a bare import type are each refused naming the file and the construct',
       Gherkin.Do.pipe(
         Given('a file declaring `declare const x;`')('noType', () =>

@@ -544,18 +544,20 @@ const itemsForExport = (
   entryFile: string,
   name: string,
   visited: HashSet.HashSet<string>,
-): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
-  Option.match(exportedSymbol(graph, entryFile, name), {
-    onNone: () => refuse(Option.getOrElse(exportOrigin(graph, entryFile, name), () => entryFile), `\`export { ${name} }\`, which names no declaration`),
+): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> => {
+  const origin = (): string => Option.getOrElse(exportOrigin(graph, entryFile, name), () => entryFile)
+  return Option.match(exportedSymbol(graph, entryFile, name), {
+    onNone: () => refuse(origin(), `\`export { ${name} }\`, which names no declaration`),
     onSome: (symbol) =>
       Match.value(symbol).pipe(
-        Match.when({ kind: 'external' }, (external) => refuse(entryFile, `re-export of "${name}" from "${external.module}"`)),
+        Match.when({ kind: 'external' }, (external) => refuse(origin(), `re-export of "${name}" from "${external.module}"`)),
         Match.when({ kind: 'local' }, (local) => itemsOfDeclarations(contextFor(local.file), local.declarations, name)),
         Match.when({ kind: 'namespace' }, (namespace) =>
           Effect.map(itemsForFile(graph, contextFor, namespace.file, visited), (items): ReadonlyArray<ApiItem> => [{ kind: 'namespace', name, items }])),
         Match.exhaustive,
       ),
   })
+}
 
 type PendingAlias = { readonly local: LocalDeclaration; readonly node: TSTypeAliasDeclaration }
 
