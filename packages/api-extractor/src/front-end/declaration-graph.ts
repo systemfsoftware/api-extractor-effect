@@ -412,7 +412,7 @@ export type FileScope = {
 export type ResolvedSymbol =
   | { readonly kind: 'local'; readonly file: string; readonly name: string; readonly declarations: ReadonlyArray<Declaration> }
   | { readonly kind: 'namespace'; readonly file: string }
-  | { readonly kind: 'external'; readonly module: string; readonly imported: string }
+  | { readonly kind: 'external'; readonly file: string; readonly module: string; readonly imported: string }
 
 export type DeclarationGraph = {
   readonly files: HashMap.HashMap<string, FileScope>
@@ -590,7 +590,7 @@ const packageImportTarget = (graph: DeclarationGraph, file: string, imported: st
 const importTarget = (graph: DeclarationGraph, from: string, binding: ImportBinding, seen: Seen): Option.Option<ResolvedSymbol> =>
   isRelativeSpecifier(binding.specifier)
     ? Option.flatMap(fileIn(graph, from, binding.specifier), (file) => packageImportTarget(graph, file, binding.imported, seen))
-    : Option.some({ kind: 'external', module: binding.specifier, imported: binding.imported })
+    : Option.some({ kind: 'external', file: from, module: binding.specifier, imported: binding.imported })
 
 const importedName = (graph: DeclarationGraph, scope: FileScope, name: string, seen: Seen): Option.Option<ResolvedSymbol> =>
   Option.flatMap(HashMap.get(scope.imports, name), (binding) => importTarget(graph, scope.path, binding, seen))

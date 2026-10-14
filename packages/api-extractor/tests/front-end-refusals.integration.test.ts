@@ -118,22 +118,36 @@ Feature('Refusing declaration text the model cannot hold')
     )
 
     scenario(
-      'a re-export from another package reached through a star export is refused naming the file that re-exports it',
+      'a re-export from another package reached through a star export is refused naming the file that re-exports it, past an earlier star target listing the name unresolved',
       Gherkin.Do.pipe(
-        Given("an entry star-exporting a file holding `export { x } from 'lodash'`")('declarations', () =>
+        Given("an entry star-exporting a file holding `export { x } from 'lodash'`")('direct', () =>
           Effect.succeed(
             declarations([
               ['index.d.ts', "export * from './a.js'\n"],
               ['a.d.ts', "export { x } from 'lodash'\n"],
             ]),
           )),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file holding the re-export')((scope, expect) =>
+        Given("an entry star-exporting `a.d.ts`, which lists `x` with no declaration, then `b.d.ts`, holding `export { x } from 'lodash'`")('behindUnresolved', () =>
+          Effect.succeed(
+            declarations([
+              ['index.d.ts', "export * from './a.js'\nexport * from './b.js'\n"],
+              ['a.d.ts', 'declare const present: number\nexport { present, x }\n'],
+              ['b.d.ts', "export { x } from 'lodash'\n"],
+            ]),
+          )),
+        When('each model is built')('refusals', (scope) =>
+          Effect.all({
+            direct: Effect.flip(FrontEnd.buildModel(scope.direct)),
+            behindUnresolved: Effect.flip(FrontEnd.buildModel(scope.behindUnresolved)),
+          })),
+        Then('each refusal names the file holding the re-export')((scope, expect) =>
           expect({
-            _tag: scope.refusal._tag,
-            file: scope.refusal.file,
-            construct: scope.refusal.construct,
-          }).toEqual({ _tag: 'UnsupportedDeclaration', file: 'a.d.ts', construct: 're-export of "x" from "lodash"' })),
+            direct: { _tag: scope.refusals.direct._tag, file: scope.refusals.direct.file, construct: scope.refusals.direct.construct },
+            behindUnresolved: { _tag: scope.refusals.behindUnresolved._tag, file: scope.refusals.behindUnresolved.file, construct: scope.refusals.behindUnresolved.construct },
+          }).toEqual({
+            direct: { _tag: 'UnsupportedDeclaration', file: 'a.d.ts', construct: 're-export of "x" from "lodash"' },
+            behindUnresolved: { _tag: 'UnsupportedDeclaration', file: 'b.d.ts', construct: 're-export of "x" from "lodash"' },
+          })),
       ),
     )
 
