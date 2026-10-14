@@ -7,7 +7,7 @@ export type Item = ApiModel.ApiItem
 
 export type SourceFiles = ReadonlyArray<readonly [string, string]>
 
-export const declarations = (files: SourceFiles, ...entryPoints: ReadonlyArray<SourceFiles>): FrontEnd.Declarations => ({
+export const declarations = (files: SourceFiles, ...entryPoints: readonly [] | readonly [SourceFiles]): FrontEnd.Declarations => ({
   producer: 'fixture-emitter@0.0.0',
   package: { name: 'fixture', version: '1.0.0' },
   entryPoints: (entryPoints[0] ?? [['.', 'index.d.ts']] as const).map(([exportPath, declarationFile]) => ({ exportPath, declarationFile })),

@@ -964,6 +964,57 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      "a type parameter does not hide a same-named type reached in another file",
+      Gherkin.Do.pipe(
+        Given('an entry whose generic `f<T>` returns `ns.T`, where `ns` is the module `./x.js` and `x.d.ts` declares the type alias `T`')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              ['index.d.ts', "import type * as ns from './x.js'\nexport declare function f<T>(): ns.T\n"],
+              ['x.d.ts', 'export type T = { readonly a: string }\n'],
+            ]),
+          )),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then("`ns.T` is the module's alias, kept among the entry's locals")((scope, expect) =>
+          expect(entryAt(scope.model, '.').locals).toEqual([
+            {
+              kind: 'typeAlias',
+              name: 'T',
+              typeParameters: [],
+              type: { kind: 'object', members: [{ kind: 'property', name: 'a', optional: false, readonly: true, type: { kind: 'keyword', name: 'string' } }] },
+            },
+          ])),
+      ),
+    )
+
+    scenario(
+      'a private constructor is a member of its class, apart from a public one',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `class Closed { private constructor() }` and `class Open { constructor() }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare class Closed {\n  private constructor()\n}\nexport declare class Open {\n  constructor()\n}\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('`Closed` holds a `private constructor` member and `Open` a `constructor` member')((scope, expect) =>
+          expect({ closed: itemOf(scope.model, '.', 'Closed', 'class'), open: itemOf(scope.model, '.', 'Open', 'class') }).toMatchObject({
+            closed: { members: [{ kind: 'method', name: 'private constructor', optional: false, signatures: [{ typeParameters: [], parameters: [] }] }] },
+            open: { members: [{ kind: 'method', name: 'constructor', optional: false, signatures: [{ typeParameters: [], parameters: [] }] }] },
+          })),
+      ),
+    )
+
+    scenario(
+      "an index signature is named by its key type, whatever its parameter's name",
+      Gherkin.Do.pipe(
+        Given('an entry declaring `interface A { [k: string]: number }` and `type B = { [index: string]: number } & { readonly b: true }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export interface A {\n  [k: string]: number\n}\nexport type B = { [index: string]: number } & { readonly b: true }\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then("`A` has the member `[key: string]`, and `B`'s index-only object reads `{ [key: string]: number }`")((scope, expect) =>
+          expect({ a: itemOf(scope.model, '.', 'A', 'interface'), b: itemOf(scope.model, '.', 'B', 'typeAlias') }).toMatchObject({
+            a: { members: [{ kind: 'property', name: '[key: string]', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } }] },
+            b: { type: { kind: 'intersection', members: expect.arrayContaining([{ kind: 'text', text: '{ [key: string]: number }' }]) } },
+          })),
+      ),
+    )
+
+    scenario(
       'a namespace body value does not shadow an imported type of the same name',
       Gherkin.Do.pipe(
         Given('an entry importing type `A` from `pkg` and declaring namespace `N` with a value `A` and a function `f` returning `A`')('declarations', () =>

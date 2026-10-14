@@ -293,7 +293,7 @@ const indexSignatureMemberOf = (context: TypeContext, member: TSIndexSignature):
       Effect.gen(function* () {
         const key = yield* canonicalTypeText(context, parameter.typeAnnotation.typeAnnotation)
         const type = yield* typeExprOf(context, member.typeAnnotation.typeAnnotation)
-        return { kind: 'property' as const, name: `[${parameter.name}: ${key}]`, optional: false, readonly: member.readonly, type }
+        return { kind: 'property' as const, name: `[key: ${key}]`, optional: false, readonly: member.readonly, type }
       }),
   })
 
@@ -335,13 +335,19 @@ const accessibleName = (
     Match.orElse(() => Option.map(propertyKeyNameOf(key), (name) => (isStatic ? `static ${name}` : name))),
   )
 
+const classMethodName = (method: MethodDefinition): Option.Option<string> =>
+  Match.value(method).pipe(
+    Match.when({ kind: 'constructor' }, (constructor) => Option.some(constructor.accessibility === 'private' ? 'private constructor' : 'constructor')),
+    Match.orElse(() => accessibleName(method.key, method.accessibility, method.static)),
+  )
+
 const classMethodDraftOf = (context: TypeContext, method: MethodDefinition): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
-  Option.match(accessibleName(method.key, method.accessibility, method.static), {
+  Option.match(classMethodName(method), {
     onNone: () => Effect.succeedNone,
     onSome: (name) =>
       Effect.asSome(Effect.map(signatureOf(context, method.value.typeParameters, method.value.params, method.value.returnType), (signature): Draft =>
         Match.value(method.kind).pipe(
-          Match.when('constructor', () => ({ kind: 'method' as const, name: 'constructor', optional: false, signatures: [signature] })),
+          Match.when('constructor', () => ({ kind: 'method' as const, name, optional: false, signatures: [signature] })),
           Match.when('method', () => ({ kind: 'method' as const, name, optional: method.optional ?? false, signatures: [signature] })),
           Match.when('get', () => ({ kind: 'accessor' as const, name, get: Option.some(signature), set: Option.none() })),
           Match.orElse(() => ({ kind: 'accessor' as const, name, get: Option.none(), set: Option.some(signature) })),

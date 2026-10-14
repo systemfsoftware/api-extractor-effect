@@ -149,6 +149,8 @@ const plainTarget = (segments: ReadonlyArray<string>): ReferenceTarget => ({ nam
 const qualify = (name: string, rest: ReadonlyArray<string>): string =>
   Arr.match(rest, { onEmpty: () => name, onNonEmpty: (parts) => `${name}.${parts.join('.')}` })
 
+const inOtherFile = (context: TypeContext): TypeContext => ({ ...context, namesInScope: HashSet.empty() })
+
 const targetOf = (context: TypeContext, file: string, segments: ReadonlyArray<string>): Effect.Effect<ReferenceTarget> =>
   Arr.match(segments, {
     onEmpty: () => Effect.succeed(plainTarget(segments)),
@@ -165,7 +167,7 @@ const targetOf = (context: TypeContext, file: string, segments: ReadonlyArray<st
                     name: qualify(name, rest),
                     module: Option.none(),
                   }))),
-                Match.when({ kind: 'namespace' }, (namespace) => targetOf(context, namespace.file, rest)),
+                Match.when({ kind: 'namespace' }, (namespace) => targetOf(inOtherFile(context), namespace.file, rest)),
                 Match.exhaustive,
               ),
           }),
@@ -182,7 +184,7 @@ const referenceTargetFor = (
       isRelativeSpecifier(specifier)
         ? Option.match(resolveFile(context.graph, context.file, specifier), {
             onNone: () => Effect.succeed(plainTarget(segments)),
-            onSome: (file) => targetOf(context, file, segments),
+            onSome: (file) => targetOf(inOtherFile(context), file, segments),
           })
         : Effect.succeed({ name: segments.join('.'), module: Option.some(specifier) }),
   })
@@ -338,7 +340,7 @@ const printIndexSignature = (context: TypeContext, member: TSIndexSignature): Ef
       Effect.gen(function* () {
         const key = yield* canonicalTypeText(context, parameter.typeAnnotation.typeAnnotation)
         const value = yield* canonicalTypeText(context, member.typeAnnotation.typeAnnotation)
-        return `${readonlyPrefix(member.readonly)}[${parameter.name}: ${key}]: ${value}`
+        return `${readonlyPrefix(member.readonly)}[key: ${key}]: ${value}`
       }),
   })
 
