@@ -324,6 +324,150 @@ Feature('Review notes for a package match the ones api-extractor derives')
     )
 
     scenario(
+      "A namespace body's own type declarations shadow a reference to an imported type of the same name",
+      Gherkin.Do.pipe(
+        Given('a package whose namespace declares an interface named like an imported type and uses that name in a function')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { A } from './a.js'",
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  interface A { y: number }',
+                    '  function f(): A',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport interface A { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('no note is derived for the name the namespace binds and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
+      'A value-only declaration in a namespace body does not shadow a type reference to an imported type of the same name',
+      Gherkin.Do.pipe(
+        Given('a package whose namespace declares a value named like an imported type and returns that name from a function')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import type { A } from './a.js'",
+                    'export declare namespace N {',
+                    '  const A: number',
+                    '  function f(): A',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport interface A { readonly x: string }\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('the type reference still names the forgotten export and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [
+              { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'N', symbol: 'A' },
+              { messageId: 'ae-missing-release-tag', entryPoint: '.', item: 'N', symbol: 'N' },
+            ],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
+      "A `typeof` query reads a namespace body's value declarations rather than its type declarations",
+      Gherkin.Do.pipe(
+        Given('a package whose namespace declares a value named like an imported value and queries it with `typeof`')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import { A } from './a.js'",
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  const A: number',
+                    '  /** @public */',
+                    '  export type T = typeof A',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport declare const A: number\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('no note is derived for the value the namespace binds and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
+      'A type-only declaration in a namespace body does not shadow a `typeof` query of an imported value of the same name',
+      Gherkin.Do.pipe(
+        Given('a package whose namespace declares an interface named like an imported value and queries that name with `typeof`')('declarations', () =>
+          Effect.sync(() =>
+            declarationsOf({
+              entry: 'index.d.ts',
+              files: [
+                [
+                  'index.d.ts',
+                  [
+                    "import { A } from './a.js'",
+                    '/** @public */',
+                    'export declare namespace N {',
+                    '  interface A { y: number }',
+                    '  /** @public */',
+                    '  export type T = typeof A',
+                    '}',
+                    '',
+                  ].join('\n'),
+                ],
+                ['a.d.ts', '/** @public */\nexport declare const A: number\n'],
+              ],
+            }))),
+        When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
+        Then('the query still names the forgotten export and api-extractor agrees')((scope, expect) =>
+          expect({
+            messages: scope.both.messages,
+            pairs: reviewed(scope.both.declarations, scope.both.messages),
+          }).toEqual({
+            messages: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'N', symbol: 'A' }],
+            pairs: sorted(scope.both.upstream),
+          })),
+      ),
+    )
+
+    scenario(
       'Every note for this package matches the ones api-extractor derives for it',
       Gherkin.Do.pipe(
         Given('this repository package')('source', () => Effect.flatMap(packageRoot, (root) => FrontEnd.readPackage({ packageRoot: root }))),

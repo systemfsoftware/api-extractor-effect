@@ -33,7 +33,7 @@ import {
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
-import { declarationGraph, exportedNames, exportedSymbol, grouped, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
+import { declarationGraph, exportedNames, exportedSymbol, grouped, namespaceSpacesOf, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
@@ -485,25 +485,12 @@ const itemsOfGroups = (
     (items) => items.flat(),
   )
 
-const isTypeSpaceKind = (kind: Declared['kind']): boolean =>
-  Match.value(kind).pipe(
-    Match.whenOr('interface', 'typeAlias', 'class', 'enum', 'namespace', () => true),
-    Match.orElse(() => false),
-  )
-
-const declaresType = (declarations: ReadonlyArray<Declaration>): boolean =>
-  Arr.some(declarations, (declaration) => isTypeSpaceKind(declaration.declared.kind))
-
-const typeSpaceNames = (groups: HashMap.HashMap<string, ReadonlyArray<Declaration>>): ReadonlyArray<string> =>
-  Arr.filter(Arr.fromIterable(HashMap.keys(groups)), (name) =>
-    Option.match(HashMap.get(groups, name), { onNone: () => false, onSome: declaresType }))
-
 const namespaceBodyItems = (
   context: TypeContext,
   bodies: ReadonlyArray<TSModuleBlock | null>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
-    itemsOfGroups(withNamesInScope(context, typeSpaceNames(groups)), groups))
+    itemsOfGroups(withNamesInScope(context, namespaceSpacesOf(bodies).types), groups))
 
 const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
   bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))

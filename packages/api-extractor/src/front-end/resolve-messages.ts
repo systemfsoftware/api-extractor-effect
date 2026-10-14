@@ -8,8 +8,11 @@ import {
   type TSClassImplements,
   type TSImportType,
   type TSConditionalType,
+  type TSGlobalDeclaration,
   type TSInferType,
   type TSInterfaceHeritage,
+  type TSModuleBlock,
+  type TSModuleDeclaration,
   type TSMappedType,
   type TSTypeName,
   type TSTypeParameterDeclaration,
@@ -19,7 +22,7 @@ import {
 } from 'oxc-parser'
 import type { AnalysisMessage, AnalysisMessageId } from './analysis-message.schema.ts'
 import type { Declaration, DeclarationGraph, FileScope, ResolvedSymbol } from './declaration-graph.ts'
-import { declarationGraph, exportedNames, exportedSymbol, resolveName } from './declaration-graph.ts'
+import { declarationGraph, exportedNames, exportedSymbol, namespaceSpacesOf, resolveName } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import type { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
@@ -77,10 +80,13 @@ type ReferenceScan = {
   readonly references: ReadonlyArray<Reference>
 }
 
-type TypeParameterScope = {
+type NameSpace = 'type' | 'value'
+
+type NameScope = {
   readonly start: number
   readonly end: number
-  readonly names: ReadonlyArray<string>
+  readonly types: ReadonlyArray<string>
+  readonly values: ReadonlyArray<string>
 }
 
 type ScopeCarrier = {
@@ -91,45 +97,69 @@ type ScopeCarrier = {
 
 const EMPTY_SCAN: ReferenceScan = { references: [] }
 
-const withinScope = (scope: TypeParameterScope, at: number): boolean => at >= scope.start && at < scope.end
+const withinScope = (scope: NameScope, at: number): boolean => at >= scope.start && at < scope.end
 
-const matchesName = (scope: TypeParameterScope, name: string): boolean => Arr.some(scope.names, (candidate) => candidate === name)
+const namesIn = (scope: NameScope, space: NameSpace): ReadonlyArray<string> => (space === 'type' ? scope.types : scope.values)
 
-const shadowed = (scopes: ReadonlyArray<TypeParameterScope>, name: string, at: number): boolean =>
-  Arr.some(scopes, (scope) => withinScope(scope, at) && matchesName(scope, name))
+const matchesName = (scope: NameScope, name: string, space: NameSpace): boolean =>
+  Arr.some(namesIn(scope, space), (candidate) => candidate === name)
+
+const shadowed = (scopes: ReadonlyArray<NameScope>, name: string, at: number, space: NameSpace): boolean =>
+  Arr.some(scopes, (scope) => withinScope(scope, at) && matchesName(scope, name, space))
 
 const typeParameterNamesOf = (declaration: TSTypeParameterDeclaration | null): ReadonlyArray<string> =>
   declaration === null ? [] : declaration.params.map((parameter) => parameter.name.name)
 
-const addReference = (references: Array<Reference>, scopes: ReadonlyArray<TypeParameterScope>, name: string, at: number): void => {
-  if (!shadowed(scopes, name, at)) {
+const addReference = (references: Array<Reference>, scopes: ReadonlyArray<NameScope>, name: string, at: number, space: NameSpace): void => {
+  if (!shadowed(scopes, name, at, space)) {
     references.push({ start: at, name })
   }
 }
 
-const openScope = (scopes: Array<TypeParameterScope>, node: ScopeCarrier): void =>
-  void scopes.push({ start: node.start, end: node.end, names: typeParameterNamesOf(node.typeParameters ?? null) })
+const openScope = (scopes: Array<NameScope>, node: ScopeCarrier): void =>
+  void scopes.push({ start: node.start, end: node.end, types: typeParameterNamesOf(node.typeParameters ?? null), values: [] })
 
-const closeScope = (scopes: Array<TypeParameterScope>): void => void scopes.pop()
+const closeScope = (scopes: Array<NameScope>): void => void scopes.pop()
 
-const openNamedScope = (scopes: Array<TypeParameterScope>, node: TSMappedType): void =>
-  void scopes.push({ start: node.start, end: node.end, names: [node.key.name] })
+const openNamedScope = (scopes: Array<NameScope>, node: TSMappedType): void =>
+  void scopes.push({ start: node.start, end: node.end, types: [node.key.name], values: [] })
+
+type ModuleDeclaration = TSModuleDeclaration | TSGlobalDeclaration
+
+const moduleBlockOf = (node: ModuleDeclaration): Option.Option<TSModuleBlock> => Option.fromNullishOr(node.body)
+
+const openNamespaceScope = (scopes: Array<NameScope>, node: ModuleDeclaration): void =>
+  Option.match(moduleBlockOf(node), {
+    onNone: () => undefined,
+    onSome: (block) => void scopes.push({ start: block.start, end: block.end, ...namespaceSpacesOf([block]) }),
+  })
+
+const closeNamespaceScope = (scopes: Array<NameScope>, node: ModuleDeclaration): void =>
+  Option.match(moduleBlockOf(node), { onNone: () => undefined, onSome: () => closeScope(scopes) })
 
 type ConditionalScope = {
   readonly start: number
   readonly end: number
   readonly extendsStart: number
   readonly extendsEnd: number
-  readonly names: Array<string>
+  readonly types: Array<string>
+  readonly values: ReadonlyArray<string>
 }
 
-const openConditional = (scopes: Array<TypeParameterScope>, conditionals: Array<ConditionalScope>, node: TSConditionalType): void => {
-  const scope: ConditionalScope = { start: node.start, end: node.trueType.end, extendsStart: node.extendsType.start, extendsEnd: node.extendsType.end, names: [] }
+const openConditional = (scopes: Array<NameScope>, conditionals: Array<ConditionalScope>, node: TSConditionalType): void => {
+  const scope: ConditionalScope = {
+    start: node.start,
+    end: node.trueType.end,
+    extendsStart: node.extendsType.start,
+    extendsEnd: node.extendsType.end,
+    types: [],
+    values: [],
+  }
   scopes.push(scope)
   conditionals.push(scope)
 }
 
-const closeConditional = (scopes: Array<TypeParameterScope>, conditionals: Array<ConditionalScope>): void => {
+const closeConditional = (scopes: Array<NameScope>, conditionals: Array<ConditionalScope>): void => {
   scopes.pop()
   conditionals.pop()
 }
@@ -139,24 +169,24 @@ const bindsInfer = (scope: ConditionalScope, at: number): boolean => at >= scope
 const bindInfer = (conditionals: ReadonlyArray<ConditionalScope>, node: TSInferType): void =>
   Option.match(Arr.findLast(conditionals, (scope) => bindsInfer(scope, node.start)), {
     onNone: () => undefined,
-    onSome: (scope) => void scope.names.push(node.typeParameter.name.name),
+    onSome: (scope) => void scope.types.push(node.typeParameter.name.name),
   })
 
 const scanOf = (program: Program): ReferenceScan => {
   const references: Array<Reference> = []
-  const scopes: Array<TypeParameterScope> = []
+  const scopes: Array<NameScope> = []
   const conditionals: Array<ConditionalScope> = []
-  const record = (node: NameNode | null, start: number): void =>
-    Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => addReference(references, scopes, name, start) })
+  const record = (node: NameNode | null, start: number, space: NameSpace): void =>
+    Option.match(rootNameOf(node), { onNone: () => undefined, onSome: (name) => addReference(references, scopes, name, start, space) })
   const enter = (node: ScopeCarrier): void => openScope(scopes, node)
   const exit = (): void => closeScope(scopes)
   new Visitor({
-    TSTypeReference: (node: TSTypeReference) => record(node.typeName, node.start),
-    TSTypeQuery: (node: TSTypeQuery) => record(node.exprName, node.start),
-    TSInterfaceHeritage: (node: TSInterfaceHeritage) => record(node.expression, node.start),
-    TSClassImplements: (node: TSClassImplements) => record(node.expression, node.start),
+    TSTypeReference: (node: TSTypeReference) => record(node.typeName, node.start, 'type'),
+    TSTypeQuery: (node: TSTypeQuery) => record(node.exprName, node.start, 'value'),
+    TSInterfaceHeritage: (node: TSInterfaceHeritage) => record(node.expression, node.start, 'type'),
+    TSClassImplements: (node: TSClassImplements) => record(node.expression, node.start, 'type'),
     ClassDeclaration: (node: Class) => {
-      record(node.superClass, node.start)
+      record(node.superClass, node.start, 'value')
       enter(node)
     },
     'ClassDeclaration:exit': exit,
@@ -186,6 +216,8 @@ const scanOf = (program: Program): ReferenceScan => {
     'TSFunctionType:exit': exit,
     TSConstructorType: enter,
     'TSConstructorType:exit': exit,
+    TSModuleDeclaration: (node: ModuleDeclaration) => openNamespaceScope(scopes, node),
+    'TSModuleDeclaration:exit': (node: ModuleDeclaration) => closeNamespaceScope(scopes, node),
     TSMappedType: (node: TSMappedType) => openNamedScope(scopes, node),
     'TSMappedType:exit': exit,
     TSConditionalType: (node: TSConditionalType) => openConditional(scopes, conditionals, node),

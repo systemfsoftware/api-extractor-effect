@@ -14,7 +14,9 @@ import {
   type Program,
   type Statement,
   type TSEnumDeclaration,
+  type TSGlobalDeclaration,
   type TSInterfaceDeclaration,
+  type TSModuleBlock,
   type TSModuleDeclaration,
   type TSTypeAliasDeclaration,
   type VariableDeclaration,
@@ -294,6 +296,76 @@ export type Declared =
 export type Declaration = {
   readonly declared: Declared
   readonly statementStart: number
+}
+
+export type NamespaceSpaces = {
+  readonly types: ReadonlyArray<string>
+  readonly values: ReadonlyArray<string>
+}
+
+type NamedDeclaration = {
+  readonly name: string
+  readonly kind: Declared['kind']
+}
+
+const namedDeclaration = (name: string, kind: Declared['kind']): NamedDeclaration => ({ name, kind })
+
+const optionalDeclaration = (id: { readonly name: string } | null, kind: Declared['kind']): ReadonlyArray<NamedDeclaration> =>
+  Option.match(Option.fromNullishOr(id), { onNone: () => [], onSome: (present) => [namedDeclaration(present.name, kind)] })
+
+const variableDeclarationsIn = (variable: VariableDeclaration): ReadonlyArray<NamedDeclaration> =>
+  Arr.getSomes(
+    variable.declarations.map((declarator) =>
+      declarator.id.type === 'Identifier' ? Option.some(namedDeclaration(declarator.id.name, 'variable')) : Option.none()),
+  )
+
+const namespaceNameIn = (id: TSModuleDeclaration['id']): ReadonlyArray<NamedDeclaration> =>
+  Match.value(id).pipe(
+    Match.when({ type: 'Identifier' }, (identifier) => [namedDeclaration(identifier.name, 'namespace')]),
+    Match.orElse(() => []),
+  )
+
+const namespaceDeclarationIn = (module: TSModuleDeclaration | TSGlobalDeclaration): ReadonlyArray<NamedDeclaration> =>
+  module.kind === 'global' ? [] : namespaceNameIn(module.id)
+
+const declarationsInStatement = (statement: Directive | Statement): ReadonlyArray<NamedDeclaration> =>
+  Match.value(statement).pipe(
+    Match.when({ type: 'ExportNamedDeclaration' }, (exported) =>
+      Option.match(Option.fromNullishOr(exported.declaration), { onNone: () => [], onSome: declarationsInStatement })),
+    Match.when({ type: 'VariableDeclaration' }, (variable: VariableDeclaration) => variableDeclarationsIn(variable)),
+    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_: FunctionNode) => optionalDeclaration(function_.id, 'function')),
+    Match.when({ type: 'ClassDeclaration' }, (class_: Class) => optionalDeclaration(class_.id, 'class')),
+    Match.when({ type: 'TSInterfaceDeclaration' }, (iface: TSInterfaceDeclaration) => [namedDeclaration(iface.id.name, 'interface')]),
+    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias: TSTypeAliasDeclaration) => [namedDeclaration(alias.id.name, 'typeAlias')]),
+    Match.when({ type: 'TSEnumDeclaration' }, (enumeration: TSEnumDeclaration) => [namedDeclaration(enumeration.id.name, 'enum')]),
+    Match.when({ type: 'TSModuleDeclaration' }, (module: TSModuleDeclaration | TSGlobalDeclaration) => namespaceDeclarationIn(module)),
+    Match.orElse(() => []),
+  )
+
+const statementsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
+  Arr.flatMap(bodies, (body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
+
+const declarationsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<NamedDeclaration> =>
+  Arr.flatMap(statementsIn(bodies), declarationsInStatement)
+
+const declaresType = (kind: Declared['kind']): boolean =>
+  Match.value(kind).pipe(
+    Match.whenOr('interface', 'typeAlias', 'class', 'enum', 'namespace', () => true),
+    Match.orElse(() => false),
+  )
+
+const declaresValue = (kind: Declared['kind']): boolean =>
+  Match.value(kind).pipe(
+    Match.whenOr('variable', 'function', 'class', 'enum', 'namespace', () => true),
+    Match.orElse(() => false),
+  )
+
+const namesDeclaredBy = (declarations: ReadonlyArray<NamedDeclaration>, inSpace: (kind: Declared['kind']) => boolean): ReadonlyArray<string> =>
+  Arr.dedupe(Arr.map(Arr.filter(declarations, (declaration) => inSpace(declaration.kind)), (declaration) => declaration.name))
+
+export const namespaceSpacesOf = (bodies: ReadonlyArray<TSModuleBlock | null>): NamespaceSpaces => {
+  const declarations = declarationsIn(bodies)
+  return { types: namesDeclaredBy(declarations, declaresType), values: namesDeclaredBy(declarations, declaresValue) }
 }
 
 export type ImportBinding = {
