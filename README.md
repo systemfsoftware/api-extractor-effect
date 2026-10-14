@@ -100,7 +100,11 @@ treats that message as untrusted text. A `Reported` diagnostic is one the compil
 reported, carrying its `TSxxxx` code; a `Note` is a refusal reason no compiler reported, so
 it carries no code. Either names a `file` only when that file is inside the package. A
 refusal of an entry point names the entry's recorded source, which may lie outside the
-package.
+package. The fallback runs TypeScript 7's native compiler, which the `typescript` package
+installs for the host platform as an optional dependency. Installed without optional
+dependencies, or on a platform TypeScript 7 does not ship for, every package that needs
+the fallback is refused with `CompilerRejected`, whose one diagnostic carries `tsc`'s
+message naming the missing platform package.
 Both routes meet at declaration text: one syntactic builder makes the model and one
 resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and
