@@ -16,6 +16,7 @@ const KEYWORD_NAMES = [
   'void',
 ] as const
 
+/** TypeScript keyword types the model names directly. */
 export const KeywordName: Schema.Literals<typeof KEYWORD_NAMES> = Schema.Literals(KEYWORD_NAMES)
 export type KeywordName = typeof KeywordName.Type
 
