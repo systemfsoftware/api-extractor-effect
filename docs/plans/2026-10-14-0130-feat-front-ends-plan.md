@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-14-0042-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0108-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -574,6 +574,32 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U20 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `5d32c3f..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U22. Rulings on the full-path review at `9854ba8`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `9854ba8` (run `20261014-011118-9854ba8b`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `5d32c3f..9854ba8`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (28 honored, 24 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, performance, reliability, security, api-contract, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R3, R6, R8, R16; KTD1, KTD6, KTD11.
+- **Rulings, fixes** (each scenario fails at the named commit, unless marked as pinning existing behaviour):
+  - M1 (testing P2, then a defect the pin found): a class member's `protected` and `abstract` modifiers were dropped, so `protected p` modelled as a public `p`, an abstract method as a concrete one and a protected constructor as `constructor`; public-to-protected and concrete-to-abstract changes were invisible to the diff. Following K3 and the `static` prefix, a member is named with its modifiers in TypeScript's written order, `protected`, `static`, `abstract` (`1e61902`). Builder scenario; fails at `eec0927`. The rest of the gap is pinned: static fields, auto-accessors and accessor pairs, a private field and a static block holding nothing (`eec0927`).
+  - M2 (DeepSeek delta P3): an export list reached through `export *` that names no declaration was refused naming the entry, which holds no such statement. The refusal names the file whose export map lists the name (`5c6c2d1`). Refusals scenario; fails at `9854ba8`.
+  - M3 (adversarial P2): without TypeScript 7's platform package, which `typescript` installs as an optional dependency, every package needing the fallback is refused. The README states it; the refusal's one diagnostic carries `tsc`'s message naming the missing package (`42a57e7`; probed: the shim exits 1 with `Unable to resolve @typescript/typescript-linux-x64`).
+  - M4 (maintainability P3, two): the builder imports the graph's `statementsIn` instead of a copy (`5c6c2d1`); the resolver records each namespace path once, by start offset, instead of in two passes (`b88de2f`). No behaviour change.
+  - M5 (testing P2 and gaps): pins for canonical text of template literal, predicate, `asserts`, indexed-access, abstract construct and mixed-signature object types, and for a pattern export whose target directory does not exist (`eec0927`). All pass at `9854ba8`.
+- **Rulings, rejected:**
+  - Correctness gap, `tsc`'s exit diagnostic has no scenario: no package-shaped input reaches it; M3 probes the environment fault that does, and U21's follow-up keeps write failures with PR4.
+  - Correctness gap, a `Note` in `route.diagnostics`: every decline that carries a `Note` (missing or outside entry, shared declaration, unresolved import) is also refused by the compiler (U12 D1, D2; ruling #5), so no analysis returns a `Fallback` route holding one.
+  - api-contract gap, decoding `AnalysisMessage` and `Route` with the exported codecs: `AnalysisMessage`'s codec is annotated `Schema.Codec<AnalysisMessage>` and `Route`'s type is `typeof Route.Type`, so a codec cannot drift from its type without `pnpm typecheck` failing.
+  - Project-standards gap, `FIVE_IDS` beside `ANALYSIS_MESSAGE_IDS`: the fixture's list selects which upstream messages the oracle compares, and an expected value must not come from the subject (boundary-testing pack); a sixth id is a public change that brings its own scenario.
+  - Security gap, a `__proto__` source condition: `conditionValue` keeps only a `Path` target, so a prototype read names no entry.
+  - DeepSeek peer residual, `resolveMessages` called alone narrows where `analyse` refuses: `analyse` builds the model first (U21 L2), and the public route is `analyse`.
+- **Follow-ups:**
+  - Security and adversarial residuals, entries per directory are not bounded by the walk's 1024-listing bound, and a source symlinked out of the package is reported as unreadable: owner PR4. Trigger: PR4's adversarial corpus.
+  - Adversarial residual and gap, a workspace root marked other than by `pnpm-workspace.yaml`: owner PR6. Trigger: the consumer journey, which adds a non-pnpm host.
+  - api-contract residuals, `AnalysisMessage` carries no version and `Verdict` became an interface beside a schema constant: owner PR4, which moves messages into the model under a `schemaVersion` bump. The package is `0.0.0` and unpublished.
+  - Reliability residual, native parser throws, and DeepSeek residuals on route equality for multi-entry packages and on the layer's TypeScript import: unchanged owners and triggers (U16, U18, U20).
+  - Performance residuals: owner PR5, as U18 and U20.
+- **Preserved:** U11-U21 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `9854ba8..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -596,7 +622,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U21 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U22 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
