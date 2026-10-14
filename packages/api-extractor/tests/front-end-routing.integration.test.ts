@@ -28,6 +28,10 @@ const destructuredExportPackage = packageOf(sourceManifest('destructured', './sr
   'mod.ts': 'const pair = { a: 1, b: 2 }\nexport const { a, b } = pair\n',
 })
 
+const typeIncorrectSourcePackage = packageOf(sourceManifest('type-incorrect', './src/mod.ts'), {
+  'mod.ts': "export const count: number = 'one'\n",
+})
+
 const missingEntrySourcePackage = packageOf(sourceManifest('missing-entry', './src/mod.ts'), {})
 
 const tsxEntryBesideTsPackage = packageOf(sourceManifest('tsx-entry', './src/mod.tsx'), {
@@ -104,6 +108,25 @@ Feature('A package is routed to the front-end its declarations allow')
             entryPoints: ['.'],
             exports: ['namespace:ApiModel', 'namespace:FrontEnd', 'namespace:Verdict'],
             decoded: scope.analysis.model,
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'a package whose annotated source is type-incorrect takes the fast path, which never type-checks',
+      Gherkin.Do.pipe(
+        Given("a package exporting `export const count: number = 'one'` from its only source")('packageRoot', () => typeIncorrectSourcePackage),
+        When('the engine analyses it')('analysis', (scope) => Effect.flatMap(FrontEnd.readPackage({ packageRoot: scope.packageRoot }), FrontEnd.analyse)),
+        Then('the model holds `count` as a constant variable of its annotated type, the value being no concern of the fast path')((scope, expect) =>
+          expect({
+            route: scope.analysis.route._tag,
+            exports: scope.analysis.model.entryPoints.flatMap((entry) => entry.items.map((item) => `${item.kind}:${item.name}`)),
+            count: scope.analysis.model.entryPoints.flatMap((entry) => entry.items).find((item) => item.name === 'count' && item.kind === 'variable'),
+          }).toEqual({
+            route: 'FastPath',
+            exports: ['variable:count'],
+            count: { kind: 'variable', name: 'count', constant: true, type: { kind: 'keyword', name: 'number' } },
           })
         ),
       ),
