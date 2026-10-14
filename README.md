@@ -105,7 +105,9 @@ package. The fallback runs TypeScript 7's native compiler, which the `typescript
 installs for the host platform as an optional dependency. Installed without optional
 dependencies, or on a platform TypeScript 7 does not ship for, every package that needs
 the fallback is refused with `CompilerRejected`, whose one diagnostic carries `tsc`'s
-message naming the missing platform package.
+message naming the missing platform package. `oxc-parser` and `oxc-transform` install
+their native bindings the same way, but load them when this package is imported, so
+without them the import itself fails with `Cannot find native binding`.
 Both routes meet at declaration text: one syntactic builder makes the model and one
 resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and
