@@ -974,8 +974,8 @@ Feature('Building a package API model from its declaration text')
     scenario(
       'a class member carries its restricted access, staticness and abstractness in its name',
       Gherkin.Do.pipe(
-        Given('an entry declaring `protected p`, `protected static q`, `abstract m`, `protected abstract get n`, `public r` and `protected constructor` in one class')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare abstract class C {\n  protected p: string\n  protected static q: number\n  abstract m(): void\n  protected abstract get n(): number\n  public r: string\n  protected constructor()\n}\n']]))),
+        Given('an entry declaring `protected p`, `protected static q`, `abstract m`, `protected abstract get n`, `abstract x`, `abstract accessor a`, `private static z`, `public r` and `protected constructor` in one class')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare abstract class C {\n  protected p: string\n  protected static q: number\n  abstract m(): void\n  protected abstract get n(): number\n  abstract x: string\n  abstract accessor a: number\n  private static z: number\n  public r: string\n  protected constructor()\n}\n']]))),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('every restricted member is named with its modifiers in written order, and `public r` as the plain name')((scope, expect) =>
           expect(itemOf(scope.model, '.', 'C', 'class')).toEqual({
@@ -985,6 +985,8 @@ Feature('Building a package API model from its declaration text')
               { kind: 'property', name: 'protected static q', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
               { kind: 'method', name: 'abstract m', optional: false, signatures: [{ typeParameters: [], parameters: [], returns: { kind: 'keyword', name: 'void' } }] },
               { kind: 'property', name: 'protected abstract n', optional: false, readonly: true, type: { kind: 'keyword', name: 'number' } },
+              { kind: 'property', name: 'abstract x', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } },
+              { kind: 'property', name: 'abstract a', optional: false, readonly: false, type: { kind: 'keyword', name: 'number' } },
               { kind: 'property', name: 'r', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } },
               { kind: 'method', name: 'protected constructor', optional: false, signatures: [{ typeParameters: [], parameters: [], returns: { kind: 'keyword', name: 'any' } }] },
             ],
