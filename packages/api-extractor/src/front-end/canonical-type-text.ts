@@ -38,7 +38,7 @@ import type {
   TSTypeReference,
   TemplateElement,
 } from 'oxc-parser'
-import type { KeywordName } from '../model/type-expr.schema.ts'
+import { KeywordName } from '../model/type-expr.schema.ts'
 import {
   type Declaration,
   type DeclarationGraph,
@@ -79,22 +79,24 @@ const withNamespaceScope = (context: TypeContext, spaces: NamespaceSpaces): Type
 
 const inValueSpace = (context: TypeContext): TypeContext => ({ ...context, namesInScope: context.valuesInScope })
 
-const KEYWORD_ENTRIES = [
-  ['TSAnyKeyword', 'any'],
-  ['TSBigIntKeyword', 'bigint'],
-  ['TSBooleanKeyword', 'boolean'],
-  ['TSNeverKeyword', 'never'],
-  ['TSNullKeyword', 'null'],
-  ['TSNumberKeyword', 'number'],
-  ['TSObjectKeyword', 'object'],
-  ['TSStringKeyword', 'string'],
-  ['TSSymbolKeyword', 'symbol'],
-  ['TSUndefinedKeyword', 'undefined'],
-  ['TSUnknownKeyword', 'unknown'],
-  ['TSVoidKeyword', 'void'],
-] as const
+const KEYWORD_NODES = {
+  any: 'TSAnyKeyword',
+  bigint: 'TSBigIntKeyword',
+  boolean: 'TSBooleanKeyword',
+  never: 'TSNeverKeyword',
+  null: 'TSNullKeyword',
+  number: 'TSNumberKeyword',
+  object: 'TSObjectKeyword',
+  string: 'TSStringKeyword',
+  symbol: 'TSSymbolKeyword',
+  undefined: 'TSUndefinedKeyword',
+  unknown: 'TSUnknownKeyword',
+  void: 'TSVoidKeyword',
+} as const
 
-type KeywordNodeName = (typeof KEYWORD_ENTRIES)[number][0]
+type KeywordNodeName = (typeof KEYWORD_NODES)[KeywordName]
+
+const KEYWORD_ENTRIES: ReadonlyArray<readonly [KeywordNodeName, KeywordName]> = KeywordName.literals.map((name) => [KEYWORD_NODES[name], name] as const)
 
 const KEYWORDS: HashMap.HashMap<string, KeywordName> = HashMap.fromIterable<string, KeywordName>(KEYWORD_ENTRIES)
 
