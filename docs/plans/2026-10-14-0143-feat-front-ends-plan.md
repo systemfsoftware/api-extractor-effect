@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-14-0108-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0130-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -600,6 +600,30 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U21 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `9854ba8..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U23. Rulings on the full-path review at `ea58038`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `ea58038` (run `20261014-013421-ea58038c`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `9854ba8..ea58038`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (27 honored, 25 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, performance, reliability, security, adversarial, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R6, R16; KTD1, KTD6.
+- **Rulings, fixes** (each scenario fails at `ea58038`, unless marked as pinning existing behaviour):
+  - N1 (DeepSeek delta P3): M2 named the listing file for an export list naming no declaration, but an `export { x } from 'lodash'` reached through the entry's `export *` was still refused naming the entry. Both refusals name the file whose export map lists the name (`8c1bc4e`). Refusals scenario.
+  - N2 (testing P2, correctness gap): two of M1's three abstract arms had no scenario. The modifier scenario holds an abstract property, an abstract auto-accessor and a private static member (`4ce0980`); it fails when either arm is removed.
+  - N3 (api-contract P3): U1's isolatedDeclarations refactor dropped `KeywordName`'s doc comment; it is restored (`a40e552`). No other doc comment was removed from `src` outside the front-end (checked over the diff).
+- **Rulings, rejected:**
+  - DeepSeek delta P3, a getter and setter differing in modifier split into two members: TypeScript admits only a public getter with a restricted setter (TS2808 refuses a getter less accessible than its setter, TS2676 mismatched abstractness; probed on 7.0.2). Two members say that exactly: `w` reads publicly and only a subclass writes `protected w`. Merging would publish a public writable `w`. Pinned (`69173f8`).
+  - DeepSeek delta P3, M3 lacks a scenario and the TypeScript 7 API may load the native compiler at import: probed with `typescript` 7.0.2 copied without its platform packages, `typescript/unstable/async` imports and `new API()` constructs, so the package loads and only the fallback is refused. A committed scenario would remove an optional dependency from the shared store; the fault is an install fault, not package input.
+  - Maintainability P2, fold `exportOrigin` into the export walk: the walk returns the first star target that resolves a name, the origin the first that lists it; one walk would refuse a package whose first star target lists a name unresolved while a later one resolves it.
+  - Testing gaps, `static abstract` and `static protected`: TypeScript refuses both (TS1243, TS1029), so the written order is canonical.
+  - Security gap, the manifest's `recursionBudget`: it bounds generated law values, not decoding.
+  - Correctness residual, `exportOrigin` through a re-export chain names the entry: the entry holds the `export { X } from` statement, which is the listing the refusal names.
+- **Follow-ups:**
+  - Security residuals, `PackageSource.entryPoints` carries a manifest's path before an emitter confines it, and the fallback reads what the package tsconfig extends: owner the unit adding a third adapter (KTD1), which must confine entries as both shipped adapters do. Trigger: that adapter.
+  - Adversarial gaps and DeepSeek residuals, unparseable, extends-missing and solution-style tsconfigs, case-mismatched specifiers, the oracle's stand-in tsconfig and its sorted comparison: owner PR4. Trigger: PR4's adversarial corpus and differential lane.
+  - Adversarial residual, `analyse` requires the compiler layer for a fast-path-only consumer: owner PR6. Trigger: the CLI, which composes the layers.
+  - api-contract residuals, unversioned `Declarations`, `AnalysisMessage` and `Route`, and `Verdict` no longer extendable as a class: U22's owner, PR4.
+  - Reliability and performance residuals: unchanged owners and triggers (U20, U22).
+- **Preserved:** U11-U22 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `ea58038..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -622,7 +646,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U22 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U23 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
