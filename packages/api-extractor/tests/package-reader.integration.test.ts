@@ -59,6 +59,17 @@ const loopPatternPackage = Effect.gen(function* () {
   return root
 })
 
+const parentLoopPatternPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'package-reader-' })
+  yield* fileSystem.writeFileString(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0', exports: { './*': { [condition]: './src/*.ts' } } }))
+  yield* fileSystem.makeDirectory(path.join(root, 'src/a/b'), { recursive: true })
+  yield* fileSystem.writeFileString(path.join(root, 'src/a/x.ts'), '')
+  yield* fileSystem.symlink('..', path.join(root, 'src/a/b/up'))
+  return root
+})
+
 const explicitOverridePackage = packageOf(
   { './special': { [condition]: './src/b.ts' }, './*': { [condition]: './src/*.ts' } },
   { 'src/a.ts': '', 'src/b.ts': '', 'src/special.ts': '' },
@@ -114,21 +125,18 @@ const aliasedSiblingPatternPackage = Effect.gen(function* () {
   return root
 })
 
-const ALIAS_DEPTH = 12
+const ALIAS_DEPTH = 10
 
-const aliasFanOutPackage = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
-  const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: 'package-reader-' })
-  yield* fileSystem.writeFileString(
-    path.join(root, 'package.json'),
-    JSON.stringify({ name: 'fixture', version: '1.0.0', exports: { './*': { [condition]: './src/*.ts' } } }),
-  )
-  const levels = Array.from({ length: ALIAS_DEPTH }, (_, depth) => path.join(root, 'src', ...Array.from({ length: depth }, () => 'a')))
-  yield* Effect.forEach(levels, (level) =>
-    Effect.andThen(fileSystem.makeDirectory(path.join(level, 'a'), { recursive: true }), fileSystem.symlink('a', path.join(level, 'b'))), { discard: true })
-  return root
-})
+const aliasFanOutPackage = (target: string, fanOutDirectory: string, sources: Record<string, string>) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const root = yield* packageOf({ './*': { [condition]: target } }, sources)
+    const levels = Array.from({ length: ALIAS_DEPTH }, (_, depth) => path.join(root, fanOutDirectory, ...Array.from({ length: depth }, () => 'a')))
+    yield* Effect.forEach(levels, (level) =>
+      Effect.andThen(fileSystem.makeDirectory(path.join(level, 'a'), { recursive: true }), fileSystem.symlink('a', path.join(level, 'b'))), { discard: true })
+    return root
+  })
 
 const escapingPatternPackage = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
@@ -229,6 +237,17 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the real source is read, the symlink loop contributing no entry')((scope, expect) =>
           expect(scope.entryPoints).toEqual([{ exportPath: './a', sourceFile: 'src/a.ts' }])
+        ),
+      ),
+    )
+
+    scenario(
+      'a pattern export walks a symlinked directory pointing at an ancestor two levels up only once',
+      Gherkin.Do.pipe(
+        Given('a package exporting every `./src/<name>.ts` through `"./*"` where `src/a/b/up` is a symlink back to `src/a`')('packageRoot', () => parentLoopPatternPackage),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only the real source is read, the upward symlink contributing no entry')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: './a/x', sourceFile: 'src/a/x.ts' }])
         ),
       ),
     )
@@ -338,19 +357,51 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
+      'a manifest that omits `version` or `name` is refused as a rejected manifest, naming its package root',
+      Gherkin.Do.pipe(
+        Given('a package whose manifest names a source entry but holds no `version`')('withoutVersion', () =>
+          rawPackageOf(JSON.stringify({ name: 'fixture', exports: { '.': { [condition]: './src/mod.ts' } } }))),
+        Given('a package whose manifest names a source entry but holds no `name`')('withoutName', () =>
+          rawPackageOf(JSON.stringify({ version: '1.0.0', exports: { '.': { [condition]: './src/mod.ts' } } }))),
+        When('the package reader reads both')('refusals', (scope) =>
+          Effect.all({ withoutVersion: refusalOfReading(scope.withoutVersion), withoutName: refusalOfReading(scope.withoutName) })),
+        Then('each is refused as a rejected manifest naming its package root')(
+          (scope, expect) =>
+            expect(scope.refusals).toMatchObject({
+              withoutVersion: { _tag: 'ManifestRejected', packageRoot: scope.withoutVersion },
+              withoutName: { _tag: 'ManifestRejected', packageRoot: scope.withoutName },
+            }),
+        ),
+      ),
+    )
+
+    scenario(
       'a pattern export whose symlinked aliases fan out past the walk bound is refused, naming the export',
       Gherkin.Do.pipe(
         Given(`a package exporting every \`./src/<name>.ts\` through \`"./*"\`, where each of ${ALIAS_DEPTH} nested directories holds \`a\` and a symlink \`b\` to it`)(
           'packageRoot',
-          () => aliasFanOutPackage,
+          () => aliasFanOutPackage('./src/*.ts', 'src', {}),
         ),
         When('the package reader reads it')('refusal', (scope) => refusalOfReading(scope.packageRoot)),
         Then('it is refused as a rejected manifest naming the package root and the `./*` export')((scope, expect) =>
           expect(scope.refusal).toMatchObject({
             _tag: 'ManifestRejected',
             packageRoot: scope.packageRoot,
-            issue: 'the pattern export "./*" reaches more than 4096 directories',
+            issue: 'the pattern export "./*" reaches more than 1024 directories',
           })),
+      ),
+    )
+
+    scenario(
+      'a pattern export never walks into node_modules, however its symlinks fan out',
+      Gherkin.Do.pipe(
+        Given(`a package exporting every \`./<name>.ts\` through \`"./*"\`, whose \`node_modules/dep\` holds ${ALIAS_DEPTH} nested directories each with \`a\` and a symlink \`b\` to it`)(
+          'packageRoot',
+          () => aliasFanOutPackage('./*.ts', 'node_modules/dep', { 'mod.ts': '' }),
+        ),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only the package\'s own source is an entry point')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: './mod', sourceFile: 'mod.ts' }])),
       ),
     )
 

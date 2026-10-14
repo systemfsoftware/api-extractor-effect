@@ -108,11 +108,11 @@ const directoryRealPath = (childPath: string): Effect.Effect<Option.Option<strin
       : Effect.succeed(Option.none<string>())
   })
 
-const MAX_PATTERN_DIRECTORIES = 4096
+const MAX_PATTERN_DIRECTORIES = 1024
 
 type Walk = { readonly names: ReadonlyArray<string>; readonly listed: number }
 
-type WalkPattern = { readonly root: string; readonly key: string }
+type WalkPattern = { readonly root: string; readonly key: string; readonly prefix: string }
 
 type WalkError = PlatformError | ManifestRejected
 
@@ -141,15 +141,20 @@ const enterDirectory = (
 ): Effect.Effect<Walk, WalkError, Platform> =>
   HashSet.has(ancestors, realPath) ? Effect.succeed(walk) : walkStep(pattern, relative, HashSet.add(ancestors, realPath), walk)
 
+const isUnmatchable = (pattern: WalkPattern, childRelative: string, name: string): boolean =>
+  INVALID_SEGMENT.test(name) && pattern.prefix.length <= childRelative.length - name.length
+
 const stepChild = (pattern: WalkPattern, relative: string, ancestors: HashSet.HashSet<string>) =>
   (walk: Walk, name: string): Effect.Effect<Walk, WalkError, Platform> =>
     Effect.gen(function* () {
       const path = yield* Path.Path
       const childRelative = joinRelative(path, relative, name)
-      return yield* Option.match(yield* directoryRealPath(path.join(pattern.root, relative, name)), {
-        onNone: () => Effect.succeed({ names: Arr.append(walk.names, childRelative), listed: walk.listed }),
-        onSome: (realPath) => enterDirectory(pattern, childRelative, ancestors, walk, realPath),
-      })
+      return yield* isUnmatchable(pattern, childRelative, name)
+        ? Effect.succeed(walk)
+        : Option.match(yield* directoryRealPath(path.join(pattern.root, relative, name)), {
+            onNone: () => Effect.succeed({ names: Arr.append(walk.names, childRelative), listed: walk.listed }),
+            onSome: (realPath) => enterDirectory(pattern, childRelative, ancestors, walk, realPath),
+          })
     })
 
 const walkRelative = (pattern: WalkPattern, relative: string): Effect.Effect<ReadonlyArray<string>, WalkError, Platform> =>
@@ -200,10 +205,11 @@ const expandPattern = (root: string, condition: string, key: string, target: Exp
     onSome: (targetText) =>
       Option.match(patternPartsOf(targetText), {
         onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
-        onSome: (parts) =>
-          Effect.map(walkDirectory({ root, key }, directoryOf(stripRelativePrefix(parts.prefix))), (candidates) =>
-            Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, stripRelativePrefix(parts.prefix), parts.suffix))),
-          ),
+        onSome: (parts) => {
+          const prefix = stripRelativePrefix(parts.prefix)
+          return Effect.map(walkDirectory({ root, key, prefix }, directoryOf(prefix)), (candidates) =>
+            Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, prefix, parts.suffix))))
+        },
       }),
   })
 

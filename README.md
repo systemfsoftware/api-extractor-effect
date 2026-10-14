@@ -76,8 +76,9 @@ under an export path; a target that nests it under another condition, or lists t
 an array, names no entry. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
 refuses — is refused with `ManifestRejected`, naming the package root. So is a pattern
-export whose walk lists more than 4096 directories, which symlinked aliases of a
-directory can reach by fanning out; a symlink back to an ancestor is never entered.
+export whose walk lists more than 1024 directories, which symlinked aliases of a
+directory can reach by fanning out; a symlink back to an ancestor is never entered, nor
+is a `node_modules` directory no export name could pass through.
 A `package.json`
 that is missing or cannot be read fails with the file system's `PlatformError`, as every
 operation here does on an I/O fault.
