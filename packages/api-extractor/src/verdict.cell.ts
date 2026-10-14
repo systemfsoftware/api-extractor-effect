@@ -5,7 +5,7 @@ import { judgeSurfaces } from './judge-surfaces.workflow.ts'
 import type { ApiModel } from './model/api-model.schema.ts'
 import type { RuleCorpus } from './rules/corpus.schema.ts'
 import { defaultCorpus } from './rules/default-corpus.ts'
-import { RuleCorpusRejected, SurfaceRejected } from './verdict.schema.ts'
+import { RuleCorpusRejected, SurfaceRejected, type Verdict } from './verdict.schema.ts'
 import { ENGINE } from './version.ts'
 
 /** Two encoded surfaces of one package, and the corpus to judge them by (the shipped one when absent). */
@@ -20,7 +20,9 @@ export type VerdictInput = {
  * stamped with this engine. Both surfaces and the corpus are decoded before the
  * decision sees them.
  */
-export const verdictCell = Sandwich.named('api_extractor.verdict')((input: VerdictInput) =>
+export const verdictCell: Sandwich.WrittenCell<VerdictInput, never, never, typeof Verdict, string, RuleCorpusRejected | SurfaceRejected, never> = Sandwich.named(
+  'api_extractor.verdict',
+)((input: VerdictInput) =>
   // The encoded command, not `new CompareSurfaces(...)`: the constructor validates and would throw
   // on an undecodable surface, where the cell must answer `SurfaceRejected`.
   Effect.succeed({

@@ -53,6 +53,17 @@ Feature('The verdict cell judges two surfaces and refuses the ones it cannot')
       ),
     )
 
+    scenario(
+      'a verdict decoded from the document carries the family brand',
+      Gherkin.Do.pipe(
+        Given('two surfaces whose returned error channel gains a tag')('surfaces', () => Effect.sync(() => ({ before, after }))),
+        When('the verdict cell judges them and the document is decoded')('verdict', (scope) =>
+          Effect.map(Verdict.cell.run(scope.surfaces), (document) => Result.getOrThrow(decodeVerdict(document)))),
+        Then('the decoded verdict holds `Verdict.VerdictTypeId`')((scope, expect) =>
+          expect(scope.verdict).toSatisfy((verdict: object) => Verdict.VerdictTypeId in verdict, 'the verdict holds Verdict.VerdictTypeId')),
+      ),
+    )
+
     scenarioOutline(
       'a surface repeating <label> is refused while the distinct one is judged',
       repeatedKeys,

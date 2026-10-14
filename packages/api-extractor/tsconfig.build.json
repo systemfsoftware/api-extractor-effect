@@ -4,7 +4,8 @@
     "noEmit": false,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "stripInternal": true
+    "stripInternal": true,
+    "isolatedDeclarations": true
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]

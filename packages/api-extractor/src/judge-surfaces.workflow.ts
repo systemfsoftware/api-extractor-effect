@@ -10,7 +10,7 @@ import { AmbiguousRuleCorpus, CompareSurfaces, Verdict, VERDICT_SCHEMA_VERSION }
  * corpus, and the highest bump among them. A corpus that cannot pick one rule
  * per change is refused before anything is judged.
  */
-export const judgeSurfaces = Workflow.make({
+export const judgeSurfaces: Workflow.MadeWorkflow<typeof CompareSurfaces, typeof Verdict, typeof AmbiguousRuleCorpus> = Workflow.make({
   command: CompareSurfaces,
   decision: Verdict,
   error: AmbiguousRuleCorpus,

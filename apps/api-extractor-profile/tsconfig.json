@@ -1,0 +1,21 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "customConditions": ["@systemfsoftware/source"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    "*.ts"
+  ]
+}

@@ -1,0 +1,700 @@
+---
+title: API extractor front-ends - Plan
+type: feat
+date: 2026-10-13
+topic: front-ends
+artifact_contract: ce-unified-plan/v1
+product_contract_source: ce-brainstorm
+origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
+supersedes: docs/plans/2026-10-14-0157-feat-front-ends-plan.md
+execution: code
+---
+
+# API extractor front-ends - Plan
+
+## Goal Capsule
+
+- **Objective:** a maintainer points the engine at a TypeScript package's source and gets its versioned API model and analysis messages, without a type-check when the package's exports are annotated and through the compiler otherwise, and both routes give the same model.
+- **Means:** one emitter port with an isolated-declarations adapter and a TypeScript 7 `tsc` process adapter, meeting one syntactic builder and resolver at declaration text (KTD1, KTD3, KTD5, KTD6); the fast-path emitter follows the committed profile (KTD2).
+- **Product authority:** the operator's U7 / PR3 contract of 2026-10-12, then `docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md` (R15, R17, R18; KTD9, KTD11, KTD13; the model and verdict contract and the provenance rules R1, R2, R7), then `AGENTS.md`. The report renderer and differential lane (PR4), the CI benchmark (PR5) and the CLI, bump check and journey (PR6) are not active scope.
+- **Open blockers:** none for planning. Two delivery decisions belong to the operator and are held until the PR (Outstanding Questions).
+- **Stop conditions:** stop and report if the profile shows neither candidate agreeing with TypeScript 7 on which corpus packages are isolated-clean (KTD2), if real declaration text needs a model shape `schemaVersion` 2 cannot hold, or if a resolver divergence from upstream (R10) traces to reachability no type position in the declaration text spells (alias indirection, conditional or mapped types, generic instantiation): that is a checker-only message for the operator and origin KTD13's fallback routing, not a resolver bug to widen.
+- **Execution profile:** branch `feat/front-ends` from `origin/main` `9bd73962`, one PR. The agent implements, reviews report-only, and opens the PR; the operator rules on findings and merges.
+
+---
+
+## Product Contract
+
+### Summary
+
+The engine gains its two front-ends. An isolated-declarations fast path and a TypeScript 7 compiler fallback emit declaration text behind one emitter port. One syntactic builder turns that text into the existing versioned model, and one syntactic resolver derives api-extractor's analysis messages from it. A committed per-phase profile on the real corpus picks the fast-path emitter before any code depends on it.
+
+### Problem Frame
+
+PR1 and PR2 built the model, the diff and the verdict, but nothing produces a model from a real package: every model so far is hand-built or generated from the schema. The model schema was sized for the verdict and has never met real declaration text (origin U2). The origin plan's speed claim rests on a fast path that never type-checks, yet no isolatedDeclarations-clean package exists to take it, and the repository's own package fails `--isolatedDeclarations` with 52 errors today. TypeScript 7 ships no stable programmatic API, so the compiler can only be reached as a process until 7.1, and the choice between TypeScript's `transpileDeclaration` and `oxc-transform` for the fast path has no measurement behind it (origin R15).
+
+### Key Decisions
+
+- **Analysis messages travel beside the model in PR3, not inside it.** The origin's KTD10 moves messages into the model together with declaration spans and TSDoc in PR4, which bumps `schemaVersion` there; adding them now would bump it twice. Governs R3, R11.
+- **The route is decided by the fast emitter's own evidence, not by a tsconfig flag.** A package is isolated-clean when its sources emit isolated declarations without a diagnostic; a configuration that claims cleanliness proves nothing (pack: boundary-testing, staged-protocol-evidence.md). Governs R1, R2.
+- **The resolver covers the messages computed from the module graph and release tags.** The `{@inheritDoc}` and `{@link}` messages need TSDoc declaration-reference parsing, which arrives with the model's TSDoc in PR4. Governs R9.
+- **A failing compile is refused, never modelled.** A model built from declarations the compiler flagged would carry `any` where the source meant something else, and a verdict over it would pass silently. Governs R5.
+
+### Requirements
+
+**Routing and emitters**
+
+- R1. A package whose entry sources and the sources they reach emit isolated declarations without a diagnostic takes the fast path, and no type checker runs for it (origin R17).
+- R2. Every other package with a TypeScript source entry takes the compiler fallback, TypeScript 7 `tsc` run as a process, and the result names the isolated-declaration diagnostics that routed it there.
+- R3. Both paths give the same model, `schemaVersion` 2, for the same package, built from the same declaration files (those the entry points reach); only `producer.declarations` differs, and it names the emitter and version that produced the declarations (origin R7, R17).
+- R4. Both emitters implement one emitter port, so a TypeScript 7.1 API adapter can replace the process adapter with no model schema change (origin R18).
+- R5. A fallback compile that reports diagnostics is refused with those diagnostics.
+- R16. A package with no TypeScript source entry is refused as having no front-end input, before either emitter runs.
+
+**Model builder**
+
+- R6. One syntactic builder turns declaration text into the model on both paths and reads no type checker.
+- R7. Declarations that differ only in printing build the same model: quote style, member separators, whitespace, and `import("x").Y` against an imported `Y`.
+- R8. A type the model's structure does not decompose is kept as canonical text, so changing it still registers as a change.
+
+**Analysis messages**
+
+- R9. A syntactic resolver over the same declaration text reports `ae-forgotten-export`, `ae-missing-release-tag`, `ae-internal-missing-underscore`, `ae-incompatible-release-tags` and `ae-internal-mixed-release-tag` (origin KTD13).
+- R10. On a real package, the resolver reports the same message ids and symbols for those five messages as upstream api-extractor 7.59.1 run on the same declarations.
+- R11. A message locates itself by entry point and declaration name, never by file offset, so both paths report the same messages for the same package.
+
+**Profile**
+
+- R12. A per-phase profile on the origin's KTD11 corpus is committed before the fast-path emitter is chosen. It times source discovery, both fast-path candidates, the TypeScript 7 fallback and declaration parsing per package, and it records how often TypeScript 7 and TypeScript 5.9.3 print a package's declarations differently (origin R15, KTD9).
+- R13. The profile is reproducible from a committed harness and states the corpus commit, the toolchain versions and the host it ran on.
+- R14. The fast-path emitter is the one the committed profile supports, and the choice cites it.
+
+**Fast-path corpus**
+
+- R15. This repository's package is isolatedDeclarations-clean, and its build fails if it stops being clean.
+
+### Acceptance Examples
+
+- AE1. **Covers R1, R3.** **Given** this repository's package, **when** the engine analyses it, **then** it takes the fast path; **and when** the fallback is run on the same package, its model serialises to the same bytes once `producer.declarations` is set equal.
+- AE2. **Covers R2.** **Given** a package that exports `const ids = [1, 2].map(String)` with no annotation, **when** the engine analyses it, **then** it takes the fallback and the routing reason names the TS9010 diagnostic for `ids`.
+- AE3. **Covers R7.** **Given** one declaration file that writes `import("effect").Effect.Effect<A>` and another that imports `Effect` from `effect` and writes `Effect.Effect<A>`, **when** both are built, **then** both give the reference `Effect.Effect` from module `effect`.
+- AE4. **Covers R9, R11.** **Given** an exported function whose return type names an interface the entry point does not export, **when** the resolver runs, **then** it reports `ae-forgotten-export` for that interface at the function's name, and a type imported from another package draws no message.
+- AE5. **Covers R5.** **Given** a package whose fallback compile reports a type error, **when** the engine analyses it, **then** it refuses with the compiler's diagnostic and builds no model.
+
+### Scope Boundaries
+
+- The `.api.md` renderer, the differential lane against upstream and the adversarial corpus are PR4 (origin U8).
+- The cold and warm benchmark in CI is PR5 (origin U9). This PR's profile runs locally and is committed as evidence.
+- The CLI, the changeset-bump check and the consumer-flake journey are PR6 (origin U10).
+- Declaration spans, TSDoc text and messages inside the model, and the `schemaVersion` bump they bring, are PR4 (origin KTD10).
+- The `{@inheritDoc}` and `{@link}` messages are PR4.
+- The oracle-line TypeScript 5.9.3 adapter that origin KTD9 adds where TypeScript 7 prints differently serves the report path, so it is PR4; this PR measures the divergence it depends on.
+- No mutation run, local or otherwise; no copied systemfsoftware tooling or packs.
+
+### Outstanding Questions
+
+**Resolve Before Planning:** none.
+
+**Deferred to the operator (delivery, before the PR):**
+
+- The change intent's bump for `@systemfsoftware/api-extractor`. `.changeset/README.md` requires a non-`none` intent for any change to `packages/api-extractor` while the package sits at 0.0.0 beside the `v0.0.0` tag, and the first non-`none` bump is the operator's call (`docs/plans/2026-10-10-2113-fix-release-version-surface-plan.md`, Scope Boundaries).
+- Whether this branch stacks on PR #5. The operator cut it from `origin/main`; `AGENTS.md` OP13b stacks a branch that shares files with an open PR by the same author, and PR #5 also changes `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `README.md`.
+
+### Sources
+
+- Origin plan: `docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md` (R7, R15, R17, R18; KTD9, KTD10, KTD11, KTD13; U7).
+- Learnings: `docs/solutions/design-patterns/keyed-uniqueness-in-the-api-model-schema.md` (item names are labels that may repeat; entry-point paths and enum member names are identities), `docs/solutions/build-errors/turbo-stale-cache-with-source-condition-dependencies.md` (any new consumer of the package's source depends on `transit`).
+- Corpus: systemfsoftware at `732f66a0c85819b2005f9e0930a595bc4de91ee1` (the flake's pin), 43 public packages, 37 with a TypeScript source entry.
+- Packs declared in `.compound-engineering/config.yaml` (systemfsoftware `df908ddfe497e53c1c03b92519a96c913c441a58`): cell-architecture, boundary-testing, schema-laws, package-topology.
+
+---
+
+## Planning Contract
+
+Product Contract preservation: Product Contract unchanged.
+
+### Key Technical Decisions
+
+- KTD1. **One emitter port, two service tags, adapters as layers.** `src/front-end/declaration-emitter.service.ts` holds the `DeclarationEmitter` shape (`emit(source) -> Declarations`) and two `Context.Service` tags, `IsolatedEmitter` and `CompilerEmitter`, with no driver imports (pack: cell-architecture, ports-separate-from-layers.md; pack: cell-architecture, service-and-layer-boundaries.md). Each adapter module exports a `layer` that takes no options; the compiler's emit policy is the exported `compilerEmitPolicy` record. No `*Live` identifier exists. A TypeScript 7.1 API adapter provides `CompilerEmitter` the same way; 7.0.2's `typescript/unstable/sync` API has no declaration-emit request, so the process adapter is the only 7.0 route. Governs R4.
+- KTD2. **The fast-path emitter is chosen by a pre-registered rule over the committed profile.** Candidates: `oxc-transform` 0.150.0 `isolatedDeclarationSync` and TypeScript 5.9.3 `transpileDeclaration` (5.9.3 is already in the lockfile through `@microsoft/api-extractor`, and TypeScript 7 has no JavaScript emit API). The declaration parser follows the emitter's family: `oxc-parser` 0.150.0 or TypeScript 5.9.3 `createSourceFile`. Rule, in order: (1) the candidate's clean-or-not verdict matches TypeScript 7 `tsc --isolatedDeclarations` on every corpus package; (2) the lower corpus total of median warm emit plus parse time wins; (3) within 10%, the smaller runtime dependency wins. The choice and the numbers it rests on are recorded in a `Decision` section of `docs/profiles/2026-10-12-front-end-phases.md`, in a commit after the one that adds the profile. Governs R12, R14.
+- KTD3. **The fallback runs the `tsc` of this package's own `typescript@7.0.2` dependency as a child process.** `typescript` moves from `devDependencies` to `dependencies` so the stamp `typescript@7.0.2` names what ran. The adapter runs `-p <tsconfig> --noEmit false --declaration --emitDeclarationOnly --declarationMap false --sourceMap false --incremental false --composite false --tsBuildInfoFile null --rootDir <workspace root> --outDir <scoped temp dir> --listEmittedFiles --pretty false` through effect's `ChildProcessSpawner`. Its `TSFILE:` lines and diagnostics are decoded with schemas (pack: cell-architecture, decode-never-cast.md). Any `error TS` line or non-zero exit is `CompilerRejected` with the diagnostics (R5). The workspace root is the nearest ancestor holding `pnpm-workspace.yaml`, else the package root, because family packages resolve sibling sources through `@systemfsoftware/source` and TypeScript 7 refuses files outside `rootDir`. The adapter keeps only the emitted files under the package root that the entry declarations reach through relative specifiers, the same closure the isolated adapter walks, so both `Declarations` hold the same file set (R3). Governs R2, R3, R4, R5.
+  - **Amended by U12.** `tsc`'s stdout is package-influenced text: a module specifier or file name containing a newline puts a well-formed `error TS…` or `file(l,c): error TS…` line on stdout (reproduced on 7.0.2, run `20261013-163200-2c130632` #3), so no line grammar can tell a real diagnostic from a forged one. The adapter therefore reads no stdout. It writes one derived config, `{ "extends": <package tsconfig>, "compilerOptions": <emit policy> }`, where the emit policy is one exported record (`noEmit: false`, `declaration`, `emitDeclarationOnly`, `declarationMap: false`, `sourceMap: false`, `stripInternal: false`, `isolatedDeclarations: false`, `removeComments: false`, `incremental: false`, `composite: false`, `tsBuildInfoFile: null`, `rootDir: <workspace root>`, `outDir` and `declarationDir: <scoped temp dir>`), and runs `tsc -p <derived config>`. Emitted declarations are the `.d.ts` files found under the scoped directory. A non-zero exit is `CompilerRejected`; its diagnostics come from TypeScript 7.0.2's `typescript/unstable/async` API opened on the same derived config, following `tsc`'s reporting order (config and syntactic; else program and global; else semantic; then declaration), errors only, de-duplicated. The API runs only on a refusal, so a clean package pays nothing for it. If the API reports no error for a failed run, the refusal carries one diagnostic without a code naming the exit status and stderr. `references` are not carried into the derived config: without `--build`, `tsc -p` uses them only to redirect imports to referenced projects' built output, and the model reads only this package's declarations. The profile harness imports the same emit policy (U12). Settings that resolve from the config file's directory (the default `typeRoots` chain, a `types` entry naming a package, the default `include`) would otherwise resolve from a temp directory. The derived config is therefore written into a scoped mirror of the package config's directory, each ancestor carrying a symlink to the real `node_modules` unless the ancestor is itself named `node_modules` (`tsc` never looks inside one), and a mirrored `node_modules` segment renamed so it cannot collide with that symlink; `tsc`'s upward `node_modules` walk then matches the package's own (U13), and `files` is the package config's resolved `fileNames`, read once with the API's `parseConfigFile` (a tsconfig with no `include` otherwise matches `**/*` in the temp directory, TS18003). Each was reproduced on 7.0.2 and has an equality case in the e2e journey.
+- KTD4. **The route is a tagged union built from the isolated emitter's outcome.** `Route` is `FastPath` or `Fallback { diagnostics }`; `NotIsolated { diagnostics }` from `IsolatedEmitter` is the only thing that selects the fallback (pack: schema-laws, tagged-unions-over-state-by-presence.md; pack: boundary-testing, staged-protocol-evidence.md). A package without a TypeScript source entry never reaches routing: `readPackage` fails with `NoSourceEntry`, since neither route can produce a model for it (R16). Governs R1, R2, R16.
+- KTD5. **`Declarations` is the meeting point of every front-end.** It holds the producer stamp, the declaration files as package-relative POSIX paths with their text in code-unit order, and each entry point's declaration file. Entry points come from `package.json` `exports`, reading each export's `@systemfsoftware/source` condition (the family's convention, an option of the package reader); `./package.json` and non-TypeScript targets are skipped. The tsconfig is `tsconfig.build.json` when present, else `tsconfig.json`. Governs R3, R6.
+- KTD6. **The builder walks a syntactic module graph and maps type nodes onto the existing `TypeExpr` AST.** Relative specifiers resolve by swapping `.js`, `.ts`, `.mjs` or no extension for `.d.ts`, then `/index.d.ts`. A reference's `name` is the qualified name as written (`Effect.Effect`), and `module` is the bare specifier its leftmost identifier was imported from; `import("x").Y` becomes the same reference, and a relative `import("./y").Z` becomes a local one (R7). Keywords, literals, references, unions, intersections, arrays, plain tuples, function types, and object literals of properties, methods and call signatures decompose. Every other node becomes `text`, printed from the AST by one canonical printer, so formatting never reaches the model (R8). Items follow the model's kinds: `export * as ns` and `declare namespace` become namespaces, overloads group into one function, `export default` is an item named `default`. `locals` holds every type alias reachable from an export and not exported. Two distinct locals sharing a name take upstream's `_2`, `_3` suffixes in code-unit order of their file paths, and references follow the rename. `export =` and `declare global` are refused with `UnsupportedDeclaration`, naming the construct and file. Governs R6, R7, R8.
+- KTD7. **The resolver reads release tags from the declaration's leading `/** */` comment and the module graph from KTD6.** A forgotten export is a declaration in the package's own files that an exported item's type positions, heritage clauses or `typeof` queries reach, and that the entry point does not export under any name or namespace. Type parameters, globals and other packages' types never count. A message is `{ messageId, entryPoint, item, symbol }` in code-unit order, with `item` the exported item's name path (R11). The five ids follow api-extractor 7.59.1's semantics, checked against upstream run in-process with `Extractor.invoke` (R10). Governs R9, R10, R11.
+- KTD8. **The public surface is one `FrontEnd` namespace from `mod.ts`.** It exports `analyse`, `readPackage`, `buildModel`, `resolveMessages`, the two tags, the adapter layers, and the `Declarations`, `Analysis`, `AnalysisMessage`, `Route` schemas and error classes every signature reaches (pack: cell-architecture, single-namespace-barrel.md; pack: package-topology, enumerated-entry-modules.md; pack: package-topology, one-access-path.md; pack: package-topology, public-signature-types.md). `analyse` returns `{ route, model, messages }` and needs `IsolatedEmitter | CompilerEmitter` plus the platform services the adapters need. Governs R1-R5, R9.
+- KTD9. **Cleanliness is enforced by the build.** `packages/api-extractor/tsconfig.build.json` sets `isolatedDeclarations: true`; tsdown's declaration build reads it, so the CI build lane fails when an export loses its annotation. TypeScript refuses an `extends` expression (TS9021) and a computed class member (TS9038) under `--isolatedDeclarations`. The schema classes `Verdict` and `CompareSurfaces` therefore become exported constants typed `Schema.Class<…>` beside an instance type of the same name, which also keeps `effect-schema-discovery` generating their codec laws (it recognises a const whose type names `Schema`, not a class extending a typed base). The error classes extend typed base constants, and the brand and instrumentation keys move onto the class value and prototype. The flag also moves tsdown's declaration generator (rolldown-plugin-dts) from `tsgo` to `oxc`, so `dist/mod.d.ts` changes in printing: quote style, named field types where the old file inlined them, `override` modifiers. No exported name changes, and the package is unpublished at 0.0.0. `attw` checks the built entry. Verdict output bytes do not change: `apps/api-extractor-e2e/host-digest.ts` keeps printing `e4478f03…6da2`. Governs R15.
+- KTD10. **The profile harness is a private workspace app, run locally, its output committed under `docs/profiles/`.** `apps/api-extractor-profile` takes the corpus root and this repository's package; per package it times one cold and five warm runs of each phase and records the medians, the clean-or-not verdict of each candidate and of `tsc --isolatedDeclarations`, and the number of declaration files TypeScript 7 and TypeScript 5.9.3 print differently. TypeScript 5.9.3 is installed as the alias `typescript-5.9`. The first profile (discovery, emit, parse, divergence) is committed before KTD2's choice. A second run after the builder adds the build and resolve phases and each corpus package's build outcome (a model, or the refused construct), which is the real-text check behind the second stop condition. Governs R12, R13.
+- KTD11. **Tests follow the test-layer gate.** In-process integration features in `packages/api-extractor/tests/` cover the fast path on this package, the builder's canonical forms and the resolver against upstream. The three scenarios that spawn `tsc` (AE1, AE2, AE5) live in `apps/api-extractor-e2e`, which then holds four of its four allowed journeys, so a later PR retires one before adding another. No unit test targets an internal helper and no emitter is faked (pack: boundary-testing, no-mocks-on-internal-glue.md; pack: boundary-testing, real-system-oracles.md; pack: boundary-testing, fake-and-real-store-laws.md). Governs R1-R3, R5, R7, R10.
+- KTD12. **Turbo owns every build, cache and task-graph decision here, and this unit adds none (house law, skill turbo-query-optimization).** Evidence from `turbo query` on turbo 2.10.12, base `9bd73962`:
+  - `packageGraph`: three packages; `api-extractor-e2e` and `api-extractor-profile` each have one `development` edge to `@systemfsoftware/api-extractor`. No cycle warning appears on stderr.
+  - `boundaries`: length 0.
+  - `affectedTasks`: 14 tasks across all three packages, because the unit changes every package.
+  - Task edges: lint, typecheck and test each depend on `transit` (`turbo.json:9`, `turbo.json:15`, `turbo.json:18`), and `transit` depends on `^transit` (`turbo.json:11-12`). Appending one byte to a source file of `@systemfsoftware/api-extractor` changed the `turbo run --dry=json` hash of every lint, typecheck, test and transit task in all three packages, including `api-extractor-e2e#test`, and restoring the byte restored every hash. Turbo therefore already invalidates the new tests that read the package's source through the source condition.
+  - The profile is a package script (`apps/api-extractor-profile/package.json:13`) with no `turbo.json` task, because its output is wall-clock timing and is never cacheable.
+  - The unit's source, harness, tests and workflows contain no home-grown cache, hash, affected-only script or cache gate.
+  - CI runs `pnpm lint`, `pnpm typecheck` and `pnpm build`, which are `turbo run …` (`package.json:12-15`), through systemfsoftware `reusable-checks.yml@732f66a0` (`.github/workflows/ci.yml:48-50`). That workflow sets Turbo's remote cache only when `turbo-team` is given (`reusable-checks.yml:115-125`, `:147-154`). `ci.yml` sets none, so public CI holds no Turbo credentials. Its Turbo-hash-driven test skip (`dry-run`, `reusable-checks.yml:110-114`, `:189-197`) is unused.
+
+  Carrying `.turbo` through GitHub's cache action, or enabling `dry-run`, is CI speed work that belongs to the CI benchmark unit (PR5), not to U7.
+
+### High-Level Technical Design
+
+Directional, not an implementation specification.
+
+```mermaid
+flowchart TB
+  P[readPackage: package.json exports, tsconfig, workspace root] --> S[PackageSource]
+  S --> I[IsolatedEmitter]
+  I -->|Declarations| B
+  I -->|NotIsolated diagnostics| C[CompilerEmitter: tsc 7 process]
+  C -->|Declarations| B[buildModel: parse, module graph, items, locals]
+  C -->|CompilerRejected| X[refusal]
+  B --> M[ApiModel v2]
+  B --> R[resolveMessages: release tags, reachability]
+  R --> A[Analysis: route, model, messages]
+  M --> A
+```
+
+The route decision has two outcomes and one input: the isolated emitter's result. The 7.1 adapter replaces only the `CompilerEmitter` box.
+
+### Assumptions
+
+- The family's `@systemfsoftware/source` export condition names each entry's source module. A package without it is refused with `NoSourceEntry` (R16).
+- `oxc-transform`'s and TypeScript's isolated-declaration diagnostics agree on which packages are clean; the profile checks this before KTD2 relies on it.
+- An isolated-clean package's TypeScript 7 declarations differ from its isolated declarations only in printing, which KTD6 normalises. The real equality journey (AE1) is the check.
+
+### Assumptions challenged (destructive review, Edge-First lens)
+
+First cycle on this artifact; Edge-First was chosen because the plan's happy path is one well-formed package and the failure modes sit at its edges.
+
+1. *An isolated emitter that reports no diagnostic proves the package clean.* Two emitters may disagree (Assumptions). The profile records each candidate's verdict beside `tsc --isolatedDeclarations` (KTD10), and KTD2's first rule rejects a candidate that disagrees on any corpus package.
+2. *Every real declaration file fits the model.* `export =`, `declare global`, colliding local names and default exports all occur in published packages. KTD6 names the handling of each instead of letting the builder drop one silently.
+3. *`tsc` output mirrors the package's source tree.* Family packages resolve sibling sources, which TypeScript 7 refuses outside `rootDir` (probe: TS5011 on `packages/effect-cell-types` without `--rootDir`). KTD3 roots the compile at the workspace and maps emitted files back by relative path.
+
+Radical alternative considered: skip declaration emit on the fast path and build the model straight from the annotated source, which already contains every type the declaration would. Rejected: two builder inputs break origin approach B's single meeting point and double the surface R3's equality must hold over; the profile shows whether emit cost matters at all.
+
+### Sequencing
+
+U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → U7 → U8 → U9 → U10 → U11 → U12. U4's builder can start on TypeScript 7 output before U3 lands only once KTD2's parser is known, so U3 precedes it.
+
+---
+
+## Implementation Units
+
+### U1. Make this package isolatedDeclarations-clean
+
+- **Goal:** the package emits isolated declarations without a diagnostic, enforced by its build.
+- **Requirements:** R15; KTD9.
+- **Files:** `packages/api-extractor/tsconfig.build.json`, `packages/api-extractor/src/**/*.ts` (annotations), `packages/api-extractor/src/verdict.schema.ts`, `packages/api-extractor/src/verdict.cell.ts`, `packages/api-extractor/src/judge-surfaces.workflow.ts`.
+- **Approach:** annotate every exported `const` (schemas with their `Schema.*` types, the workflow and the cell with `effect-cell-types`' made types), give each tagged class an explicitly typed base. No behaviour change.
+- **Execution note:** refactor only; the host digest is the byte check.
+- **Test expectation:** none - annotations, proven by `tsc -p tsconfig.build.json` and the unchanged suite.
+- **Verification:** `tsc -p packages/api-extractor/tsconfig.build.json --noEmit` reports no TS9xxx; `pnpm build` passes; `pnpm test` passes; host digest `e4478f03…6da2`.
+
+### U2. Profile harness and the first phase profile
+
+- **Goal:** a reproducible per-phase profile on the real corpus, committed before the emitter choice.
+- **Requirements:** R12, R13; KTD10.
+- **Files:** `apps/api-extractor-profile/{package.json,tsconfig.json,oxlint.config.ts,profile.ts}`, `pnpm-workspace.yaml` (none expected beyond the workspace glob), `pnpm-lock.yaml`, `docs/profiles/2026-10-12-front-end-phases.json`, `docs/profiles/2026-10-12-front-end-phases.md`.
+- **Approach:** corpus = systemfsoftware `732f66a0c8` checked out and installed with `pnpm install --frozen-lockfile --ignore-scripts`, plus `packages/api-extractor`. Phases per package: discovery (manifest and source graph), `oxc-transform` emit, `transpileDeclaration` emit, `tsc` 7 emit, `tsc` 5.9.3 emit (divergence only), `oxc-parser` parse, `createSourceFile` parse, and `tsc --isolatedDeclarations` diagnostics as the cleanliness referee. The JSON records corpus commit, versions, host CPU, Node version and per-phase medians; the markdown tables it.
+- **Test expectation:** none - an evidence tool whose output is the committed profile.
+- **Verification:** the harness runs end to end on the corpus; the JSON names commit `732f66a0c8` and both packages sets.
+
+### U3. Emitter port, isolated adapter and the recorded choice
+
+- **Goal:** the port and the chosen fast-path adapter exist, with the choice citing the profile.
+- **Requirements:** R1, R4, R14; KTD1, KTD2, KTD4, KTD5.
+- **Files:** `packages/api-extractor/src/front-end/declaration-emitter.service.ts`, `packages/api-extractor/src/front-end/declarations.schema.ts`, `packages/api-extractor/src/front-end/package-source.schema.ts` (reader), the chosen adapter module, `packages/api-extractor/package.json`, this plan's KTD2.
+- **Approach:** the adapter emits each entry source, parses the emitted imports, and follows relative specifiers until the reachable set is closed; any diagnostic yields `NotIsolated`.
+- **Test scenarios:** covered through U8's fast-path feature (this package emits with no diagnostic; route `FastPath`).
+- **Verification:** U8.
+
+### U4. Syntactic model builder
+
+- **Goal:** `buildModel(declarations)` gives a schema-valid, sorted `ApiModel` v2.
+- **Requirements:** R3, R6, R7, R8; KTD6.
+- **Files:** `packages/api-extractor/src/front-end/declaration-graph.ts`, `packages/api-extractor/src/front-end/type-expr-of.ts`, `packages/api-extractor/src/front-end/canonical-type-text.ts`, `packages/api-extractor/src/front-end/build-model.ts`.
+- **Approach:** KTD6; the model passes through `sortModel` and is stamped with `ENGINE` and the declarations' producer.
+- **Test scenarios:** (`tests/front-end-model.integration.test.ts`) AE3 rows: `import("effect").Effect.Effect<A>` and an imported `Effect.Effect<A>` give one reference; a mapped type printed by `oxc` and by TypeScript gives one `text`; `export * as ns` gives a namespace item; two overloads give one function with two signatures; an unexported alias reached from an export lands in `locals`; `export =` is refused naming the file.
+- **Verification:** the feature passes; this package's fast-path model decodes with `ApiModel.decode`.
+
+### U5. Syntactic resolver
+
+- **Goal:** `resolveMessages(declarations)` gives the five messages in code-unit order.
+- **Requirements:** R9, R10, R11; KTD7.
+- **Files:** `packages/api-extractor/src/front-end/analysis-message.schema.ts`, `packages/api-extractor/src/front-end/resolve-messages.ts`, `packages/api-extractor/tests/__fixtures__/upstream-messages.ts`, `packages/api-extractor/tests/analysis-messages.integration.test.ts`.
+- **Test scenarios:** this package's fast-path declarations: the resolver's `(messageId, symbol)` set equals upstream 7.59.1's for the five ids. One declaration fixture per id, each checked against upstream rather than a hand-written answer: an unexported interface in a return type (AE4), an export without a release tag, an `@internal` export without `_`, a `@public` export whose type names a `@beta` one, and a merged declaration with two tags. A type from `effect` draws no message.
+- **Verification:** the feature passes.
+
+### U6. TypeScript 7 compiler adapter
+
+- **Goal:** `CompilerEmitter` emits declarations by running `tsc` 7 and refuses on diagnostics.
+- **Requirements:** R2, R4, R5; KTD3.
+- **Files:** `packages/api-extractor/src/front-end/typescript-7-compiler.ts`, `packages/api-extractor/package.json` (`typescript` to `dependencies`).
+- **Test scenarios:** U8's e2e journeys.
+- **Verification:** U8.
+
+### U7. Router and public surface
+
+- **Goal:** `FrontEnd.analyse` routes per KTD4 and returns `{ route, model, messages }`.
+- **Requirements:** R1, R2, R3; KTD4, KTD8.
+- **Files:** `packages/api-extractor/src/front-end/analyse.ts`, `packages/api-extractor/src/FrontEnd.ts`, `packages/api-extractor/src/mod.ts`.
+- **Test scenarios:** U8.
+- **Verification:** `pnpm build` and `attw`: the `.mjs` and `.d.ts` entries agree on the new namespace (pack: package-topology, condition-branch-agreement.md).
+
+### U8. Front-end features
+
+- **Goal:** the Product Contract's acceptance examples run on real inputs.
+- **Requirements:** R1, R2, R3, R5, R7, R10, R16; KTD11.
+- **Files:** `packages/api-extractor/tests/front-end-model.integration.test.ts` (U4 rows plus: this package analysed in-process takes `FastPath` and its model decodes as `schemaVersion` 2; a package whose exports name no TypeScript source is refused with `NoSourceEntry`), `apps/api-extractor-e2e/tests/front-ends.integration.test.ts`, `apps/api-extractor-e2e/fixtures/inferred-export/`, `apps/api-extractor-e2e/fixtures/type-error/`, `apps/api-extractor-e2e/package.json`.
+- **Test scenarios:** (e2e) AE1: this package through `IsolatedEmitter` and through `CompilerEmitter` serialises to the same bytes once `producer.declarations` is set equal, and both give the same messages; AE2: `fixtures/inferred-export` routes to `Fallback` naming TS9010 and builds a model; AE5: `fixtures/type-error` is refused with the compiler's diagnostic.
+- **Verification:** `pnpm turbo run test --filter=@systemfsoftware/api-extractor --filter=api-extractor-e2e` passes.
+
+### U9. Second profile and documentation
+
+- **Goal:** the committed profile covers every phase, and the README says how front-ends route.
+- **Requirements:** R12, R13.
+- **Files:** `apps/api-extractor-profile/profile.ts`, `docs/profiles/2026-10-12-front-end-phases.{json,md}`, `README.md`.
+- **Approach:** add `build` and `resolve` phases that call `FrontEnd.buildModel` and `FrontEnd.resolveMessages`, and the fallback model count; README gains the front-end section and the profile reproduction steps.
+- **Test expectation:** none - evidence and documentation.
+- **Verification:** the harness runs on the corpus with every phase present.
+
+### U10. Review dispositions
+
+- **Goal:** the operator-accepted findings of the full-path `ce-code-review` (run `20261012-174501-836c437c`, head `fd4ad93`) are fixed, each with a test that fails before the fix and passes after; rejected findings stay rejected.
+- **Requirements:** R1, R3, R5, R6, R16; KTD9, KTD12.
+- **Files:** `.changeset/*.md`, `packages/api-extractor/src/front-end/{compiler-output.schema,oxc-isolated-emitter,typescript-7-compiler,build-model}.ts`, `packages/api-extractor/tests/front-end-{routing,model}.integration.test.ts`, `apps/api-extractor-e2e/tests/front-ends.integration.test.ts`, `README.md`.
+- **Approach:**
+  - #1: a `minor` change intent for `@systemfsoftware/api-extractor`. The `FrontEnd` namespace is new public surface (pack: package-topology, surface-changes-are-versioned.md).
+  - #2: `Position` is capped below 1e9 and digit text has one spelling, with no zero padding. Each refinement has a refusal law in its own file (pack: schema-laws, refusals-beside-generated-laws.md). The four committed `Refuted` seeds stay as regression coverage. U11 supersedes the refusal laws and the seeds; the refinements stay.
+  - #5: the isolated emitter declines with `NotIsolated`, naming the declaration file, when an entry point's source cannot be read.
+  - #6: the fallback passes `--stripInternal false`, so both routes keep `@internal` declarations.
+  - #9: an entry point's declarations load from its recorded source path before any sibling candidate.
+  - Requirements-check advisory: an enum member with a computed declared value is refused with `UnsupportedDeclaration` naming the member. Both emitters print constant members as literals and omit non-constant initializers, so only declaration text written by hand carries one.
+  - README: the builder's refusals (external re-export, `declare global`, module augmentation, `export =`, computed enum value) are documented as limitations.
+  - Rejected: #4. tsc 7.0.2 imports a non-exported interface from an import-bearing `.d.ts` (exit 0), and adding `export {}` makes the same import TS2459. The validator rejected #3, #7, #8 and #10-#16.
+- **Test expectation:** the routing feature gains a missing-entry scenario and a `.tsx`-beside-`.ts` scenario; the model feature gains a computed-enum refusal; the e2e equality journey gains an `@internal` package without adding a journey (KTD11). Each fails at `fd4ad93` and passes after its fix. Each refusal law fails when its refinement is widened.
+- **Verification:** the Verification Contract gates, plus a delta review of the fixes by a named non-Claude cross-model peer (DeepSeek or MiniMax only).
+
+### U11. Ruling #2's refusal properties under the refusal-properties rule
+
+- **Goal:** each in-source refusal property ruling #2 added is kept only if no consumer can observe its refusal (pack: schema-laws, refusal-properties-cover-unobservable-boundaries.md, systemfsoftware #761). `main` retired the generated schema laws in #9.
+- **Requirements:** R3; KTD11.
+- **Files:** `packages/api-extractor/src/front-end/compiler-output.schema.ts`, `packages/api-extractor/src/__property_seeds__/schema-laws.test.ts.jsonl`, `apps/api-extractor-e2e/tests/front-ends.integration.test.ts`.
+- **Approach:**
+  - The digit-spelling refusal (`∀s_SourcelessDiagnosticLineDigitsRefusal_≡CanonicalSpelling`) is observable. A package's own text reaches `tsc`'s stdout: TypeScript 7.0.2 prints an unresolved import specifier raw, so `import 'x\nerror TS007: m'` puts the line `error TS007: m'.` on stdout, and `FrontEnd.analyse` reports through `CompilerRejected` whether that line became a diagnostic. The property goes. The e2e refusal journey proves the refusal there instead, without adding a journey (KTD11).
+  - The `Position` cap refusal (`∀n_SourcelessDiagnosticFieldsPositionRefusal_≡PrintableByTsc`) is not observable, and no oracle justifies keeping it. Decoding never meets the cap, because `Digits` (`compiler-output.schema.ts:10,26`) admits at most nine digits first. The only other way in is `Schema.is` on the struct itself, which the rule says is not a consumer. Its predicate `printableByTsc` (non-negative safe integer printing in at most nine digits) restates the refinement `[0, 1e9)` rather than coming from an oracle the schema did not produce, and its can-fail evidence was a hand-widened refinement, which REPO-D3 now forbids. The property goes; the cap stays (ruling #2).
+  - The four `Refuted` seeds belong to generated laws that #9 deleted with `src/schema-laws.test.ts`, the file the seed store is keyed to. Nothing reads them, so the store goes.
+- **Test expectation:** the e2e refusal journey gains a package whose import specifiers make `tsc` print `error TS007:` and `error TS1000000000:` lines, and asserts that only `tsc`'s two TS2882 diagnostics come back. It fails at `fd4ad93`, where `Digits` admitted zero padding and returned a forged code 7. Admission (skill test-layer-selection): the refusal is observable only where real `tsc` stdout reaches the public `CompilerEmitter`, a process spawn the in-process layer forbids, so it belongs to the e2e failure-contract journey; it extends that journey rather than adding a fifth (KTD11).
+- **Residual risk:** the scenario relies on TypeScript 7.0.2 printing an unresolved specifier raw. A `tsc` that escapes it would print no forged line, and the scenario would pass without exercising the refusal. A `typescript` bump re-checks that the forged lines still appear on stdout.
+- **Verification:** the Verification Contract gates.
+
+---
+
+
+### U12. Rulings on every open finding (review of `2c13063` and earlier rounds)
+
+- **Goal:** every finding from the full-path reviews at `fd4ad93`, `a2fe1eb`, `2b2e595` and `2c13063`, the delta passes, the anchor-50 suppressions and the pack-rule rows has a ruling: fixed by a named commit with a test that fails before the fix and passes after, rejected with a reason, or converted to a follow-up with an owner and a trigger. Nothing stays open for the root.
+- **Requirements:** R1-R7, R10, R16; KTD3 (amended), KTD5, KTD6, KTD7, KTD11.
+- **Rulings, fixes:**
+  - C1 (`2c13063` #1, P1): a local alias key is a prefix of another (`a.d.ts\0Opt` inside `a.d.ts\0Options`), so `replaceNames` corrupts text types. Local keys gain a start and an end delimiter, so one key can never occur inside another. Builder scenario with a prefix pair.
+  - C3 (#3, P2): forged diagnostics. KTD3 amendment above; `compiler-output.schema.ts` is deleted. e2e refusal journey: sourceless and filed forged lines stay inside the TS2882 messages.
+  - C4 (#4) and B7: a synthetic diagnostic has no TypeScript code. `Diagnostic.code` becomes optional and, when present, a positive integer; messages print `TS<code>` only for a real code.
+  - A10: an import whose specifier names no declaration file is no longer dropped. The fast path declines with `NotIsolated` naming the importing file and the specifier, so `tsc` decides; a compiler-emitted declaration whose import names no declaration is refused with `UnsupportedDeclaration`.
+  - A11: `.cts` entries are read (`.ts`, `.tsx`, `.mts`, `.cts`).
+  - A12: a subpath pattern export (`"./*"`) is expanded against the package's files under Node's rules: the `*` matches any substring, explicit subpaths win, and a longer pattern prefix wins.
+  - D1: an entry's recorded source is authoritative on both routes. The fast path loads an entry declaration only from its recorded source and declines with `NotIsolated` when that file is missing or resolves outside the package (ruling #5 keeps that decline); the compiler adapter refuses the same entry with `CompilerRejected` before `tsc` runs. Neither route models a sibling `.ts` in place of a deleted `.tsx`. The reader does not refuse it, because a refusal there would bypass ruling #5's fast-path decline.
+  - D2: two entry points whose sources share a declaration path are declined by the fast path and refused by the compiler adapter before `tsc` runs. `tsc` 7.0.2 does not refuse them: it exits 0 and writes one declaration file for both.
+  - B5: a named optional tuple member keeps its `?` in canonical text.
+  - C5 and A16: one property-key resolver, shared by the builder and the printer; the private-name case is an explicit decision of each caller.
+  - C7 and A17: the entry-point mapping lives once in the declaration graph; each emitter keeps only its own refusal.
+  - C9: the keyword vocabulary is one ordered list.
+  - C10: `TYPESCRIPT_PRODUCER` is exported from `FrontEnd` beside `OXC_TRANSFORM_PRODUCER`.
+  - C11: the README and the changeset say both routes give the same model apart from the producer stamp.
+  - B2 and A6: the profile harness imports the adapter's emit policy instead of copying it, and re-records nothing (its numbers were measured before the choice and stay the record).
+  - A15 (also the `2c13063` anchor-50 reliability note): the profile harness fails on a failed `git` instead of reading an empty corpus.
+  - S3 (`2c13063` anchor-50 security note): the fast path compares real paths, so a symlink inside the package that points outside it is not read.
+  - S1 (`2c13063` anchor-50 adversarial note): a type parameter's name only shadows within its own declaration, so it no longer hides a forgotten export of the same name elsewhere in the file.
+- **Rulings, tests for gaps:**
+  - C6, A13 and B10: the e2e refusal journey covers a non-zero `tsc` exit (a package with no tsconfig), an entry excluded from the tsconfig (`the compiler emitted no declaration`), and the escaping entry through `CompilerEmitter`.
+  - C8 and A9: builder scenarios for `declare global`, `declare module "x"` and an external re-export refusal.
+  - A8: a builder scenario asserting an interface item's and a class item's full shape.
+  - B9: an oracle scenario asserting the full message array, order and de-duplication included.
+  - A18: the upstream comparison also compares each forgotten export's entry point; upstream exposes no item, so `item` is asserted by the hand-written scenarios (corrected in U14).
+- **Rulings, rejected:**
+  - C2: re-raises ruling #4 (rejected): `tsc` 7.0.2 imports a non-exported interface from an import-bearing `.d.ts`, and adding `export {}` makes the same import TS2459.
+  - A7 (six extractors repeating one discriminator): the `2b2e595` validator rejected the same claim at four sites. Each extractor is behaviourally correct and the generic replacement adds a type-level dispatch without removing a defect.
+  - The `2b2e595` anchor-50 notes: compiler fallback without a deadline (ruling #13, rejected); `Declarations` without a version discriminator (an in-process port value, never serialised; the model carries `schemaVersion`). The setter `: any` note is checked by a builder scenario and fixed if it reproduces.
+  - Rejected rows of earlier rounds keep their validator reasons.
+- **Rulings, pack rows:**
+  - schema-laws/arbitrary-filter-floors (`MessageText` lookahead) and schema-laws/tagged-unions-over-state-by-presence (`UNPARSED_FILED_LINE` sentinel): fixed by deleting `compiler-output.schema.ts` (C3).
+  - schema-laws/invariants-as-refinements (`Diagnostic.code` as bare `Schema.Finite`): fixed by C4.
+  - schema-laws/refusals-beside-generated-laws: not violated. The generated laws are retired on `main` (#9), the rule's refusal-law clause is superseded by #761, and after C3 no refined codec remains in the diff.
+  - ci-wall-clock/flake-outputs-build-once-on-main: pre-existing (`ci.yml` is byte-identical to base) and outside this diff. Follow-up owned by the CI benchmark unit (PR5, origin U9), triggered when PR5 changes the `sfs-deps` job.
+  - D3: KTD3's argument list now lives in the emit policy above, which includes `stripInternal: false`.
+- **Rulings, delta review** (DeepSeek, `openrouter/deepseek/deepseek-v4.1-flash`, over `2c13063..8efc442`):
+  - P2, D1 contract text: accepted. This plan corrects D1 and D2 to what the adapters do; the earlier text named a reader refusal (`MissingSource`) that would have reversed ruling #5.
+  - P3, the exit cause is dropped when the API also reports errors: rejected. Every reported diagnostic is a real `tsc` error and the package is refused either way; carrying `tsc`'s printed output in every refusal would put package-influenced text into all of them. A write failure the API cannot see still surfaces alone, through the exit diagnostic.
+- **Preserved:** the R2 property-by-property decisions of U11 stand as recorded at `2c13063`; C3 then deletes the codecs they were about. The PR1 counterexample (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`) is recorded and not re-run.
+- **Test expectation:** each fix above names its scenario; each scenario fails at `2c13063` and passes after its fix. e2e cases extend the existing refusal and equality journeys (KTD11 keeps four journeys).
+- **Verification:** the Verification Contract gates, a named DeepSeek delta review over the fix commits, and a fresh full-path receipt at the final head.
+
+### U13. Rulings on the full-path review at `e5ec09d`
+
+- **Goal:** every finding of the full-path `ce-code-review` at `e5ec09d` (run `20261013-183505-e5ec09d2`: ten reviewer roles, the learnings and ci-wall-clock checks, and the DeepSeek peer `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling, and each fix has a test that fails before it and passes after.
+- **Requirements:** R1, R3, R5, R12, R16; KTD3, KTD5, KTD7.
+- **Rulings, fixes:**
+  - #4 (P2, DeepSeek peer): the derived config extends the package's, so a package with `isolatedDeclarations: true` and an unannotated export was declined by the fast path and refused by `tsc` with the same TS9010. The emit policy pins `isolatedDeclarations: false` (`c4202d9`). The e2e TS9010 routing scenario gains the same package with the flag set; it fails at `e5ec09d` with `CompilerRejected`.
+  - #1 (P2, api-contract): `Diagnostic.file` is optional, like `code`, and present only for a file inside the package; the `''` sentinel is gone (`c4202d9`). The e2e TS5033 refusal asserts no `file`; it fails at `e5ec09d`, which returned `file: ''`.
+  - #2 (P2, correctness): `null` (excluded subpath) and array (fallback list) export targets are admitted and skipped instead of failing the manifest decode (`c093a03`). Reader scenario; at `e5ec09d` the read fails with `SchemaError`.
+  - #8 (P2, promoted from the correctness reviewer's anchor-50 note and the adversarial reviewer's residual, reproduced by the orchestrator): a pattern export's expansion passes the same TypeScript-source filter as an explicit entry and drops a match with an empty, `.`, `..` or `node_modules` segment, as Node's pattern resolution does (`c093a03`). Reader scenario; at `e5ec09d` it reads `./node_modules/dep/index`, `./data.json` and the directory `./sub`.
+  - #5 (P3, maintainability) and #6 (P3, DeepSeek peer): the profile harness maps `.cts` to `.d.cts`, skips `null` and array targets, drains `tsc`'s stderr, and counts a file missing from the 5.9.3 output apart from a printing difference (`432b608`). The rerun, `docs/profiles/2026-10-13-front-end-phases.{json,md}`, records 126 of 585 shared files printed differently and none missing, so the earlier records' figures were printing differences.
+  - Regression found by that rerun: at `c4202d9` four corpus packages naming `types: ["vitest/globals"]` were refused with TS2688. U12 C3 had moved the derived config into a bare temp directory, outside the package's `node_modules` ancestry. The derived config is now written into a mirror of that ancestry and the explicit `typeRoots` chain is gone (KTD3, `432b608`). The equality journey gains a package naming `types: ["greeting/globals"]` from its own `node_modules` through an `exports` subpath; it fails at `c4202d9` with TS2688.
+  - Anchor-50 note promoted by reproduction: a mapped-type key or an `infer` variable reported a phantom `ae-forgotten-export` for a same-named local declaration. The resolver now scopes both binders (`d77e2dd`). The oracle feature gains a scenario that matches upstream's notes; it fails at `432b608` with phantom `K` and `U` notes.
+- **Rulings, rejected:**
+  - #3 (P2, testing): a pattern that matches no file yields no entry. Node exposes nothing for it and KTD5 promises one entry per matching source, so no valid package loses an entry (validator).
+  - #7 (P3, adversarial): `readonly (string[])` is TS1354 in TypeScript, so no valid package reaches the text fallback for a parenthesised `readonly` operand (validator).
+- **Rulings, delta review** (DeepSeek, over `e5ec09d..5831e97`):
+  - P2: a package whose tsconfig lies under a `node_modules` directory failed on the fallback with `AlreadyExists`, because the mirror created that ancestor's `node_modules` as a real directory before its symlink. Fixed in `18c81e0`: a mirrored `node_modules` segment gets its own name and an ancestor named `node_modules` gets no symlink. The equality journey gains a package installed under `node_modules` that names a global type from a sibling dependency; it fails at `5831e97` with `AlreadyExists`.
+  - P3: the README rule for #1 covered every diagnostic, but an entry-point refusal names the entry's recorded source, which may lie outside the package (`../shared/mod.ts`). The README now limits the rule to diagnostics the compiler reported (`18c81e0`); the code was already right.
+  - Residuals recorded, no change: a top-level `exports` array is refused by the manifest decode; the mirror's walk also visits the temp directory's own ancestors (`/tmp/node_modules`, `/node_modules`), which a package's walk would not; with `preserveSymlinks: true`, files reached through the mirror keep mirror paths, so their diagnostics carry no `file`; a directory whose name ends in `.ts` passes the lexical pattern filter.
+- **Follow-up:** the anchor-50 note that `Diagnostic.code`'s positive-integer refinement has no refusal property. Under the refusal-properties rule (systemfsoftware #761), a refusal is proven where a consumer observes it, and nothing in this repository decodes a `FrontEnd.Diagnostic`. Owner: the report renderer unit (PR4). Trigger: the first decode of `FrontEnd.Diagnostic` in this repository, whose test proves the refusal through it.
+- **Preserved:** U12's rulings and the PR1 counterexample record stand.
+- **Test expectation:** each fix above names its scenario and the commit it fails at. The e2e cases extend the existing routing, refusal and equality journeys (KTD11 keeps four journeys).
+- **Verification:** the Verification Contract gates, a named DeepSeek delta review over `e5ec09d..` the final head, and a fresh full-path receipt at the final head.
+
+### U14. Rulings on the full-path review at `a98496e`, then `main` at `942ac81`
+
+- **Goal:** every finding of the full-path `ce-code-review` at `a98496e` (run `20261013-202026-a98496e3`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer `openrouter/deepseek/deepseek-v4.1-flash`), its anchor-50 suppressions, the orchestrator's export-set evidence and both open pack rows has a ruling: fixed with a public-boundary test that fails before the fix, rejected with a reason, or a follow-up with an owner and a trigger. `main` at `942ac814e7` is then merged plainly, and the review evidence is taken again at the merged head.
+- **Requirements:** R3, R5, R6, R9, R10, R16; KTD5, KTD6, KTD7, KTD8.
+- **The 13:15 decision, already applied in U12:** `2c13063` #1 alias rename (C1, `5a862ac`); #3 forged line (C3, `7520eae`); #4 code-0 rendering (C4, `25d0ef9`); earlier #10 unreadable import (A10, `3e81954`); #11 `.cts` entry and #12 pattern subpath (A11, A12, `fa1f695`); #2 rejected as a re-raise of ruling #4 (C2). Its two pack rows, `arbitrary-filter-floors` and `tagged-unions-over-state-by-presence` in `compiler-output.schema.ts`, were fixed by deleting that file (`7520eae`).
+- **Rulings, fixes:**
+  - E1 (#1, P1, correctness): an anonymous `export default function` or `export default class` is declared under `default`, the name its importer uses. Builder scenario.
+  - E2 (orchestrator, beside #1): the implicit exports of a module declaration file follow `tsc` 7.0.2. A file exports its non-exported declarations only when it has no export declaration (`export {…}`, `export {…} from`, `export * from`) and no export assignment (`export default <expression>`). The local name of `export default class X`, `function X` or `interface X` is never exported (TS2614). Ruling #4 stands: implicit exports exist, and `export {}` stops them. Builder scenarios.
+  - E3 (#8, P2, DeepSeek peer, promoted by reproduction against upstream): release tags are read with `@microsoft/tsdoc`, the parser upstream uses, so a tag word inside a code span or fence is not a tag. Oracle scenario against upstream 7.59.1.
+  - E4 (#2, P2, testing): a builder scenario builds an interface with an index, a call and a construct signature.
+  - E5 (#3, P3, maintainability): `TypeExprs` loses the two members no caller reads.
+  - E6 (#5, P3, api-contract): an undecodable `package.json` is refused with `ManifestRejected` naming the package root; `readPackage`'s error channel no longer carries `Schema.SchemaError`. Reader scenario.
+  - E7 (#6, P3, testing): the e2e TS9010 routing scenario asserts the fallback's `TYPESCRIPT_PRODUCER` stamp.
+  - E8 (DeepSeek anchor-50 note, reproduced): a hand-written `.d.ts` that an emitted declaration imports is read verbatim on both routes, because `tsc` emits nothing for a declaration input. At `a98496e` the fast path declined and the fallback refused the whole package. Equality-journey package.
+  - E9 (pack row schema-laws/rich-type-over-foreign-encoded): `package.json` export targets keep Node's shape as the Encoded side and decode into a tagged `ExportTarget` (path, conditions, fallbacks, excluded) in `package-source.schema.ts`; `read-package.ts` reads only the decoded union. Existing reader scenarios cover every case.
+- **Rulings, rejected:**
+  - #7 (P3, DeepSeek peer; rejected by the validator): upstream's `ExtractorMessage` has no item field, so the oracle cannot compare one. A18 is corrected here to what landed in `55eb06e`: the oracle compares message id, symbol and the entry point of a forgotten export, and `item` is asserted by the hand-written scenarios.
+  - Reliability anchor-50 note (an unreadable source aborts the fast path): a source that is present but unreadable is an environment fault, not a package shape. `tsc` cannot read it either, so declining would only trade the `PlatformError` naming the file for a `CompilerRejected` from the fallback. A missing source still declines (ruling #5), and a directory where a source is expected is skipped (orchestrator probe at `a98496e`: `src/a.ts` as a directory, the fast path read `src/a.tsx`). The failure is not reproducible as the root user, so no test can show it.
+  - Adversarial anchor-50 note (same-stem `.ts` and `.tsx`): `tsc` resolves `./a.js` to `a.ts` before `a.tsx`, and the fast path's candidate order matches. Both routes model `a: number` (orchestrator probe at `a98496e`).
+  - Project-standards anchor-50 note (profile JSON without `canonicalJson`): AGENTS.md's serialiser rule governs the tool's outputs, whose bytes R5 and R7 make host-independent. The profile is a private app's timing record (KTD10); its numbers differ on every run, and no locale API reaches it.
+  - Pack row cell-architecture/sandwich-phase-order: not a violation. The pack's cell is the product's decision, `judgeSurfaces`, run by `verdictCell` (`verdict.cell.ts:23-39`, KTD14). `analyse` is a capability operation over the emitter ports: its requirement channel is the two emitter services (`analyse.ts:38-41`, KTD1). It holds no command and no write phase, and its builder is a parser, not a complexity-1 `Workflow`. A front-end result is the Encoded side of the verdict cell's command (`verdict.cell.ts:12-16`).
+- **Follow-ups:**
+  - #4 (P3, maintainability), the profile harness's copies of the declaration-path, tsconfig and export-map rules. Owner: the CI benchmark unit (PR5, origin U9). Trigger: PR5 moving the profile into its benchmark lane, which re-records it. Changing the harness here would stop the three committed profiles reproducing from it (R13).
+  - ci-wall-clock/one-stuck-job-backstop and flake-outputs-build-once-on-main: pre-existing; `.github`, `flake.nix` and `flake.lock` equal `main`. Owner: PR5. Trigger: PR5 changing a job in `ci.yml`.
+- **Then:** plain-merge `origin/main` at `942ac814e7` (#6 changeset coverage from turbo's build hashes; #11 packs repinned to systemfsoftware `0923912eed`), re-run the gates, the delta lens and the full-path receipt at the merged head, with the packs at `0923912eed`.
+- **Preserved:** U11-U13 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Test expectation:** each fix names its scenario, at the public surface (`FrontEnd.*` or a spawned `tsc`), and fails at `a98496e`. e2e cases extend the existing journeys (KTD11 keeps four).
+- **Verification:** the Verification Contract gates, a named DeepSeek delta lens over the fixing commits, and a fresh full-path receipt at the final head.
+
+### U15. Rulings on the full-path review at the merged head `932ae50`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `932ae50` (run `20261013-215304-932ae50a`: ten reviewer roles, the learnings and ci-wall-clock checks, and the DeepSeek peer `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling: fixed with a named commit, rejected with a reason, or a follow-up with an owner and a trigger. The testing and learnings reviewers and the DeepSeek delta lens died with a session crash and were run again; the delta lens is taken at the final head over every fixing commit since `a98496e`.
+- **Requirements:** R3, R5, R6, R16; KTD4, KTD5, KTD6, KTD7.
+- **Rulings, fixes** (each scenario fails at `932ae50`, or at `4fec99b` for F7, unless marked as pinning existing behaviour):
+  - F1 (correctness P2): a reference to an unexported interface, class or other non-alias declaration kept its bare name, so it read as the exported item of that name, and two hidden `Opts` collapsed into one. Every reachable hidden declaration takes a distinct model name through the alias-local name assignment; only aliases are emitted into `locals`, so the schema is unchanged (`4fec99b`). Builder scenario.
+  - F2 (adversarial P2): a function or constructor type inside text printed `=>: T`; it prints `(x: number) => string` as `tsc` does (`4fec99b`). Builder scenario.
+  - F3 (adversarial P3): local renames inserted the model name as a replacement pattern, so `T$$` became `T$`; the name is inserted literally (`4fec99b`). Builder scenario.
+  - F4 (correctness P3, DeepSeek peer P2): an entry whose source condition names a hand-written `.d.ts` mapped to a `.d.d.ts` path; the fast path modelled it and the compiler route refused it. The entry keeps its own path and the compiler route reads it as a hand-written declaration (`1109e48`). Equality-journey package.
+  - F5 (api-contract P2): the README said a refusal never carries `tsc`'s printed output. Per U13 P3 it does, alone, when the TypeScript 7 API reports no error; the README now says so and calls that text untrusted (`5dd424b`). Removing the output from the code is rejected: it reverses U13 P3, and a write failure the API cannot see would surface as an exit code only.
+  - F6 (maintainability P2, P3): one shared-declaration rule, `sharedDeclarations` in `declaration-graph.ts`, serves both adapters, and `read-package.ts` reuses `package-file.ts`'s `isAbsent` (`611a024`). Routing, reader and e2e journeys pass unchanged.
+  - F7 (pack rows schema-laws/tagged-unions-over-state-by-presence and rich-type-over-foreign-encoded, learnings P3): `Diagnostic` is the union of `Reported` (TS code, optional in-package file, message) and `Note` (optional file, message). The adapters turn oxc's text and the TypeScript 7 API's diagnostic into a variant; the refusal text and the fast path's diagnostic order match on the tag (`34206fd`). `file` stays optional in both variants, absent the same way in each (rule 2). The e2e routing and refusal journeys assert the tags.
+  - F8 (testing P3 and gaps): pinning scenarios, passing before and after: two files re-exporting each other (`4fec99b`); a package with two entry points that do not share a declaration file, and the reader's `sourceCondition` option (`eca9cee`); a refused diagnostic keeps `tsc`'s elaboration lines (`47bf1c3`).
+- **Rulings, rejected:**
+  - Reliability P2 (`catchCause` at `typescript-7-compiler.ts:97,229`): the TypeScript 7 API resolves `parseConfigFile` on a malformed tsconfig (empty `fileNames`) and rejects only when it cannot read the file (orchestrator probe on 7.0.2: "could not read file"); `tsc` then fails on the same `extends` and the package is refused. At `:229` an API failure leaves the refusal in place with the exit diagnostic. Neither turns a refusal into a model. The two gaps beside it (a `tsc` that cannot be spawned, an API rejection) are the tool's own installation, not package input.
+  - Security gap (recursion budget on the manifest codec): `recursionBudget` budgets arbitrary generation for generated laws, which `main` retired (#9); it does not bound decoding, so there is no behaviour to pin.
+  - Residuals: the verdict's `declarations` field carries each surface's producer stamp by design (R7); `VerdictTypeId` sits on `Verdict.prototype` since U1 (isolatedDeclarations) and `VerdictTypeId in verdict` holds for a judged, decoded and constructed verdict (orchestrator probe); a `NotIsolated`-only fallback is ruling #5 and the U14 unreadable-source ruling; the oracle's projection is ruling #7 and A18; the native parsers run in-process because parsing package text is the tool's job (KTD17 approved packages); a diagnostic's file outside the package is dropped by `fileFieldOf` (`typescript-7-compiler.ts:173-177`) and its message is `tsc`'s own text (F5).
+- **Follow-ups:**
+  - The profile harness's own discovery, declaration-path and resolution rules, its deadline-free `git`/`tsc` spawns, its abort on one undecodable corpus manifest, its separate timing of `buildModel` and `resolveMessages`, and the unmeasured cost of the TSDoc tag parse (maintainability P3 and gaps, performance, reliability and correctness residuals). Owner: the CI benchmark unit (PR5, origin U9). Trigger: PR5 moving the profile into its benchmark lane, which re-records it; until then the committed profiles must reproduce from this harness (R13).
+  - Adversarial inputs: a wildcard export whose matched directory is a symlink out of the package, a reported diagnostic whose file lies outside the package, a `tsc` failure the API cannot see, and a multi-entry package checked against upstream's messages (security, api-contract, testing and learnings gaps). Owner: the report and differential unit (PR4), whose adversarial corpus and differential lane (R9) are the arbiter. Trigger: PR4 adding its adversarial corpus.
+  - Text fidelity of the canonical printer and the fast path's text against `tsc`'s on the real corpus (adversarial residuals, DeepSeek gap). Owner: PR4. Trigger: PR4's renderer comparing the `.api.md` text with upstream 7.59.1.
+- **Preserved:** U11-U14 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, the DeepSeek delta lens over `a98496e..` the final head, and a fresh full-path receipt at the final head.
+
+### U16. Rulings on the full-path review at `425c81c`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `425c81c` (run `20261013-225357-425c81cc`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `a98496e..425c81c`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer found no contradicted pack rule; the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` equal `main`).
+- **Requirements:** R3, R5, R6, R16; KTD5, KTD6, KTD7.
+- **Rulings, fixes** (each scenario fails at the commit named, unless marked as pinning existing behaviour):
+  - G1 (correctness and adversarial P2, maintainability P3): F1 (`4fec99b`) renamed hidden declarations through a NUL-delimited key but matched only whole reference names, so `C.Inner` through a hidden namespace `C` leaked the key into the model. Structural names are renamed through the same key substitution as text (`8f4617a`). Builder scenario; fails at `425c81c`.
+  - G2 (correctness P2): a namespace or enum declared twice kept only the first declaration's members; the builder reads every body (`8f4617a`). Builder scenario; fails at `425c81c`.
+  - G3 (testing residual): after F1 the local-alias drain builds only aliases, so its "not a type alias" refusal was unreachable and is deleted (`8f4617a`).
+  - G4 (DeepSeek delta P2): an entry naming `src/index.d.ts` beside an `src/index.ts` the tsconfig compiles was modelled from the hand-written file on the fast path and from `tsc`'s emit of `index.ts` on the fallback. The fallback drops `tsc`'s emit for a declaration file an entry names as its own source (`f98127b`). Equality-journey package; fails at `95956df`.
+  - G5 (DeepSeek peer P3): the fallback's unresolved-import refusal now says "inside the package", as the fast path's does, so a declaration that exists outside the package is not reported as missing (`f98127b`).
+  - G6 (DeepSeek delta P3): a pattern export inserted the matched file name as a replacement pattern (`src/a$$b.ts` exported as `./a$b`); it is inserted literally (`99b7495`). Reader scenario; fails at `dfd896d`. No other `replace` in `src` takes a dynamic replacement string.
+  - G7 (api-contract P3 and P3): the README lists every `UnsupportedDeclaration` cause, including the compiler fallback's (`95956df`); KTD1 above no longer says the compiler layer takes options.
+  - G8 (testing P2, P3 and gaps): pinning scenarios (`dfd896d`): notes for a second entry point carry its own path; the builder's statement-form and variable refusals; negative, bigint, boolean, null and single-quoted literals; a pattern match with a dot segment and a malformed pattern target.
+- **Rulings, rejected:**
+  - Maintainability P3, seven per-kind extractors in `build-model.ts`: U12 A7 kept them.
+  - Adversarial residual, an array-form export target reads no entry: U13 #2 admits and skips array targets.
+  - Reliability and adversarial residuals, a native oxc throw or an `UnsupportedDeclaration` from oxc's own output aborts instead of falling back: no input that triggers either was found by three reviewers or the peers; the adversarial corpus follow-up below owns the search.
+  - Reliability gap, interrupting a fallback run: the `tsc` child and both temp directories are scoped (`Effect.scoped` around `emit`, `makeTempDirectoryScoped`), so their release is Effect's scope guarantee; a test would test the library.
+  - Correctness gap, an in-process scenario mixing an emitted declaration and a hand-written `.d.ts` reached by import: the e2e equality journey's `hand-written-declaration` package is that shape, through both real emitters.
+  - Project-standards residual, provenance headers: no file in `src`, `tests` or the profile app names or derives from rushstack or PR #552 (reviewer text search), and the README's Provenance section says so.
+- **Follow-ups:**
+  - Maintainability P2, one exported-surface walk shared by the builder and the resolver (with the external-symbol policy as an argument), and the gap that nothing pins their agreement on a diamond or namespace re-export graph. Owner: PR4. Trigger: PR4's renderer, which reads the model and the messages together and makes a disagreement visible.
+  - Performance residuals (a declaration file parsed twice, an uncached TSDoc parse per tag lookup, a pattern walk that lists `node_modules` before filtering it) and the profile referee counting a `tsc` run that never checked as clean (DeepSeek peer P3), and profile reproduction after this unit's fixes (DeepSeek delta gap). Owner: PR5. Trigger: PR5 moving the profile into its benchmark lane and re-recording it.
+  - Security residuals and gaps (a wildcard match through a symlinked directory, unbounded declaration nesting, a package root that is itself a symlink, a tsconfig including files outside the package) and the DeepSeek residual on non-POSIX path separators in the fallback's declaration keys (CI hosts are Linux x86_64 and arm64). Owner: PR4's adversarial corpus for the inputs; PR6 (CLI and consumer journey) for a non-POSIX host lane. Trigger: PR4 adding its corpus; PR6 adding a host to the consumer journey.
+- **Preserved:** U11-U15 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `425c81c..` the final head, and a full-path receipt at the final head.
+
+### U17. Rulings on the full-path review at `a6300c7`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `a6300c7` (run `20261013-231221-a6300c70`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `425c81c..a6300c7`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer accounted for all 52 rules of the five enrolled packs (cell-architecture 15, boundary-testing 7, schema-laws 9, package-topology 7, ci-wall-clock 14) and found none contradicted; the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` equal `main`). Security, project-standards, performance and reliability reported no finding. CI is green at `a6300c7` (runs 38482833614, 38482833730).
+- **Requirements:** R3, R6, R7, R8; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at the commit named, unless marked as pinning existing behaviour):
+  - H1 (correctness P2): a conditional type's `infer U` was resolved in the true branch like a declaration, so an imported `U` printed `import("pkg").U` and a hidden `V` printed `V_2`. Each file's conditionals record the names their `extends` clause binds, and the true branch prints with them in scope (`2dd44cb`). Builder scenario; fails at `a6300c7`.
+  - H2 (DeepSeek delta P3): merged enum bodies that repeat a member name built a model `ApiModel.decode` rejects (`Expected enum members unique by key`, probed). The builder refuses it naming the member (`0e1d692`). Builder scenario; fails at `2dd44cb`.
+  - H3 (probe of the DeepSeek delta residual): a namespace or enum declared twice inside a namespace body stayed two items, while the top level merges them (U16 G2). Namespace bodies merge by name at every depth through the same item builders (`0e1d692`). Builder scenario; fails at `2dd44cb`. Corrected by U18 I7: this package declares no namespace, so its own analysis is no evidence for the rewrite; U18 I1 records the statement form the rewrite dropped.
+  - H4 (DeepSeek delta P3, api-contract P3): the README's refusal list now names every `UnsupportedDeclaration` cause in `src` (checked against each `refuse` call) and documents `readPackage`'s `sourceCondition` option (`0e1d692`).
+  - H5 (testing P2, P3 and gap): pinning scenarios for the destructuring-parameter, dotted-namespace, unparseable-text and bare-import-type refusals (`0e1d692`), and for a bare-path or absent `exports` refused with `NoSourceEntry` (`68502ef`).
+  - H6 (maintainability P3): one `refuse` helper (exported from `declaration-graph.ts`; the preset forbids a non-schema export from `front-end-error.schema.ts`) and one `directoryOf` (`0e1d692`).
+- **Rulings, rejected:**
+  - DeepSeek peer P2, a bare import type (`typeof import('./x.js')`) refuses the whole package. Printing it as text would write a package-relative file path into the model, so moving a file would register as an API change, and schema version 2 has no reference form for a module namespace (KTD6 makes a relative `import("./y").Z` a local reference, which needs a member). No package of the 40-package corpus reaches it (the second profile's refusals are `declare global`, an external re-export and `declare module`). The README lists the refusal (H4), and H5 pins it.
+  - Maintainability P2, seven per-kind extractors in `build-model.ts`: U12 A7 kept them.
+  - Testing gap, the derived tsconfig's literal content: asserting the config text tests wiring; its effect is observed through the compiled model and the e2e equality journey.
+  - Testing gap, `apps/api-extractor-profile/profile.ts` has no test: it is the evidence harness whose output is the committed record; the record is re-recorded, not unit-tested (PR5 follow-up below).
+  - Performance gaps, a parse count and the directory surface a pattern walk lists: both pin implementation cost, not a consumer-visible result.
+  - Project-standards residual, the derived tsconfig is written with `JSON.stringify`, not `canonicalJson`: it is a temporary input to `tsc` that never leaves the run, not an output.
+  - Adversarial residual, `Route.Fallback.diagnostics` mixes source paths (oxc) and declaration paths (missing entry, shared declaration, unresolved import): each names the file the diagnostic is about, and the routing scenarios pin both.
+  - DeepSeek peer gap, a `.tsx` entry with a same-stem `.ts` needing the fallback: U14 ruled that `tsc` picks the `.ts`.
+  - DeepSeek delta gap, the hand-written-entry equality journey asserts no modelled text: the journey asserts byte equality of both routes' serialised models, which includes the text.
+- **Follow-ups:**
+  - Api-contract P3, `UnsupportedDeclaration.construct` is prose a caller must string-match. Owner: PR4. Trigger: PR4's report or adversarial corpus grouping refusals by cause, which then adds a closed cause field (a model-independent error-shape change).
+  - Adversarial P3 and P3, the profile's clean columns count the source walk rather than the emitted declaration closure, and its divergence figures include a failed compile's output; reliability residual, a package the record marks fallback-failing routes FastPath; adversarial residual and gaps, route equality is proven end to end on one real package and fast-path and fallback refusals are never compared on one package. Owner: PR5. Trigger: PR5 moving the profile into its benchmark lane and re-recording it, which also adds an emitted-closure clean column and per-package route equality.
+  - Security residuals and gaps (native parse of untrusted text, symlinked pattern directories, a symlinked package root, a tsconfig including files outside the package) and the DeepSeek and testing gaps above U16 assigned: unchanged owners and triggers.
+- **Preserved:** U11-U16 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `a6300c7..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U18. Rulings on the full-path review at `460f429`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `460f429` (run `20261013-233424-460f4299`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `a6300c7..460f429`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer accounted for all 52 pack rules and found none contradicted on an unsettled basis; its pre-existing ci-wall-clock rows (job timeouts below the backstop, the changeset check's dev shell, split gate jobs) concern `.github` files this branch does not change and stay with PR5. Project-standards, performance and api-contract reported no finding.
+- **Requirements:** R3, R6, R7, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at the commit named):
+  - I1 (testing P1, DeepSeek delta P1): `0e1d692` read an export-modified statement in a namespace body through the declaration-node path, which has no namespace arm, so `export namespace M` inside `N` was dropped. The exported declaration takes the same statement path as an unexported one (`e0790d6`). Builder scenario; fails at `460f429`.
+  - I2 (security residual, probed): the pattern walk used Node's recursive `readdir`, which follows a symlinked directory; on node v24.21.0 `src/loop -> .` listed `loop/a.ts`, `loop/loop/a.ts`, ... (82 names until `ELOOP`), so one loop added about 40 bogus entries and several loops made `readPackage` effectively never return. The walk lists one directory at a time and enters each real path once (`fef7fe8`). Reader scenario; fails at `e0790d6`.
+  - I3 (DeepSeek peer P3, probed): a reference inside a namespace body resolved against the file scope only, so with `import type { A } from 'pkg'` a function in `N` returning `N`'s own `A` modelled `A` from `pkg`. A body's declared names are in scope for its items, as type parameters are (`1f3d00c`). Builder scenario; fails at `e0790d6`.
+  - I4 (DeepSeek delta residual): `import X = M.Y` inside a namespace body was dropped silently; it is refused as at the top of a file (`1f3d00c`). Builder scenario; fails without the new arm.
+  - I5 (maintainability P3): the namespace-body grouping reuses `declaration-graph.ts`'s `grouped` (`1f3d00c`).
+  - I6 (correctness P3 and gap): the README names hand-written `.d.ts`, `.d.mts` and `.d.cts` entry files, and a reader scenario pins them (`fef7fe8`, existing behaviour).
+  - I7 (DeepSeek delta P3): U17 H3 cited the host digest, which samples generated models and never runs a front-end. The claim is corrected above. Measured instead: this package's `analyse` output (model and messages) has sha256 `cbcb540d…3b34` at `a6300c7`, at `2dd44cb` and with the U18 fixes; it declares no namespace, so this shows no collateral change only.
+- **Rulings, rejected:**
+  - Maintainability P2, seven per-kind extractors in `build-model.ts`: U12 A7 kept them.
+  - Reliability P3, the blanket `catchCause` at `typescript-7-compiler.ts:97` and `:230`: U15 rejected it with probe evidence.
+  - DeepSeek delta residual, an `infer` in the `extends` clause of a conditional nested inside another conditional's `extends` clause is bound by the inner conditional only: TypeScript binds an `infer` declaration to the nearest enclosing conditional whose `extends` clause holds it, which is the inner one.
+- **Follow-ups:**
+  - Adversarial P3 and residuals, and the correctness residual: the profile harness discovers entry sources from the manifest itself instead of `readPackage`, has no `.cts`/`.mts` import candidates, copies `analyse`'s routing, and compares TypeScript 7 with 5.9.3 rather than oxc with `tsc`; reliability residual, it drops an unreadable emitted file from its outputs. Owner: PR5. Trigger: PR5 moving the profile into its benchmark lane and re-recording it on `readPackage` and `analyse`.
+  - DeepSeek peer residual and gap, the resolver walks only a file's exported names and namespace aliases, so a member of a `declare namespace` body draws no analysis message; api-contract residual, `AnalysisMessage`'s `item` and `symbol` fields mean different things per message id and are not documented; testing gaps, the oracle compares only the first entry point and several refusal constructs (unsupported members, computed names, a qualified namespace name inside a body, a heritage expression, an unmatched oxc message as a `Note`) have no scenario. Owner: PR4. Trigger: PR4's differential lane against upstream 7.59.1 (KTD13's arbiter for resolver gaps), its adversarial corpus, and its renderer, which documents the message fields it reads.
+  - Security residuals (native parse of untrusted text, a symlinked source escaping the package, a symlinked package root) and the adversarial residual on the fallback's mirrored `node_modules` ancestry: unchanged owners and triggers (U16).
+- **Preserved:** U11-U17 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `460f429..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U19. Rulings on the full-path review at `3ff23ef`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `3ff23ef` (run `20261013-234958-3ff23efe`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `460f429..3ff23ef`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (30 honored, 22 not reached, none contradicted); the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` are byte-identical to `main`) and its pre-existing rows stay with PR5. Security, reliability, performance, project-standards and api-contract reported no finding.
+- **Requirements:** R3, R6, R7, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at the commit named):
+  - J1 (DeepSeek delta P2; testing and adversarial residuals): `fef7fe8`'s walk-wide visited set listed a sibling's symlinked alias (`src/b -> a`) under one name only, chosen by readdir order, so model bytes depended on the host. The walk skips a directory only when its real path is one of its ancestors' and reads each listing in code-unit order (`9b04f01`). Reader scenario; fails at `3ff23ef`.
+  - J2 (DeepSeek delta residual): `1f3d00c` put every name a namespace body declares in scope, so a `const A` in `N` shadowed an imported type `A`. Only names declared as an interface, type alias, class, enum or namespace are in scope for type positions (`8881471`). Builder scenario; fails at `3ff23ef`.
+  - J3 (maintainability P1, P2 and P3): the 1180-line model feature is split into the built-model feature and a refusals feature over one fixture module; three module-private helpers lose their `export`; `TypeContext.typeParameters` is `namesInScope` (`8881471`).
+  - J4 (api-contract residual and gaps, testing P3 and gaps, DeepSeek delta gaps): pins for a `.d.mts` entry, a plain-string subpath target (`NoSourceEntry`), a missing `package.json` (`PlatformError`), the workspace root and tsconfig choice, a pattern target outside the package (`9b04f01`), and an exported import alias in a namespace body (`8881471`); the README says where the source condition is read and names `PlatformError` (`9b04f01`).
+- **Rulings, rejected:**
+  - Adversarial P2 and correctness P3, a source condition nested under another condition or inside a fallback array names no entry: KTD5 reads the family condition directly under an export path, which is where the family writes it; which nested branch Node takes depends on the consumer's active conditions (`import` or `require`), which the reader has no mode to choose, and U13 #2 already admits and skips array targets. The README now states the rule.
+  - DeepSeek delta residual, a shadowed reference no longer claims a hidden local's name, so another hidden local's `_N` suffix can change: the suffix now follows the declarations a reference really reaches, which is the intended naming.
+  - Reliability and security residuals, `tsc`'s stdout and stderr are buffered whole: ruling #13 leaves `tsc` without a deadline and U12 reads neither stream as diagnostics; a hostile package that floods `tsc`'s output is the PR4 adversarial corpus's input.
+- **Follow-ups:**
+  - DeepSeek peer P3 and gaps: the fallback refuses a hand-written declaration's relative import that names no declaration file even when a TypeScript source exists there, while the fast path emits from the source; `.d.mts`/`.d.cts` and non-declaration specifiers are not run through both routes. Adversarial and correctness residuals: route equality is shown on authored fixtures only. Owner: PR4. Trigger: PR4's differential lane and adversarial corpus, which run both routes on unauthored packages.
+  - Security residual and gap, refusal text carries package-controlled characters to a renderer: owner PR4. Trigger: PR4's report renderer, the first sink that must escape it.
+  - Performance residuals and gap (a pattern target at the package root walks installed dependencies; per-declaration rescans in the resolver and the rename sweep) and the remaining testing gaps (an empty-output `tsc` exit, resolver comment attribution around `export default`): owner PR5 and PR4 respectively. Trigger: PR5's benchmark lane with a large synthetic package; PR4's differential lane.
+- **Preserved:** U11-U18 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `3ff23ef..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U20. Rulings on the full-path review at `681efe3`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `681efe3` (run `20261014-000912-681efe30`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `3ff23ef..681efe3`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (26 honored, 26 not reached, none contradicted); the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` are byte-identical to `main`). Project-standards, performance and api-contract reported no finding.
+- **Requirements:** R1, R3, R6, R7, R9, R16; KTD5, KTD6, KTD7, KTD8, KTD11.
+- **Rulings, fixes** (each scenario fails at the commit named, unless marked as pinning existing behaviour):
+  - K1 (security P1 and gaps): J1 walks every alias of a directory, so nested aliases (`a`, `b -> a` at each level) fan out exponentially. The walk counts the directories it lists per pattern export and refuses past a bound with `ManifestRejected` naming the export (`24e9b67`). A root pattern then met the same fan-out through `node_modules`, where pnpm's symlinks alias like any tree; the walk no longer enters a directory whose name is an invalid export segment lying wholly inside the matched name, and the bound is 1024 (`e8df9af`). Reader scenarios: an alias tree of depth 10 is refused, failing at `681efe3`; a `node_modules` alias tree of depth 13 under a root pattern is read, failing at `3016e54`. The README states the bound.
+  - K2 (correctness P2 and gap): a type parameter hid a same-named type reached in another file (`f<T>(): ns.T`). A lookup that crosses a file boundary starts with no names in scope (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K3 (DeepSeek peer P2): a private constructor was dropped, so making a class unconstructable left the model unchanged. It is a member named `private constructor`, apart from `constructor` (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K4 (DeepSeek peer P3): an index signature took its parameter's name, so renaming `k` to `key` changed the model. It is named by its key type alone (`[key: string]`), in members and in text (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K5 (testing P3, DeepSeek delta P3): the `declarations` fixture ignored entry-point lists after the first; a second list is now a type error (`4ba7034`).
+  - K6 (adversarial P2 and gaps): the resolver ignored a namespace body's own declarations, so a reference to the body's type `A` reported the imported `A` as forgotten. `namespaceSpacesOf` gives a body's type-space and value-space names once for the builder and the resolver; type references and interface heritage read the type space, `typeof` and class heritage the value space (`9e220fc`). Analysis scenarios agree with upstream; two fail at `681efe3`.
+  - K7 (DeepSeek delta P2 and gap): the builder scoped only a body's type names, so with `const A` in `N`, `typeof A` printed the imported `A`. `TypeContext` gains `valuesInScope`; `typeof` and a class's superclass resolve their head in the value space and their type arguments in the type space (`abb3022`). Builder scenario; fails at `9e220fc`.
+  - K8 (DeepSeek delta gap): no scenario failed without J1's code-unit sort of each listing. Every alias is walked, entry points are re-sorted by export path and the bound counts every listing, so the order reaches no output; the sort goes (`3016e54`).
+  - K9 (maintainability P3 and gap): the statement classifier existed three times and the entry-point pair four times; `classifyDeclaration` and `EntryDeclaration` in `declaration-graph.ts` are the one copy each (`43a8ee4`). The copies had drifted: a namespace body dropped a destructuring constant that `tsc` 7.0.2 accepts in a `declare namespace` (orchestrator probe, exit 0), so `N.a` vanished; it is refused as at file scope. Refusals scenario; fails at `abb3022`.
+  - K10 (maintainability P2, testing P2, DeepSeek delta gap, api-contract gap): the 1120-line model feature splits its eight namespace scenarios into a namespaces feature (`db5c70a`); pins for a type-incorrect annotated package taking `FastPath` with `count` modelled as `number` (`db5c70a`), a symlink to an ancestor two levels up walked once, and a manifest without `name` or `version` refused as `ManifestRejected` (`e8df9af`).
+- **Rulings, rejected:**
+  - DeepSeek peer residual, private fields and methods are dropped: upstream 7.59.1 trims every private declaration from its model and report (`ApiModelGenerator.js:117`, `ApiReportGenerator.js:370`). K3 keeps the private constructor alone because it decides who may construct or extend the class.
+  - Reliability gaps and residuals on `typescript-7-compiler.ts` (`catchCause` at `:97`, `:230`): U15. The "unbounded concurrency" read of emitted declarations is sequential: `Effect.forEach` without a `concurrency` option runs one effect at a time.
+  - Testing gap, the router's `Fallback` arm has no in-process scenario: the compiler adapter spawns `tsc`, which KTD11 keeps in the e2e journeys, where the TS9010 package pins it.
+  - DeepSeek peer residual, multi-star pattern targets: the family writes single-star targets under KTD5's condition, and a multi-star target is pinned as naming no entry, so it is never mapped wrongly and a package left without entries is refused with `NoSourceEntry`.
+  - Maintainability P2 (seven per-kind extractors) and residual (two renderers over one oxc union): U12 A7 and C7. Residual, the typed error bases repeat per file: KTD9 (isolatedDeclarations).
+  - Project-standards residual, two test fixtures order strings by hand: AGENTS.md's ordering rule and its gate cover `src`.
+  - Adversarial residual, an aliased directory gives two export paths for one file: J1.
+- **Follow-ups:**
+  - K3 and K4 meet the report: upstream's report omits a private constructor and spells an index signature's parameter as written. Owner: PR4. Trigger: the report renderer, which omits `private constructor` members and takes spellings from the declaration text spans PR4 adds.
+  - Correctness, adversarial and DeepSeek residuals and gaps on route equality (unauthored packages, parameter properties, a symlinked entry sharing another entry's declaration), the security residuals on symlinks resolving outside the package and native parsing, and the resolver's namespace-member messages: unchanged owners and triggers (U16, U18, U19).
+  - Maintainability P2 and gap, the profile harness re-implements reader helpers: owner PR5 (U18). Performance residuals (`dedupeWith`, per-declaration rescans, the fallback's whole-output reads): owner PR5. Trigger: PR5's benchmark lane.
+- **Preserved:** U11-U19 rulings, except K8, which drops J1's sort as unobservable; the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `681efe3..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U21. Rulings on the full-path review at `5d32c3f`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `5d32c3f` (run `20261014-004546-5d32c3fa`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `681efe3..5d32c3f`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (14 honored, 38 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, testing, maintainability, performance, reliability, security and project-standards reported no finding.
+- **Requirements:** R3, R6, R9, R10, R16; KTD5, KTD6, KTD7.
+- **Rulings, fixes** (each scenario fails at `5d32c3f`, unless marked as pinning existing behaviour):
+  - L1 (adversarial P2, DeepSeek delta P2 and gaps): the resolver scoped a namespace block with its own names only, so with `N` declared twice and an imported `A`, a reference to `A` in the second block was reported as a forgotten export while `tsc` and the builder bind it to `N.A`. One pass per file maps each namespace path (`N`, `N.M`) to all its blocks, and a block is scoped with their union (`aea9874`). Analysis scenarios for a top-level and a nested merge agree with upstream.
+  - L2 (correctness residual and gap): an export list naming no declaration (`export { present, Missing }` in a hand-written entry) gave a model silently missing `Missing`. It is refused with `UnsupportedDeclaration` naming the file and the export (`e5db940`). Refusals scenario. The README lists the cause.
+  - L3 (DeepSeek peer P2 and residual): an export path found under a wide key (`./*` -> `./src/*.ts`) kept its entry when a narrower key (`./a/*` -> `./vendor/*.ts`) wins it in Node and names no file. A pattern entry is kept only when its key is the one Node's pattern-key order picks for its export path, which also leaves out a path whose winning key is `null` (`688e85d`). Reader scenario.
+  - L4 (DeepSeek peer P3): a key with two stars produced export paths holding a literal star; only single-star keys are patterns, and other starred keys name no entry (`688e85d`). Reader scenario.
+  - L5 (DeepSeek delta P3): a star inside a file name (`./src*.ts`) walked the package root, `node_modules` included, and tripped the walk bound. The walk enters only directories the target prefix can lead to (`688e85d`). Reader scenario. The README states L3-L5.
+  - L6 (DeepSeek delta P3): U20 K1's `node_modules` scenario at depth 10 passes at `3016e54`, whose bound was 4096; the recorded failure there used depth 13. At the head the committed depth-10 scenario fails once the pruning is removed (2049 listings past 1024). Recorded here; no code change.
+  - L7 (testing gap, adversarial gap, correctness and maintainability gaps): pins for a merged namespace whose class and enum are read from the other block in both spaces (`c9fc383`) and a `node_modules` fan-out nested under the pattern prefix (`e5db940`). Both pass at `5d32c3f`.
+  - L8 (api-contract P3): the release note names the new runtime dependencies (`c9fc383`).
+- **Rulings, rejected:**
+  - Adversarial residual, the `node_modules` prune misses `src/node_modules` under a `src/` prefix: refuted by L7's pin, which lists 2049 directories without the prune and is read at the head.
+  - Adversarial residual, cross-file namespace merging: every declaration file the builder reads is a module, whose namespaces merge only within the file.
+  - api-contract gaps and residual, a third-party emitter returning repeated export paths: KTD1's planned third adapter is TypeScript 7.1's; the shipped adapters take export paths from the manifest's keys, which are unique. Owner: the unit adding a third adapter. Trigger: that adapter.
+  - api-contract gap, canonical bytes for models differing only in the producer: R3 sets the producer equal by design and `serialise.integration.test.ts` pins canonical bytes.
+  - Security gap, a manifest naming a source outside the package: U12 D1 and ruling #5, pinned by the routing and e2e refusals.
+  - DeepSeek delta gap, a type test for the fixture's entry-list arity: a test of a test helper certifies nothing a consumer sees.
+  - Correctness residuals (NUL-delimited local keys, the namespace-body statement start, the resolver's unresolved names): C1 keeps keys disjoint; no consumer reads a namespace-body `statementStart`; after L2 a name that resolves nowhere refuses the model before messages are read through `analyse`.
+  - Maintainability residuals: the pruning rule is now named (`leadsToPrefix`, `isInvalidInsideMatch`); the two export-unwrapping frames are U20 K9's one-classifier ruling.
+- **Follow-ups:**
+  - Testing gap, `tsc`'s non-empty exit text when the API reports no error: owner PR4, with U19's empty-output gap. Trigger: PR4's adversarial corpus, which drives `tsc` write failures.
+  - Security and performance residuals (closure size, accumulated names, host paths in refusal text, route integrity on unauthored packages): unchanged owners and triggers (U16, U19, U20).
+  - Learnings residual, `condition-branch-agreement` on built `dist`: the CI `build · attw` lane runs it on every head.
+- **Preserved:** U11-U20 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `5d32c3f..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U22. Rulings on the full-path review at `9854ba8`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `9854ba8` (run `20261014-011118-9854ba8b`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `5d32c3f..9854ba8`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (28 honored, 24 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, performance, reliability, security, api-contract, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R3, R6, R8, R16; KTD1, KTD6, KTD11.
+- **Rulings, fixes** (each scenario fails at the named commit, unless marked as pinning existing behaviour):
+  - M1 (testing P2, then a defect the pin found): a class member's `protected` and `abstract` modifiers were dropped, so `protected p` modelled as a public `p`, an abstract method as a concrete one and a protected constructor as `constructor`; public-to-protected and concrete-to-abstract changes were invisible to the diff. Following K3 and the `static` prefix, a member is named with its modifiers in TypeScript's written order, `protected`, `static`, `abstract` (`1e61902`). Builder scenario; fails at `eec0927`. The rest of the gap is pinned: static fields, auto-accessors and accessor pairs, a private field and a static block holding nothing (`eec0927`).
+  - M2 (DeepSeek delta P3): an export list reached through `export *` that names no declaration was refused naming the entry, which holds no such statement. The refusal names the file whose export map lists the name (`5c6c2d1`). Refusals scenario; fails at `9854ba8`.
+  - M3 (adversarial P2): without TypeScript 7's platform package, which `typescript` installs as an optional dependency, every package needing the fallback is refused. The README states it; the refusal's one diagnostic carries `tsc`'s message naming the missing package (`42a57e7`; probed: the shim exits 1 with `Unable to resolve @typescript/typescript-linux-x64`).
+  - M4 (maintainability P3, two): the builder imports the graph's `statementsIn` instead of a copy (`5c6c2d1`); the resolver records each namespace path once, by start offset, instead of in two passes (`b88de2f`). No behaviour change.
+  - M5 (testing P2 and gaps): pins for canonical text of template literal, predicate, `asserts`, indexed-access, abstract construct and mixed-signature object types, and for a pattern export whose target directory does not exist (`eec0927`). All pass at `9854ba8`.
+- **Rulings, rejected:**
+  - Correctness gap, `tsc`'s exit diagnostic has no scenario: no package-shaped input reaches it; M3 probes the environment fault that does, and U21's follow-up keeps write failures with PR4.
+  - Correctness gap, a `Note` in `route.diagnostics`: every decline that carries a `Note` (missing or outside entry, shared declaration, unresolved import) is also refused by the compiler (U12 D1, D2; ruling #5), so no analysis returns a `Fallback` route holding one.
+  - api-contract gap, decoding `AnalysisMessage` and `Route` with the exported codecs: `AnalysisMessage`'s codec is annotated `Schema.Codec<AnalysisMessage>` and `Route`'s type is `typeof Route.Type`, so a codec cannot drift from its type without `pnpm typecheck` failing.
+  - Project-standards gap, `FIVE_IDS` beside `ANALYSIS_MESSAGE_IDS`: the fixture's list selects which upstream messages the oracle compares, and an expected value must not come from the subject (boundary-testing pack); a sixth id is a public change that brings its own scenario.
+  - Security gap, a `__proto__` source condition: `conditionValue` keeps only a `Path` target, so a prototype read names no entry.
+  - DeepSeek peer residual, `resolveMessages` called alone narrows where `analyse` refuses: `analyse` builds the model first (U21 L2), and the public route is `analyse`.
+- **Follow-ups:**
+  - Security and adversarial residuals, entries per directory are not bounded by the walk's 1024-listing bound, and a source symlinked out of the package is reported as unreadable: owner PR4. Trigger: PR4's adversarial corpus.
+  - Adversarial residual and gap, a workspace root marked other than by `pnpm-workspace.yaml`: owner PR6. Trigger: the consumer journey, which adds a non-pnpm host.
+  - api-contract residuals, `AnalysisMessage` carries no version and `Verdict` became an interface beside a schema constant: owner PR4, which moves messages into the model under a `schemaVersion` bump. The package is `0.0.0` and unpublished.
+  - Reliability residual, native parser throws, and DeepSeek residuals on route equality for multi-entry packages and on the layer's TypeScript import: unchanged owners and triggers (U16, U18, U20).
+  - Performance residuals: owner PR5, as U18 and U20.
+- **Preserved:** U11-U21 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `9854ba8..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U23. Rulings on the full-path review at `ea58038`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `ea58038` (run `20261014-013421-ea58038c`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `9854ba8..ea58038`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (27 honored, 25 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, performance, reliability, security, adversarial, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R6, R16; KTD1, KTD6.
+- **Rulings, fixes** (each scenario fails at `ea58038`, unless marked as pinning existing behaviour):
+  - N1 (DeepSeek delta P3): M2 named the listing file for an export list naming no declaration, but an `export { x } from 'lodash'` reached through the entry's `export *` was still refused naming the entry. Both refusals name the file whose export map lists the name (`8c1bc4e`). Refusals scenario.
+  - N2 (testing P2, correctness gap): two of M1's three abstract arms had no scenario. The modifier scenario holds an abstract property, an abstract auto-accessor and a private static member (`4ce0980`); it fails when either arm is removed.
+  - N3 (api-contract P3): U1's isolatedDeclarations refactor dropped `KeywordName`'s doc comment; it is restored (`a40e552`). No other doc comment was removed from `src` outside the front-end (checked over the diff).
+- **Rulings, rejected:**
+  - DeepSeek delta P3, a getter and setter differing in modifier split into two members: TypeScript admits only a public getter with a restricted setter (TS2808 refuses a getter less accessible than its setter, TS2676 mismatched abstractness; probed on 7.0.2). Two members say that exactly: `w` reads publicly and only a subclass writes `protected w`. Merging would publish a public writable `w`. Pinned (`69173f8`).
+  - DeepSeek delta P3, M3 lacks a scenario and the TypeScript 7 API may load the native compiler at import: probed with `typescript` 7.0.2 copied without its platform packages, `typescript/unstable/async` imports and `new API()` constructs, so the package loads and only the fallback is refused. A committed scenario would remove an optional dependency from the shared store; the fault is an install fault, not package input.
+  - Maintainability P2, fold `exportOrigin` into the export walk: the walk returns the first star target that resolves a name, the origin the first that lists it; one walk would refuse a package whose first star target lists a name unresolved while a later one resolves it.
+  - Testing gaps, `static abstract` and `static protected`: TypeScript refuses both (TS1243, TS1029), so the written order is canonical.
+  - Security gap, the manifest's `recursionBudget`: it bounds generated law values, not decoding.
+  - Correctness residual, `exportOrigin` through a re-export chain names the entry: the entry holds the `export { X } from` statement, which is the listing the refusal names.
+- **Follow-ups:**
+  - Security residuals, `PackageSource.entryPoints` carries a manifest's path before an emitter confines it, and the fallback reads what the package tsconfig extends: owner the unit adding a third adapter (KTD1), which must confine entries as both shipped adapters do. Trigger: that adapter.
+  - Adversarial gaps and DeepSeek residuals, unparseable, extends-missing and solution-style tsconfigs, case-mismatched specifiers, the oracle's stand-in tsconfig and its sorted comparison: owner PR4. Trigger: PR4's adversarial corpus and differential lane.
+  - Adversarial residual, `analyse` requires the compiler layer for a fast-path-only consumer: owner PR6. Trigger: the CLI, which composes the layers.
+  - api-contract residuals, unversioned `Declarations`, `AnalysisMessage` and `Route`, and `Verdict` no longer extendable as a class: U22's owner, PR4.
+  - Reliability and performance residuals: unchanged owners and triggers (U20, U22).
+- **Preserved:** U11-U22 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `ea58038..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U24. Rulings on the full-path review at `fa6bca2`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `fa6bca2` (run `20261014-014547-fa6bca20`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `ea58038..fa6bca2`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (22 honored, 30 not reached, none contradicted); the ci-wall-clock pack is not triggered. Testing, performance, security, adversarial, api-contract, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R1, R6, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at `fa6bca2`, unless marked as pinning existing behaviour):
+  - O1 (DeepSeek delta P3): N1 named the first star target listing a name, so with `a.d.ts` listing `x` unresolved before `b.d.ts` re-exporting it from `lodash`, the refusal paired `a.d.ts` with a re-export it does not hold. An external symbol carries the file whose binding resolved it, and that refusal names it; the unresolved-name refusal keeps naming the first listing file (`d08f648`). Refusals scenario.
+  - O2 (testing gap): U1 moved `VerdictTypeId` onto `Verdict.prototype` and only a probe read it. A verdict decoded from the cell's document holds the brand (`84ef8d2`); the scenario fails when the prototype brand is removed.
+  - O3 (correctness P2, confidence 50): a conditions object under the source condition names no entry. KTD5 reads the condition where the family writes it, with a path for its value; the README states it beside the nested and array forms, and the reader scenario pins it (`ecbf999`). Pins existing behaviour.
+- **Rulings, rejected:**
+  - Reliability P3, an empty compile fails with a raw `NotFound`: not reachable from package input. Probed with a fallback package whose tsconfig names only a hand-written `index.d.ts` that re-exports an unannotated `util.ts`, with and without a `util.d.ts` beside it: `tsc` follows the import, emits `util.d.ts`, and both build a model.
+  - Maintainability P3, a shared module for the NUL-delimited keys: each key is private to its module and of a different arity, and C1's disjointness holds per key; one module would couple five for one template string.
+  - Reliability residual, `tsconfig.build.json` sets `stripInternal: true` while the fast path does not: a package the fast path declines takes the fallback by design, and the routing scenario pins this package on the fast path.
+  - Testing gap, interrupting the compiler adapter: its temp directories and child are released by `Effect.scoped` and `makeTempDirectoryScoped`, so a test would test Effect's scope.
+  - Project-standards gap, no CI gate for the locale ban: a new gate needs operator approval (GATE1); the Verification Contract runs the `git grep` at each head.
+  - Testing and api-contract gaps on the encoded shape of `Route` and `AnalysisMessage`: U22's ruling (codecs typed from their schemas).
+- **Follow-ups:**
+  - Maintainability P3, the profile harness copies `analyse`'s routing: owner PR5 with the harness's other copies (U18). Trigger: PR5 moving the profile into its benchmark lane.
+  - Adversarial residuals, a `Fallback` route's `Reported` diagnostic may be oxc's, not `tsc`'s, and text-changing options reaching the fallback through `extends`: owner PR4. Trigger: the report renderer and the adversarial corpus.
+  - Correctness gaps, an `@internal` item inside a namespace and an unsupported enum member name; security gap, a pattern walk through a directory symlink out of the package; DeepSeek gap, a hand-written entry reaching further declarations: owner PR4, as U20 and U22. Trigger: PR4's adversarial corpus and differential lane.
+  - Reliability, performance and security residuals: unchanged owners and triggers (U20, U22, U23).
+- **Preserved:** U11-U23 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `fa6bca2..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+### U25. Rulings on the full-path review at `c25bf9a`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `c25bf9a` (run `20261014-020001-c25bf9ae`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `fa6bca2..c25bf9a`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (26 honored, 26 not reached, none contradicted); the ci-wall-clock pack is not triggered. Correctness, security, api-contract, project-standards and both DeepSeek lenses reported no finding.
+- **Requirements:** R1, R6, R16; KTD1, KTD5, KTD6.
+- **Rulings, fixes** (each pins existing behaviour unless marked):
+  - P1 (maintainability P2): the resolver's `typeParameterNamesOf` repeated `typeParameterNames`; it now calls the printer's helper (`5054d04`). Analysis scenarios unchanged.
+  - P2 (testing P3): the compiler's refusal of a missing entry source had no scenario beside its pinned sibling. The e2e refusal journey analyses a package whose entry names no file: the fast path declines and the compiler refuses with a `Note` naming `src/mod.ts` (`f701dc7`).
+  - P3 (reliability P2): `oxc-parser` and `oxc-transform` load their native bindings at import (probed: both throw `Cannot find native binding` without them), so importing this package fails without them. The README states it beside the TypeScript 7 platform-package paragraph (`9ae4420`). Moving the imports behind a lazy load is not taken: a front-end without its parser has no route, and the import failure names the cause.
+  - P4 (maintainability residual): the printer's keyword table is a record keyed by the model's `KeywordName`, and its entries are derived from `KeywordName.literals`, so a keyword the model gains and the printer lacks is a type error instead of a runtime refusal (`ce351e3`; probed: dropping `void` fails `tsc` with TS2339).
+  - P5 (reliability gap): a `.ts` candidate that is a directory is skipped for the `.tsx` source. The U14 ruling rested on an orchestrator probe; a routing scenario now pins it (`b22c2b5`).
+  - P6 (correctness residual): a pattern target with two stars names no entry; the README named only the two-star key. The README states both and the reader scenario pins both (`ccd067e`).
+- **Rulings, rejected:**
+  - Adversarial P3 (confidence 50), an unreadable source escapes as `PlatformError`: re-raises the U14 unreadable-source ruling (an environment fault, not a package shape; `tsc` cannot read it either).
+  - DeepSeek delta gap, the `direct` row of O1's scenario also passed at `fa6bca2`: the scenario's fail-before rests on its `behindUnresolved` row, as U24 records; the `direct` row pins the unchanged case.
+  - DeepSeek delta residual, the two refusal branches of `itemsForExport` name different files: U24 O1 rules it (the resolving file for an external re-export, the first listing file for a name that names no declaration).
+- **Follow-ups:**
+  - Performance P2, `replaceNames` scans the rename map once per reference: owner PR5 with the other performance residuals (U20); the committed profile puts `build:model` at 274.59 ms over 40 packages. Trigger: PR5's benchmark lane measuring a large synthetic package.
+  - DeepSeek peer residuals and gaps, a reference through a namespace import (`import * as NS`, `NS.Hidden`) draws no `ae-forgotten-export`, and a package addressing itself through `#imports` or `paths` reads as external: owner PR4 with the resolver's namespace-member residual (U18). Trigger: PR4's differential lane.
+  - Correctness gaps, route equality on a module with no export statement and hidden-name collisions with nested namespace items; adversarial gap, a closure import whose `.ts` and hand-written `.d.ts` share a stem: owner PR4. Trigger: PR4's adversarial corpus.
+  - Reliability residual, native bindings executed only on linux-x64-gnu: owner PR6 with the non-POSIX host lane (U16). Trigger: the consumer journey adding a host.
+  - Security, performance, api-contract and adversarial residuals: unchanged owners and triggers (U20, U22, U23, U24).
+- **Preserved:** U11-U24 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `c25bf9a..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
+---
+
+## Verification Contract
+
+| Gate | Command or evidence | Proves |
+|---|---|---|
+| Isolated-clean package | `nix develop --command sh -c 'cd packages/api-extractor && tsc -p tsconfig.build.json --noEmit'` reports no TS9xxx; CI `build · attw` lane | R15 |
+| Targeted tests | `nix develop --command pnpm turbo run test --filter=@systemfsoftware/api-extractor --filter=api-extractor-e2e` | R1-R3, R5, R7, R9-R11, R16 |
+| Lint and typecheck | `nix develop --command pnpm lint` and `pnpm typecheck` (0 diagnostics) | AGENTS.md preset rule |
+| Build | `nix develop --command pnpm build` and `pnpm --filter @systemfsoftware/api-extractor attw` | R4, KTD8 |
+| Host digest | `node --conditions=@systemfsoftware/source apps/api-extractor-e2e/host-digest.ts \| sha256sum` gives `e4478f03…6da2` | output bytes unchanged |
+| Profile before choice | `git merge-base --is-ancestor <commit adding docs/profiles/2026-10-12-front-end-phases.json> <commit adding its Decision section>` exits 0, and the two commits differ | R12, R14 |
+| Profile reproduction | `node --conditions=@systemfsoftware/source apps/api-extractor-profile/profile.ts <corpus> <out>` on the corpus at `732f66a0c8` | R13 |
+| No locale APIs | `git grep -nE 'toLocale\|localeCompare\|Intl\\.' -- packages/api-extractor/src` prints nothing | origin R5 |
+| CI | `ci.yml` and Changeset Check green on the exact PR head | origin R22 |
+
+No mutation run, local or in CI (origin R23).
+
+---
+
+## Definition of Done
+
+- U1-U25 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
+- Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
+- The two delivery questions are ruled by the operator before the PR opens.
+- No scratch, abandoned-attempt code or throwaway probe remains in the diff.

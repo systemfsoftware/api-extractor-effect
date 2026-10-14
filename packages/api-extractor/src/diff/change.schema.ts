@@ -31,7 +31,7 @@ import {
 import { type Direction, direction } from './direction.schema.ts'
 import { type ChannelType, compose, flip, type Position } from './position.schema.ts'
 
-export const ChangeKind = Schema.Literals([
+const CHANGE_KINDS = [
   'entry-point-added',
   'entry-point-removed',
   'export-added',
@@ -65,7 +65,9 @@ export const ChangeKind = Schema.Literals([
   'enum-member-value-changed',
   'enum-const-changed',
   'type-changed',
-])
+] as const
+
+export const ChangeKind: Schema.Literals<typeof CHANGE_KINDS> = Schema.Literals(CHANGE_KINDS)
 export type ChangeKind = typeof ChangeKind.Type
 
 /** One difference between two models, before any rule judges it. */

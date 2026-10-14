@@ -2,10 +2,10 @@ import { Function, Schema } from 'effect'
 import { TypeExpr } from '../model/type-expr.schema.ts'
 
 /** Where a type sits relative to the consumer: produced (`out`), consumed (`in`), or both. */
-export const Position = Schema.Literals(['in', 'out', 'both'])
+export const Position: Schema.Literals<readonly ['in', 'out', 'both']> = Schema.Literals(['in', 'out', 'both'])
 export type Position = typeof Position.Type
 
-export const Variance = Schema.Literals(['in', 'out'])
+export const Variance: Schema.Literals<readonly ['in', 'out']> = Schema.Literals(['in', 'out'])
 export type Variance = typeof Variance.Type
 
 /** A generic type whose type arguments are Effect-style channels with a declared variance. */
