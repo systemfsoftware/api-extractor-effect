@@ -177,6 +177,8 @@ const sharedDeclarationPackage = fallingBackPackage(
   STANDALONE_TSCONFIG,
 )
 
+const missingEntryPackage = fallingBackPackage('missing-entry', { '.': './src/mod.ts' }, {}, STANDALONE_TSCONFIG)
+
 type Refused = { readonly message: string; readonly diagnostics?: ReadonlyArray<FrontEnd.Diagnostic> }
 
 const codeOf = (diagnostic: FrontEnd.Diagnostic): number | undefined =>
@@ -352,6 +354,7 @@ Feature('Both front-ends reduce a package to one model')
         ),
         Given('a package whose entry names a source beside it, outside the package')('escaping', () => escapingEntryPackage),
         Given('a package whose two entry sources share one declaration path')('shared', () => sharedDeclarationPackage),
+        Given('a package whose entry names a source that does not exist')('missing', () => missingEntryPackage),
         When('the engine analyses each')('refusals', (scope) =>
           Effect.all({
             typeError: Effect.map(Effect.flip(FrontEnd.analyse(scope.source)), refusalOf),
@@ -361,8 +364,9 @@ Feature('Both front-ends reduce a package to one model')
             longName: Effect.map(Effect.flip(FrontEnd.analyse(scope.longName)), refusalOf),
             escaping: Effect.map(refusedThrough(scope.escaping), refusalOf),
             shared: Effect.map(refusedThrough(scope.shared), refusalOf),
+            missing: Effect.map(Effect.flip(FrontEnd.analyse(scope.missing)), refusalOf),
           })),
-        Then("each is refused with the compiler's own diagnostics, the spelled lines stay inside their message, and the entry outside the package and the shared declaration come back without a code")((scope, expect) =>
+        Then("each is refused with the compiler's own diagnostics, the spelled lines stay inside their message, and the entry outside the package, the shared declaration and the missing source come back without a code")((scope, expect) =>
           expect({
             typeError: scope.refusals.typeError.error,
             forged: scope.refusals.forged.error,
@@ -372,12 +376,14 @@ Feature('Both front-ends reduce a package to one model')
             longName: scope.refusals.longName.error,
             escaping: scope.refusals.escaping.error,
             shared: scope.refusals.shared.error,
+            missing: scope.refusals.missing.error,
             files: { longName: scope.refusals.longName.files },
             codes: {
               excludedEntry: scope.refusals.excludedEntry.codes,
               longName: scope.refusals.longName.codes,
               escaping: scope.refusals.escaping.codes,
               shared: scope.refusals.shared.codes,
+              missing: scope.refusals.missing.codes,
             },
           }).toMatchObject({
             typeError: {
@@ -410,8 +416,9 @@ Feature('Both front-ends reduce a package to one model')
               _tag: 'CompilerRejected',
               diagnostics: [{ _tag: 'Note', file: 'src/mod.d.ts', message: expect.stringContaining('the entry points . and ./mod share the declaration file src/mod.d.ts') }],
             },
+            missing: { _tag: 'CompilerRejected', diagnostics: [{ _tag: 'Note', file: 'src/mod.ts', message: expect.stringContaining('does not exist') }] },
             files: { longName: [undefined] },
-            codes: { excludedEntry: [undefined], longName: [undefined], escaping: [undefined], shared: [undefined] },
+            codes: { excludedEntry: [undefined], longName: [undefined], escaping: [undefined], shared: [undefined], missing: [undefined] },
           })
         ),
       ),
