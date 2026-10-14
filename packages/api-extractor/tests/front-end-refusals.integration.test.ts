@@ -164,4 +164,15 @@ Feature('Refusing declaration text the model cannot hold')
           expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`import =`' })),
       ),
     )
+
+    scenario(
+      'a destructuring constant inside a namespace body is refused, as it is at the top of a file',
+      Gherkin.Do.pipe(
+        Given('an entry whose namespace `N` declares `const { a }: { a: number }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare namespace N {\n  const { a }: { a: number }\n}\n']]))),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('it is refused naming the file and the destructuring declaration')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a destructuring variable declaration' })),
+      ),
+    )
   })

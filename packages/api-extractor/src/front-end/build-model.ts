@@ -1,24 +1,19 @@
 import { Array as Arr, Effect, HashMap, HashSet, Match, Option, Order, Ref } from 'effect'
 import type {
-  BindingIdentifier,
   BindingPattern,
   Class,
-  Declaration as DeclarationNode,
   Directive,
   Expression,
   Function as FunctionNode,
   Statement,
-  StringLiteral,
   TSEnumDeclaration,
   TSEnumMember,
   TSEnumMemberName,
   TSInterfaceDeclaration,
   TSModuleBlock,
   TSModuleDeclaration,
-  TSQualifiedName,
   TSTypeAliasDeclaration,
   TSTypeAnnotation,
-  VariableDeclaration,
   VariableDeclarator,
 } from 'oxc-parser'
 import {
@@ -33,7 +28,7 @@ import {
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
-import { declarationGraph, exportedNames, exportedSymbol, grouped, namespaceSpacesOf, refuse, type Declaration, type Declared, type DeclarationGraph } from './declaration-graph.ts'
+import { declarationGraph, declaredOf, exportedNames, exportedSymbol, grouped, namespaceSpacesOf, refuse, type Declaration, type Declared, type DeclarationGraph, type EntryDeclaration } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
@@ -50,7 +45,6 @@ type LocalDeclaration = {
 }
 
 type VariableEntry = { readonly constant: boolean; readonly node: VariableDeclarator }
-type EntryFile = { readonly exportPath: string; readonly declarationFile: string }
 
 const KEY_DELIMITER = '\u0000'
 
@@ -506,49 +500,6 @@ const bodyDeclarations = (
 
 const declaredEntry = (declared: Declared, statementStart: number): Declaration => ({ declared, statementStart })
 
-const identifierName = (id: { readonly name: string } | null): Option.Option<string> =>
-  Option.map(Option.fromNullishOr(id), (present) => present.name)
-
-const oneDeclaration = (declared: Option.Option<Declared>, statementStart: number): ReadonlyArray<Declaration> =>
-  Option.match(declared, { onNone: () => [], onSome: (present) => [declaredEntry(present, statementStart)] })
-
-const declaratorDeclarations = (variable: VariableDeclaration, declarator: VariableDeclarator): ReadonlyArray<Declaration> =>
-  Option.match(
-    Match.value(declarator.id).pipe(
-      Match.when({ type: 'Identifier' }, (id) => Option.some(id.name)),
-      Match.orElse(() => Option.none()),
-    ),
-    {
-      onNone: () => [],
-      onSome: (name) => [declaredEntry({ kind: 'variable', constant: variable.kind === 'const', node: declarator, name }, variable.start)],
-    },
-  )
-
-const nodeDeclarations = (node: DeclarationNode | Statement): ReadonlyArray<Declaration> =>
-  Match.value(node).pipe(
-    Match.when({ type: 'VariableDeclaration' }, (variable) => variable.declarations.flatMap((declarator) => declaratorDeclarations(variable, declarator))),
-    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_: FunctionNode) =>
-      oneDeclaration(Option.map(identifierName(function_.id), (name): Declared => ({ kind: 'function', node: function_, name })), function_.start)),
-    Match.when({ type: 'ClassDeclaration' }, (class_: Class) =>
-      oneDeclaration(Option.map(identifierName(class_.id), (name): Declared => ({ kind: 'class', node: class_, name })), class_.start)),
-    Match.when({ type: 'TSInterfaceDeclaration' }, (iface: TSInterfaceDeclaration) =>
-      [declaredEntry({ kind: 'interface', node: iface, name: iface.id.name }, iface.start)]),
-    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias: TSTypeAliasDeclaration) =>
-      [declaredEntry({ kind: 'typeAlias', node: alias, name: alias.id.name }, alias.start)]),
-    Match.when({ type: 'TSEnumDeclaration' }, (enumeration: TSEnumDeclaration) =>
-      [declaredEntry({ kind: 'enum', node: enumeration, name: enumeration.id.name }, enumeration.start)]),
-    Match.orElse(() => []),
-  )
-
-const namespaceDeclarations = (
-  context: TypeContext,
-  module: TSModuleDeclaration,
-): Effect.Effect<ReadonlyArray<Declaration>, UnsupportedDeclaration> =>
-  Option.match(moduleName(module.id), {
-    onNone: () => refuse(context.file, `a ${module.id.type} namespace name`),
-    onSome: (name) => Effect.succeed<ReadonlyArray<Declaration>>([declaredEntry({ kind: 'namespace', node: module, name }, module.start)]),
-  })
-
 const statementDeclarations = (
   context: TypeContext,
   statement: Directive | Statement,
@@ -559,17 +510,8 @@ const statementDeclarations = (
         onNone: () => Effect.succeed<ReadonlyArray<Declaration>>([]),
         onSome: (inner) => statementDeclarations(context, inner),
       })),
-    Match.when({ type: Match.is('VariableDeclaration', 'FunctionDeclaration', 'TSDeclareFunction', 'ClassDeclaration', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSEnumDeclaration') }, (node) =>
-      Effect.succeed(nodeDeclarations(node))),
-    Match.when({ type: 'TSModuleDeclaration', global: false }, (module) => namespaceDeclarations(context, module)),
     Match.when({ type: 'TSImportEqualsDeclaration' }, () => refuse(context.file, '`import =`')),
-    Match.orElse(() => Effect.succeed<ReadonlyArray<Declaration>>([])),
-  )
-
-const moduleName = (id: BindingIdentifier | StringLiteral | TSQualifiedName): Option.Option<string> =>
-  Match.value(id).pipe(
-    Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
-    Match.orElse(() => Option.none()),
+    Match.orElse((node) => Effect.map(declaredOf(node, context.file), (declared) => declared.map((item) => declaredEntry(item, node.start)))),
   )
 
 const itemsOfDeclarations = (context: TypeContext, declarations: ReadonlyArray<Declaration>, name: string): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
@@ -647,7 +589,7 @@ const buildReachableLocals = (
   return drain()
 }
 
-const buildEntry = (graph: DeclarationGraph, entry: EntryFile): Effect.Effect<EntryPoint, UnsupportedDeclaration> =>
+const buildEntry = (graph: DeclarationGraph, entry: EntryDeclaration): Effect.Effect<EntryPoint, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const file = entry.declarationFile
     const exported = exportedNames(graph, file)

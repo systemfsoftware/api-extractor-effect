@@ -14,7 +14,6 @@ import {
   type Program,
   type Statement,
   type TSEnumDeclaration,
-  type TSGlobalDeclaration,
   type TSInterfaceDeclaration,
   type TSModuleBlock,
   type TSModuleDeclaration,
@@ -310,36 +309,57 @@ type NamedDeclaration = {
 
 const namedDeclaration = (name: string, kind: Declared['kind']): NamedDeclaration => ({ name, kind })
 
-const optionalDeclaration = (id: { readonly name: string } | null, kind: Declared['kind']): ReadonlyArray<NamedDeclaration> =>
-  Option.match(Option.fromNullishOr(id), { onNone: () => [], onSome: (present) => [namedDeclaration(present.name, kind)] })
+const DEFAULT_EXPORT_NAME = 'default'
 
-const variableDeclarationsIn = (variable: VariableDeclaration): ReadonlyArray<NamedDeclaration> =>
-  Arr.getSomes(
-    variable.declarations.map((declarator) =>
-      declarator.id.type === 'Identifier' ? Option.some(namedDeclaration(declarator.id.name, 'variable')) : Option.none()),
+const declarationName = (id: { readonly name: string } | null): string => (id === null ? DEFAULT_EXPORT_NAME : id.name)
+
+type ClassifiedDeclaration =
+  | { readonly kind: 'declared'; readonly declared: ReadonlyArray<Declared> }
+  | { readonly kind: 'refused'; readonly construct: string }
+
+const declaredItems = (declared: ReadonlyArray<Declared>): ClassifiedDeclaration => ({ kind: 'declared', declared })
+
+const refusedDeclaration = (construct: string): ClassifiedDeclaration => ({ kind: 'refused', construct })
+
+const declaredVariableOf = (node: VariableDeclaration) => (declarator: VariableDeclarator): Option.Option<Declared> =>
+  declarator.id.type === 'Identifier'
+    ? Option.some({ kind: 'variable', constant: node.kind === 'const', node: declarator, name: declarator.id.name })
+    : Option.none()
+
+const classifiedVariable = (node: VariableDeclaration): ClassifiedDeclaration => {
+  const declared = Arr.getSomes(node.declarations.map((declarator) => declaredVariableOf(node)(declarator)))
+  return declared.length === node.declarations.length ? declaredItems(declared) : refusedDeclaration('a destructuring variable declaration')
+}
+
+const classifiedNamespace = (module: TSModuleDeclaration): ClassifiedDeclaration =>
+  Match.value(module.id).pipe(
+    Match.when({ type: 'Identifier' }, (id) => declaredItems([{ kind: 'namespace', node: module, name: id.name }])),
+    Match.when({ type: 'Literal' }, (id) => refusedDeclaration(`\`declare module "${id.value}"\``)),
+    Match.orElse(() => refusedDeclaration('a dotted namespace declaration')),
   )
 
-const namespaceNameIn = (id: TSModuleDeclaration['id']): ReadonlyArray<NamedDeclaration> =>
-  Match.value(id).pipe(
-    Match.when({ type: 'Identifier' }, (identifier) => [namedDeclaration(identifier.name, 'namespace')]),
-    Match.orElse(() => []),
+const classifyDeclaration = (node: DeclarableNode): ClassifiedDeclaration =>
+  Match.value(node).pipe(
+    Match.when({ type: 'VariableDeclaration' }, (variable: VariableDeclaration) => classifiedVariable(variable)),
+    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_: FunctionNode) =>
+      declaredItems([{ kind: 'function', node: function_, name: declarationName(function_.id) }])),
+    Match.when({ type: 'ClassDeclaration' }, (class_: Class) => declaredItems([{ kind: 'class', node: class_, name: declarationName(class_.id) }])),
+    Match.when({ type: 'TSInterfaceDeclaration' }, (iface: TSInterfaceDeclaration) => declaredItems([{ kind: 'interface', node: iface, name: iface.id.name }])),
+    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias: TSTypeAliasDeclaration) => declaredItems([{ kind: 'typeAlias', node: alias, name: alias.id.name }])),
+    Match.when({ type: 'TSEnumDeclaration' }, (enumeration: TSEnumDeclaration) => declaredItems([{ kind: 'enum', node: enumeration, name: enumeration.id.name }])),
+    Match.when({ type: 'TSModuleDeclaration', global: true }, () => refusedDeclaration('`declare global`')),
+    Match.when({ type: 'TSModuleDeclaration', global: false }, (module: TSModuleDeclaration) => classifiedNamespace(module)),
+    Match.orElse(() => declaredItems([])),
   )
 
-const namespaceDeclarationIn = (module: TSModuleDeclaration | TSGlobalDeclaration): ReadonlyArray<NamedDeclaration> =>
-  module.kind === 'global' ? [] : namespaceNameIn(module.id)
+const namedDeclarationsOf = (classified: ClassifiedDeclaration): ReadonlyArray<NamedDeclaration> =>
+  classified.kind === 'declared' ? classified.declared.map((declared) => namedDeclaration(declared.name, declared.kind)) : []
 
 const declarationsInStatement = (statement: Directive | Statement): ReadonlyArray<NamedDeclaration> =>
   Match.value(statement).pipe(
     Match.when({ type: 'ExportNamedDeclaration' }, (exported) =>
       Option.match(Option.fromNullishOr(exported.declaration), { onNone: () => [], onSome: declarationsInStatement })),
-    Match.when({ type: 'VariableDeclaration' }, (variable: VariableDeclaration) => variableDeclarationsIn(variable)),
-    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (function_: FunctionNode) => optionalDeclaration(function_.id, 'function')),
-    Match.when({ type: 'ClassDeclaration' }, (class_: Class) => optionalDeclaration(class_.id, 'class')),
-    Match.when({ type: 'TSInterfaceDeclaration' }, (iface: TSInterfaceDeclaration) => [namedDeclaration(iface.id.name, 'interface')]),
-    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias: TSTypeAliasDeclaration) => [namedDeclaration(alias.id.name, 'typeAlias')]),
-    Match.when({ type: 'TSEnumDeclaration' }, (enumeration: TSEnumDeclaration) => [namedDeclaration(enumeration.id.name, 'enum')]),
-    Match.when({ type: 'TSModuleDeclaration' }, (module: TSModuleDeclaration | TSGlobalDeclaration) => namespaceDeclarationIn(module)),
-    Match.orElse(() => []),
+    Match.orElse((node) => namedDeclarationsOf(classifyDeclaration(node))),
   )
 
 const statementsIn = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
@@ -396,7 +416,7 @@ export type ResolvedSymbol =
 
 export type DeclarationGraph = {
   readonly files: HashMap.HashMap<string, FileScope>
-  readonly entryPoints: ReadonlyArray<{ readonly exportPath: string; readonly declarationFile: string }>
+  readonly entryPoints: ReadonlyArray<EntryDeclaration>
 }
 
 type ScopeParts = {
@@ -416,38 +436,17 @@ export const refuse: {
 } = Fn.dual(2, (file: string, construct: string): Effect.Effect<never, UnsupportedDeclaration> =>
   Effect.fail(new UnsupportedDeclaration({ file, construct })))
 
-const DEFAULT_EXPORT_NAME = 'default'
+type DeclarableNode = DeclarationNode | Statement | ExportDefaultDeclaration['declaration']
 
-const declarationName = (id: { readonly name: string } | null): string => (id === null ? DEFAULT_EXPORT_NAME : id.name)
-
-const variablesOf = (node: VariableDeclaration, file: string): DeclaredResult =>
-  Effect.forEach(node.declarations, (declarator) =>
-    declarator.id.type === 'Identifier'
-      ? Effect.succeed<Declared>({ kind: 'variable', constant: node.kind === 'const', node: declarator, name: declarator.id.name })
-      : refuse(file, 'a destructuring variable declaration'))
-
-const namespaceOf = (node: TSModuleDeclaration, file: string): DeclaredResult =>
-  Match.value(node.id).pipe(
-    Match.when({ type: 'Identifier' }, (id) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'namespace', node, name: id.name }])),
-    Match.when({ type: 'Literal' }, (id) => refuse(file, `\`declare module "${id.value}"\``)),
-    Match.orElse(() => refuse(file, 'a dotted namespace declaration')),
-  )
-
-const declaredOf = (node: DeclarationNode | Statement | ExportDefaultDeclaration['declaration'], file: string): DeclaredResult =>
-  Match.value(node).pipe(
-    Match.when({ type: 'VariableDeclaration' }, (variable) => variablesOf(variable, file)),
-    Match.when({ type: Match.is('FunctionDeclaration', 'TSDeclareFunction') }, (fn: FunctionNode) =>
-      Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'function', node: fn, name: declarationName(fn.id) }])),
-    Match.when({ type: 'ClassDeclaration' }, (cls: Class) =>
-      Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'class', node: cls, name: declarationName(cls.id) }])),
-    Match.when({ type: 'TSInterfaceDeclaration' }, (iface) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'interface', node: iface, name: iface.id.name }])),
-    Match.when({ type: 'TSTypeAliasDeclaration' }, (alias) => Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'typeAlias', node: alias, name: alias.id.name }])),
-    Match.when({ type: 'TSEnumDeclaration' }, (enumeration) =>
-      Effect.succeed<ReadonlyArray<Declared>>([{ kind: 'enum', node: enumeration, name: enumeration.id.name }])),
-    Match.when({ type: 'TSModuleDeclaration', global: true }, () => refuse(file, '`declare global`')),
-    Match.when({ type: 'TSModuleDeclaration', global: false }, (module: TSModuleDeclaration) => namespaceOf(module, file)),
-    Match.orElse(() => Effect.succeed<ReadonlyArray<Declared>>([])),
-  )
+export const declaredOf: {
+  (node: DeclarableNode): (file: string) => DeclaredResult
+  (node: DeclarableNode, file: string): DeclaredResult
+} = Fn.dual(2, (node: DeclarableNode, file: string): DeclaredResult =>
+  Match.value(classifyDeclaration(node)).pipe(
+    Match.when({ kind: 'declared' }, (classified) => Effect.succeed<ReadonlyArray<Declared>>(classified.declared)),
+    Match.when({ kind: 'refused' }, (classified) => refuse(file, classified.construct)),
+    Match.exhaustive,
+  ))
 
 const declarationsPart = (declared: ReadonlyArray<Declared>, statementStart: number): ScopeParts => ({
   ...EMPTY_PARTS,

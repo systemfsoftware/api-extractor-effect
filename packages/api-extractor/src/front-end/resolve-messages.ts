@@ -21,7 +21,7 @@ import {
   Visitor,
 } from 'oxc-parser'
 import type { AnalysisMessage, AnalysisMessageId } from './analysis-message.schema.ts'
-import type { Declaration, DeclarationGraph, FileScope, ResolvedSymbol } from './declaration-graph.ts'
+import type { Declaration, DeclarationGraph, EntryDeclaration, FileScope, ResolvedSymbol } from './declaration-graph.ts'
 import { declarationGraph, exportedNames, exportedSymbol, namespaceSpacesOf, resolveName } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import type { UnsupportedDeclaration } from './front-end-error.schema.ts'
@@ -253,11 +253,6 @@ const referencesWithin = (scan: ReferenceScan, scope: FileScope, declaration: De
 const referenceNames = (scan: ReferenceScan, scope: FileScope, declaration: Declaration): ReadonlyArray<string> =>
   Arr.map(referencesWithin(scan, scope, declaration), (reference) => reference.name)
 
-type EntryPoint = {
-  readonly exportPath: string
-  readonly declarationFile: string
-}
-
 type ExportedItem = {
   readonly file: string
   readonly name: string
@@ -318,14 +313,14 @@ const analysisMessage = (messageId: AnalysisMessageId, entryPoint: string, item:
 const untagged = (graph: DeclarationGraph, item: ExportedItem): ReadonlyArray<Declaration> =>
   Arr.filter(item.declarations, (declaration) => Option.isNone(tagOf(graph, item.file, declaration)))
 
-const missingTagMessages = (graph: DeclarationGraph, entry: EntryPoint, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
+const missingTagMessages = (graph: DeclarationGraph, entry: EntryDeclaration, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
   Arr.map(untagged(graph, item), (declaration) => analysisMessage('ae-missing-release-tag', entry.exportPath, item.namePath, declaration.declared.name))
 
 const needsUnderscore = (maxTag: ReleaseTag, item: ExportedItem): boolean => maxTag === 'internal' && !item.namePath.includes('.')
 
 const lacksUnderscore = (name: string): boolean => !name.startsWith('_')
 
-const underscoreMessages = (maxTag: ReleaseTag, entry: EntryPoint, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
+const underscoreMessages = (maxTag: ReleaseTag, entry: EntryDeclaration, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
   needsUnderscore(maxTag, item)
     ? Arr.map(Arr.filter(item.exportNames, lacksUnderscore), (name) => analysisMessage('ae-internal-missing-underscore', entry.exportPath, item.namePath, name))
     : []
@@ -335,7 +330,7 @@ const allTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean
 const mixedTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean =>
   !allTagged(maxTag, tags) && Arr.some(tags, (tag) => tag === 'internal')
 
-const mixedMessages = (entry: EntryPoint, item: ExportedItem, maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): ReadonlyArray<AnalysisMessage> =>
+const mixedMessages = (entry: EntryDeclaration, item: ExportedItem, maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): ReadonlyArray<AnalysisMessage> =>
   mixedTagged(maxTag, tags) ? [analysisMessage('ae-internal-mixed-release-tag', entry.exportPath, item.namePath, item.name)] : []
 
 const effectiveTagsOf = (graph: DeclarationGraph, item: ExportedItem): ReadonlyArray<ReleaseTag> =>
@@ -353,7 +348,7 @@ const declaringTag = (graph: DeclarationGraph, file: string, declaration: Declar
 
 const incompatibleMessages = (
   graph: DeclarationGraph,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   item: ExportedItem,
   declaration: Declaration,
   referenced: ExportedItem,
@@ -364,7 +359,7 @@ const incompatibleMessages = (
 
 const localMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
   declaration: Declaration,
@@ -377,7 +372,7 @@ const localMessages = (
 
 const resolvedNameMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
   declaration: Declaration,
@@ -390,7 +385,7 @@ const resolvedNameMessages = (
 
 const nameMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
   declaration: Declaration,
@@ -403,7 +398,7 @@ const nameMessages = (
 
 const declarationMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
   declaration: Declaration,
@@ -417,7 +412,7 @@ const declarationMessages = (
 
 const referenceMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
 ): ReadonlyArray<AnalysisMessage> =>
@@ -425,7 +420,7 @@ const referenceMessages = (
 
 const itemMessages = (
   resolution: Resolution,
-  entry: EntryPoint,
+  entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
 ): ReadonlyArray<AnalysisMessage> => {
@@ -439,7 +434,7 @@ const itemMessages = (
   ]
 }
 
-const entryMessages = (resolution: Resolution, entry: EntryPoint): ReadonlyArray<AnalysisMessage> => {
+const entryMessages = (resolution: Resolution, entry: EntryDeclaration): ReadonlyArray<AnalysisMessage> => {
   const consumable = mergeByKey(itemList(resolution.graph, entry.declarationFile))
   return Arr.flatMap(Arr.fromIterable(HashMap.values(consumable)), (item) => itemMessages(resolution, entry, consumable, item))
 }
