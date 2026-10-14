@@ -337,20 +337,58 @@ const memberDraftOf = (context: TypeContext, member: TSSignature): Effect.Effect
 const membersOf = (context: TypeContext, members: ReadonlyArray<TSSignature>): Effect.Effect<ReadonlyArray<Member>, UnsupportedDeclaration> =>
   Effect.map(Effect.forEach(members, (member) => memberDraftOf(context, member)), assembleMembers)
 
+const ABSTRACT_ELEMENT_TYPES: ReadonlyArray<ClassElement['type']> = [
+  'TSAbstractMethodDefinition',
+  'TSAbstractPropertyDefinition',
+  'TSAbstractAccessorProperty',
+]
+
+const isAbstractElement = (type: ClassElement['type']): boolean =>
+  Match.value(type).pipe(
+    Match.when(Match.is(...ABSTRACT_ELEMENT_TYPES), () => true),
+    Match.orElse(() => false),
+  )
+
+const accessibilityWord = (accessibility: TSAccessibility | null | undefined): ReadonlyArray<string> =>
+  Match.value(accessibility).pipe(
+    Match.when('private', () => ['private']),
+    Match.when('protected', () => ['protected']),
+    Match.orElse(() => []),
+  )
+
+const flagWord = (flag: boolean, word: string): ReadonlyArray<string> => (flag ? [word] : [])
+
+const modifierWords = (
+  accessibility: TSAccessibility | null | undefined,
+  isStatic: boolean,
+  isAbstract: boolean,
+): ReadonlyArray<string> => [...accessibilityWord(accessibility), ...flagWord(isStatic, 'static'), ...flagWord(isAbstract, 'abstract')]
+
+const prefixedName = (words: ReadonlyArray<string>, name: string): string =>
+  Match.value(Arr.join(words, ' ')).pipe(
+    Match.when('', () => name),
+    Match.orElse((modifiers) => `${modifiers} ${name}`),
+  )
+
 const accessibleName = (
   key: PropertyKey,
   accessibility: TSAccessibility | null | undefined,
   isStatic: boolean,
+  isAbstract: boolean,
 ): Option.Option<string> =>
   Match.value(accessibility).pipe(
     Match.when('private', () => Option.none()),
-    Match.orElse(() => Option.map(propertyKeyNameOf(key), (name) => (isStatic ? `static ${name}` : name))),
+    Match.orElse(() =>
+      Option.map(propertyKeyNameOf(key), (name) => prefixedName(modifierWords(accessibility, isStatic, isAbstract), name)),
+    ),
   )
 
 const classMethodName = (method: MethodDefinition): Option.Option<string> =>
   Match.value(method).pipe(
-    Match.when({ kind: 'constructor' }, (constructor) => Option.some(constructor.accessibility === 'private' ? 'private constructor' : 'constructor')),
-    Match.orElse(() => accessibleName(method.key, method.accessibility, method.static)),
+    Match.when({ kind: 'constructor' }, (constructor) =>
+      Option.some(prefixedName(accessibilityWord(constructor.accessibility), 'constructor')),
+    ),
+    Match.orElse(() => accessibleName(method.key, method.accessibility, method.static, isAbstractElement(method.type))),
   )
 
 const classMethodDraftOf = (context: TypeContext, method: MethodDefinition): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
@@ -381,14 +419,14 @@ const propertyDraft = (name: string, property: PropertyDefinition, type: TypeExp
 })
 
 const classPropertyDraftOf = (context: TypeContext, property: PropertyDefinition): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
-  Option.match(accessibleName(property.key, property.accessibility, property.static), {
+  Option.match(accessibleName(property.key, property.accessibility, property.static, isAbstractElement(property.type)), {
     onNone: () => Effect.succeedNone,
     onSome: (name) =>
       Effect.asSome(Effect.map(annotationTypeOrDefault(context, property.typeAnnotation, 'any'), (type) => propertyDraft(name, property, type))),
   })
 
 const classAccessorDraftOf = (context: TypeContext, accessor: AccessorProperty): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
-  Option.match(accessibleName(accessor.key, accessor.accessibility, accessor.static), {
+  Option.match(accessibleName(accessor.key, accessor.accessibility, accessor.static, isAbstractElement(accessor.type)), {
     onNone: () => Effect.succeedNone,
     onSome: (name) =>
       Effect.asSome(Effect.map(annotationTypeOrDefault(context, accessor.typeAnnotation, 'any'), (type): Draft => ({
