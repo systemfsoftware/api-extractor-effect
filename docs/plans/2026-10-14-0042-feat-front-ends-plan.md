@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-2348-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0008-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -515,6 +515,36 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U18 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `3ff23ef..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U20. Rulings on the full-path review at `681efe3`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `681efe3` (run `20261014-000912-681efe30`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `3ff23ef..681efe3`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (26 honored, 26 not reached, none contradicted); the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` are byte-identical to `main`). Project-standards, performance and api-contract reported no finding.
+- **Requirements:** R1, R3, R6, R7, R9, R16; KTD5, KTD6, KTD7, KTD8, KTD11.
+- **Rulings, fixes** (each scenario fails at the commit named, unless marked as pinning existing behaviour):
+  - K1 (security P1 and gaps): J1 walks every alias of a directory, so nested aliases (`a`, `b -> a` at each level) fan out exponentially. The walk counts the directories it lists per pattern export and refuses past a bound with `ManifestRejected` naming the export (`24e9b67`). A root pattern then met the same fan-out through `node_modules`, where pnpm's symlinks alias like any tree; the walk no longer enters a directory whose name is an invalid export segment lying wholly inside the matched name, and the bound is 1024 (`e8df9af`). Reader scenarios: an alias tree of depth 10 is refused, failing at `681efe3`; a `node_modules` alias tree of depth 13 under a root pattern is read, failing at `3016e54`. The README states the bound.
+  - K2 (correctness P2 and gap): a type parameter hid a same-named type reached in another file (`f<T>(): ns.T`). A lookup that crosses a file boundary starts with no names in scope (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K3 (DeepSeek peer P2): a private constructor was dropped, so making a class unconstructable left the model unchanged. It is a member named `private constructor`, apart from `constructor` (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K4 (DeepSeek peer P3): an index signature took its parameter's name, so renaming `k` to `key` changed the model. It is named by its key type alone (`[key: string]`), in members and in text (`4ba7034`). Builder scenario; fails at `681efe3`.
+  - K5 (testing P3, DeepSeek delta P3): the `declarations` fixture ignored entry-point lists after the first; a second list is now a type error (`4ba7034`).
+  - K6 (adversarial P2 and gaps): the resolver ignored a namespace body's own declarations, so a reference to the body's type `A` reported the imported `A` as forgotten. `namespaceSpacesOf` gives a body's type-space and value-space names once for the builder and the resolver; type references and interface heritage read the type space, `typeof` and class heritage the value space (`9e220fc`). Analysis scenarios agree with upstream; two fail at `681efe3`.
+  - K7 (DeepSeek delta P2 and gap): the builder scoped only a body's type names, so with `const A` in `N`, `typeof A` printed the imported `A`. `TypeContext` gains `valuesInScope`; `typeof` and a class's superclass resolve their head in the value space and their type arguments in the type space (`abb3022`). Builder scenario; fails at `9e220fc`.
+  - K8 (DeepSeek delta gap): no scenario failed without J1's code-unit sort of each listing. Every alias is walked, entry points are re-sorted by export path and the bound counts every listing, so the order reaches no output; the sort goes (`3016e54`).
+  - K9 (maintainability P3 and gap): the statement classifier existed three times and the entry-point pair four times; `classifyDeclaration` and `EntryDeclaration` in `declaration-graph.ts` are the one copy each (`43a8ee4`). The copies had drifted: a namespace body dropped a destructuring constant that `tsc` 7.0.2 accepts in a `declare namespace` (orchestrator probe, exit 0), so `N.a` vanished; it is refused as at file scope. Refusals scenario; fails at `abb3022`.
+  - K10 (maintainability P2, testing P2, DeepSeek delta gap, api-contract gap): the 1120-line model feature splits its eight namespace scenarios into a namespaces feature (`db5c70a`); pins for a type-incorrect annotated package taking `FastPath` with `count` modelled as `number` (`db5c70a`), a symlink to an ancestor two levels up walked once, and a manifest without `name` or `version` refused as `ManifestRejected` (`e8df9af`).
+- **Rulings, rejected:**
+  - DeepSeek peer residual, private fields and methods are dropped: upstream 7.59.1 trims every private declaration from its model and report (`ApiModelGenerator.js:117`, `ApiReportGenerator.js:370`). K3 keeps the private constructor alone because it decides who may construct or extend the class.
+  - Reliability gaps and residuals on `typescript-7-compiler.ts` (`catchCause` at `:97`, `:230`): U15. The "unbounded concurrency" read of emitted declarations is sequential: `Effect.forEach` without a `concurrency` option runs one effect at a time.
+  - Testing gap, the router's `Fallback` arm has no in-process scenario: the compiler adapter spawns `tsc`, which KTD11 keeps in the e2e journeys, where the TS9010 package pins it.
+  - DeepSeek peer residual, multi-star pattern targets: the family writes single-star targets under KTD5's condition, and a multi-star target is pinned as naming no entry, so it is never mapped wrongly and a package left without entries is refused with `NoSourceEntry`.
+  - Maintainability P2 (seven per-kind extractors) and residual (two renderers over one oxc union): U12 A7 and C7. Residual, the typed error bases repeat per file: KTD9 (isolatedDeclarations).
+  - Project-standards residual, two test fixtures order strings by hand: AGENTS.md's ordering rule and its gate cover `src`.
+  - Adversarial residual, an aliased directory gives two export paths for one file: J1.
+- **Follow-ups:**
+  - K3 and K4 meet the report: upstream's report omits a private constructor and spells an index signature's parameter as written. Owner: PR4. Trigger: the report renderer, which omits `private constructor` members and takes spellings from the declaration text spans PR4 adds.
+  - Correctness, adversarial and DeepSeek residuals and gaps on route equality (unauthored packages, parameter properties, a symlinked entry sharing another entry's declaration), the security residuals on symlinks resolving outside the package and native parsing, and the resolver's namespace-member messages: unchanged owners and triggers (U16, U18, U19).
+  - Maintainability P2 and gap, the profile harness re-implements reader helpers: owner PR5 (U18). Performance residuals (`dedupeWith`, per-declaration rescans, the fallback's whole-output reads): owner PR5. Trigger: PR5's benchmark lane.
+- **Preserved:** U11-U19 rulings, except K8, which drops J1's sort as unobservable; the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `681efe3..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -537,7 +567,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U19 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U20 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
