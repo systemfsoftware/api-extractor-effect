@@ -182,6 +182,30 @@ Feature('Building the namespaces of a package API model')
     )
 
     scenario(
+      "a class or enum one block of a merged namespace declares is read in both spaces from the other block",
+      Gherkin.Do.pipe(
+        Given('an entry importing `C` and `E` from `pkg`, declaring `N` once with a class `C` and an enum `E`, and again with types naming `C`, `typeof C`, `E` and `typeof E`')(
+          'declarations',
+          () =>
+            Effect.succeed(declarations([[
+              'index.d.ts',
+              "import { C, E } from 'pkg'\nexport declare namespace N {\n  class C {}\n  enum E { A = 1 }\n}\nexport declare namespace N {\n  type OfC = C\n  type QueryC = typeof C\n  type OfE = E\n  type QueryE = typeof E\n}\n",
+            ]])),
+        ),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then("every reference reads `N`'s own `C` and `E`, none the imports")((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
+            items: expect.arrayContaining([
+              { kind: 'typeAlias', name: 'OfC', typeParameters: [], type: { kind: 'reference', name: 'C', args: [] } },
+              { kind: 'typeAlias', name: 'QueryC', typeParameters: [], type: { kind: 'text', text: 'typeof C' } },
+              { kind: 'typeAlias', name: 'OfE', typeParameters: [], type: { kind: 'reference', name: 'E', args: [] } },
+              { kind: 'typeAlias', name: 'QueryE', typeParameters: [], type: { kind: 'text', text: 'typeof E' } },
+            ]),
+          })),
+      ),
+    )
+
+    scenario(
       'a namespace body value does not shadow an imported type of the same name',
       Gherkin.Do.pipe(
         Given('an entry importing type `A` from `pkg` and declaring namespace `N` with a value `A` and a function `f` returning `A`')('declarations', () =>
