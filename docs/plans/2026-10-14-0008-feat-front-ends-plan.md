@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-13-2333-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-13-2348-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -495,6 +495,26 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U17 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `460f429..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U19. Rulings on the full-path review at `3ff23ef`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `3ff23ef` (run `20261013-234958-3ff23efe`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `460f429..3ff23ef`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (30 honored, 22 not reached, none contradicted); the ci-wall-clock pack is not triggered (`.github`, `flake.nix` and `flake.lock` are byte-identical to `main`) and its pre-existing rows stay with PR5. Security, reliability, performance, project-standards and api-contract reported no finding.
+- **Requirements:** R3, R6, R7, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at the commit named):
+  - J1 (DeepSeek delta P2; testing and adversarial residuals): `fef7fe8`'s walk-wide visited set listed a sibling's symlinked alias (`src/b -> a`) under one name only, chosen by readdir order, so model bytes depended on the host. The walk skips a directory only when its real path is one of its ancestors' and reads each listing in code-unit order (`9b04f01`). Reader scenario; fails at `3ff23ef`.
+  - J2 (DeepSeek delta residual): `1f3d00c` put every name a namespace body declares in scope, so a `const A` in `N` shadowed an imported type `A`. Only names declared as an interface, type alias, class, enum or namespace are in scope for type positions (`8881471`). Builder scenario; fails at `3ff23ef`.
+  - J3 (maintainability P1, P2 and P3): the 1180-line model feature is split into the built-model feature and a refusals feature over one fixture module; three module-private helpers lose their `export`; `TypeContext.typeParameters` is `namesInScope` (`8881471`).
+  - J4 (api-contract residual and gaps, testing P3 and gaps, DeepSeek delta gaps): pins for a `.d.mts` entry, a plain-string subpath target (`NoSourceEntry`), a missing `package.json` (`PlatformError`), the workspace root and tsconfig choice, a pattern target outside the package (`9b04f01`), and an exported import alias in a namespace body (`8881471`); the README says where the source condition is read and names `PlatformError` (`9b04f01`).
+- **Rulings, rejected:**
+  - Adversarial P2 and correctness P3, a source condition nested under another condition or inside a fallback array names no entry: KTD5 reads the family condition directly under an export path, which is where the family writes it; which nested branch Node takes depends on the consumer's active conditions (`import` or `require`), which the reader has no mode to choose, and U13 #2 already admits and skips array targets. The README now states the rule.
+  - DeepSeek delta residual, a shadowed reference no longer claims a hidden local's name, so another hidden local's `_N` suffix can change: the suffix now follows the declarations a reference really reaches, which is the intended naming.
+  - Reliability and security residuals, `tsc`'s stdout and stderr are buffered whole: ruling #13 leaves `tsc` without a deadline and U12 reads neither stream as diagnostics; a hostile package that floods `tsc`'s output is the PR4 adversarial corpus's input.
+- **Follow-ups:**
+  - DeepSeek peer P3 and gaps: the fallback refuses a hand-written declaration's relative import that names no declaration file even when a TypeScript source exists there, while the fast path emits from the source; `.d.mts`/`.d.cts` and non-declaration specifiers are not run through both routes. Adversarial and correctness residuals: route equality is shown on authored fixtures only. Owner: PR4. Trigger: PR4's differential lane and adversarial corpus, which run both routes on unauthored packages.
+  - Security residual and gap, refusal text carries package-controlled characters to a renderer: owner PR4. Trigger: PR4's report renderer, the first sink that must escape it.
+  - Performance residuals and gap (a pattern target at the package root walks installed dependencies; per-declaration rescans in the resolver and the rename sweep) and the remaining testing gaps (an empty-output `tsc` exit, resolver comment attribution around `export default`): owner PR5 and PR4 respectively. Trigger: PR5's benchmark lane with a large synthetic package; PR4's differential lane.
+- **Preserved:** U11-U18 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `3ff23ef..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -517,7 +537,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U18 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U19 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
