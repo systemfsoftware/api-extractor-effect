@@ -6,7 +6,7 @@ topic: front-ends
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 origin: docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md
-supersedes: docs/plans/2026-10-14-0130-feat-front-ends-plan.md
+supersedes: docs/plans/2026-10-14-0143-feat-front-ends-plan.md
 execution: code
 ---
 
@@ -624,6 +624,29 @@ U1 → U2 (profile committed) → U3 (choice recorded) → U4 → U5 → U6 → 
 - **Preserved:** U11-U22 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
 - **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `ea58038..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
 
+### U24. Rulings on the full-path review at `fa6bca2`
+
+- **Goal:** every finding, testing gap and residual of the full-path `ce-code-review` at `fa6bca2` (run `20261014-014547-fa6bca20`: ten reviewer roles, the learnings and ci-wall-clock checks, the DeepSeek peer and the DeepSeek delta lens over `ea58038..fa6bca2`, both `openrouter/deepseek/deepseek-v4.1-flash`) has a ruling. The learnings reviewer adjudicated all 52 pack rules (22 honored, 30 not reached, none contradicted); the ci-wall-clock pack is not triggered. Testing, performance, security, adversarial, api-contract, project-standards and the DeepSeek peer reported no finding.
+- **Requirements:** R1, R6, R16; KTD5, KTD6.
+- **Rulings, fixes** (each scenario fails at `fa6bca2`, unless marked as pinning existing behaviour):
+  - O1 (DeepSeek delta P3): N1 named the first star target listing a name, so with `a.d.ts` listing `x` unresolved before `b.d.ts` re-exporting it from `lodash`, the refusal paired `a.d.ts` with a re-export it does not hold. An external symbol carries the file whose binding resolved it, and that refusal names it; the unresolved-name refusal keeps naming the first listing file (`d08f648`). Refusals scenario.
+  - O2 (testing gap): U1 moved `VerdictTypeId` onto `Verdict.prototype` and only a probe read it. A verdict decoded from the cell's document holds the brand (`84ef8d2`); the scenario fails when the prototype brand is removed.
+  - O3 (correctness P2, confidence 50): a conditions object under the source condition names no entry. KTD5 reads the condition where the family writes it, with a path for its value; the README states it beside the nested and array forms, and the reader scenario pins it (`ecbf999`). Pins existing behaviour.
+- **Rulings, rejected:**
+  - Reliability P3, an empty compile fails with a raw `NotFound`: not reachable from package input. Probed with a fallback package whose tsconfig names only a hand-written `index.d.ts` that re-exports an unannotated `util.ts`, with and without a `util.d.ts` beside it: `tsc` follows the import, emits `util.d.ts`, and both build a model.
+  - Maintainability P3, a shared module for the NUL-delimited keys: each key is private to its module and of a different arity, and C1's disjointness holds per key; one module would couple five for one template string.
+  - Reliability residual, `tsconfig.build.json` sets `stripInternal: true` while the fast path does not: a package the fast path declines takes the fallback by design, and the routing scenario pins this package on the fast path.
+  - Testing gap, interrupting the compiler adapter: its temp directories and child are released by `Effect.scoped` and `makeTempDirectoryScoped`, so a test would test Effect's scope.
+  - Project-standards gap, no CI gate for the locale ban: a new gate needs operator approval (GATE1); the Verification Contract runs the `git grep` at each head.
+  - Testing and api-contract gaps on the encoded shape of `Route` and `AnalysisMessage`: U22's ruling (codecs typed from their schemas).
+- **Follow-ups:**
+  - Maintainability P3, the profile harness copies `analyse`'s routing: owner PR5 with the harness's other copies (U18). Trigger: PR5 moving the profile into its benchmark lane.
+  - Adversarial residuals, a `Fallback` route's `Reported` diagnostic may be oxc's, not `tsc`'s, and text-changing options reaching the fallback through `extends`: owner PR4. Trigger: the report renderer and the adversarial corpus.
+  - Correctness gaps, an `@internal` item inside a namespace and an unsupported enum member name; security gap, a pattern walk through a directory symlink out of the package; DeepSeek gap, a hand-written entry reaching further declarations: owner PR4, as U20 and U22. Trigger: PR4's adversarial corpus and differential lane.
+  - Reliability, performance and security residuals: unchanged owners and triggers (U20, U22, U23).
+- **Preserved:** U11-U23 rulings and the PR1 counterexample record (CI run 38372869767, `∀x_TypeExprNesting_≤MaxDepth1`), not re-run.
+- **Verification:** the Verification Contract gates at the final head, a DeepSeek delta lens over `fa6bca2..` the final head, and a full-path receipt (merge, validator and report leaves) at the final head.
+
 ---
 
 ## Verification Contract
@@ -646,7 +669,7 @@ No mutation run, local or in CI (origin R23).
 
 ## Definition of Done
 
-- U1-U23 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
+- U1-U24 verified; every Verification Contract gate passes locally and CI is green on the exact PR head.
 - The commit adding the profile precedes the commit adding its `Decision` section, which records the emitter choice with the profile's numbers.
 - Report-only `ce-code-review` findings carry a ruling table, and only operator-accepted fixes are applied.
 - The two delivery questions are ruled by the operator before the PR opens.
