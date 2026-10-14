@@ -74,8 +74,9 @@ star) expands to one entry per matching source under Node's `exports` rules: an 
 subpath wins over a pattern, and an export path belongs to the pattern key Node picks for
 it, so it names no entry when that key's target has no source or is `null`. A key with two
 stars names no entry. The condition is read where the family writes it, directly
-under an export path; a target that nests it under another condition, or lists targets in
-an array, names no entry. A package with no such export is refused with `NoSourceEntry`.
+under an export path, and its value is the source's path; a target that nests it under
+another condition, lists targets in an array, or gives the condition anything but a path
+names no entry. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
 refuses — is refused with `ManifestRejected`, naming the package root. So is a pattern
 export whose walk lists more than 1024 directories, which symlinked aliases of a

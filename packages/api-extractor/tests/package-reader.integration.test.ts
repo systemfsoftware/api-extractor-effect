@@ -88,8 +88,8 @@ const nestedPatternPackage = packageOf(
 )
 
 const excludedTargetPackage = packageOf(
-  { '.': { [condition]: './src/mod.ts' }, './internal/*': null, './legacy': ['./dist/legacy.js'] },
-  { 'src/mod.ts': 'export const mod: number = 1\n' },
+  { '.': { [condition]: './src/mod.ts' }, './internal/*': null, './legacy': ['./dist/legacy.js'], './nested': { [condition]: { import: './src/nested.ts' } } },
+  { 'src/mod.ts': 'export const mod: number = 1\n', 'src/nested.ts': 'export const nested: number = 1\n' },
 )
 
 const rootPatternPackage = packageOf(
@@ -321,9 +321,9 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
-      'a null or array export target is skipped, and the package is still read',
+      'a null, array or non-path export target is skipped, and the package is still read',
       Gherkin.Do.pipe(
-        Given('a package exporting `./src/mod.ts` at `.`, excluding `./internal/*` with null and listing `./legacy` as a fallback array')('packageRoot', () => excludedTargetPackage),
+        Given('a package exporting `./src/mod.ts` at `.`, excluding `./internal/*` with null, listing `./legacy` as a fallback array and nesting conditions under the source condition at `./nested`')('packageRoot', () => excludedTargetPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the `.` entry is read')((scope, expect) =>
           expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])
