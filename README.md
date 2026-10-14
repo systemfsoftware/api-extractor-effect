@@ -69,16 +69,19 @@ process.stdout.write(ApiModel.serialise(analysis.model))
 `.ts`, `.tsx`, `.mts` or `.cts` file, or a hand-written `.d.ts`, `.d.mts` or `.d.cts`
 file, as an entry point; `readPackage({ packageRoot,
 sourceCondition })` reads another condition instead, for example `types` for a package
-whose sources are not under the family's condition. A subpath pattern (`"./*"`)
-expands to one entry per matching source under Node's `exports` rules, and an explicit
-subpath wins over a pattern. The condition is read where the family writes it, directly
+whose sources are not under the family's condition. A subpath pattern (`"./*"`, one
+star) expands to one entry per matching source under Node's `exports` rules: an explicit
+subpath wins over a pattern, and an export path belongs to the pattern key Node picks for
+it, so it names no entry when that key's target has no source or is `null`. A key with two
+stars names no entry. The condition is read where the family writes it, directly
 under an export path; a target that nests it under another condition, or lists targets in
 an array, names no entry. A package with no such export is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
 refuses — is refused with `ManifestRejected`, naming the package root. So is a pattern
 export whose walk lists more than 1024 directories, which symlinked aliases of a
-directory can reach by fanning out; a symlink back to an ancestor is never entered, nor
-is a `node_modules` directory no export name could pass through.
+directory can reach by fanning out. The walk enters only directories the pattern's
+prefix can lead to, never a symlink back to an ancestor, and never a `node_modules`
+directory no export name could pass through.
 A `package.json`
 that is missing or cannot be read fails with the file system's `PlatformError`, as every
 operation here does on an I/O fault.

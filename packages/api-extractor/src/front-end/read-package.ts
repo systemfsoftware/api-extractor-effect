@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Match, Option, Order, Path, Schema } from 'effect'
+import { Array as Arr, Effect, FileSystem, HashSet, Match, Option, Order, Path, Schema } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { directoryOf, relativeWithin } from './declaration-graph.ts'
@@ -49,7 +49,11 @@ const exportMapOf = (exports: PackageManifest['exports']): ReadonlyArray<readonl
     Match.orElse((record) => Object.entries(record).filter(([exportPath]) => exportPath !== './package.json')),
   )
 
-const isPatternKey = (exportPath: string): boolean => exportPath.includes('*')
+const starCountOf = (exportPath: string): number => exportPath.split('*').length - 1
+
+const isPatternKey = (exportPath: string): boolean => starCountOf(exportPath) === 1
+
+const isExplicitKey = (exportPath: string): boolean => starCountOf(exportPath) === 0
 
 type PatternParts = { readonly prefix: string; readonly suffix: string }
 
@@ -141,8 +145,14 @@ const enterDirectory = (
 ): Effect.Effect<Walk, WalkError, Platform> =>
   HashSet.has(ancestors, realPath) ? Effect.succeed(walk) : walkStep(pattern, relative, HashSet.add(ancestors, realPath), walk)
 
-const isUnmatchable = (pattern: WalkPattern, childRelative: string, name: string): boolean =>
+const leadsToPrefix = (prefix: string, childRelative: string): boolean =>
+  `${childRelative}/`.startsWith(prefix) || prefix.startsWith(`${childRelative}/`)
+
+const isInvalidInsideMatch = (pattern: WalkPattern, childRelative: string, name: string): boolean =>
   INVALID_SEGMENT.test(name) && pattern.prefix.length <= childRelative.length - name.length
+
+const isUnmatchable = (pattern: WalkPattern, childRelative: string, name: string): boolean =>
+  !leadsToPrefix(pattern.prefix, childRelative) || isInvalidInsideMatch(pattern, childRelative, name)
 
 const stepChild = (pattern: WalkPattern, relative: string, ancestors: HashSet.HashSet<string>) =>
   (walk: Walk, name: string): Effect.Effect<Walk, WalkError, Platform> =>
@@ -183,21 +193,26 @@ const patternPrecedence: Order.Order<string> = Order.combineAll([
   Order.mapInput(Order.Number, (key: string) => key.length),
 ])
 
-const preferredPattern = (candidate: PatternEntry, known: PatternEntry): PatternEntry =>
-  patternPrecedence(candidate.key, known.key) > 0 ? candidate : known
+const baseOf = (key: string): string => key.slice(0, key.indexOf('*'))
 
-const bestPerPath = (items: ReadonlyArray<PatternEntry>): ReadonlyArray<PatternEntry> =>
-  Arr.fromIterable(
-    HashMap.values(
-      Arr.reduce(items, HashMap.empty<string, PatternEntry>(), (best, item) =>
-        HashMap.set(
-          best,
-          item.entry.exportPath,
-          Option.match(HashMap.get(best, item.entry.exportPath), { onNone: () => item, onSome: (known) => preferredPattern(item, known) }),
-        ),
-      ),
-    ),
-  )
+const trailerOf = (key: string): string => key.slice(key.indexOf('*') + 1)
+
+const startsPastBase = (exportPath: string, key: string): boolean => exportPath.startsWith(baseOf(key)) && exportPath !== baseOf(key)
+
+const coversTrailer = (exportPath: string, key: string): boolean => exportPath.endsWith(trailerOf(key)) && exportPath.length >= key.length
+
+const endsWithTrailer = (exportPath: string, key: string): boolean => trailerOf(key).length === 0 || coversTrailer(exportPath, key)
+
+const keyMatches = (exportPath: string) => (key: string): boolean => startsPastBase(exportPath, key) && endsWithTrailer(exportPath, key)
+
+const winningKeyOf = (patternKeys: ReadonlyArray<string>, exportPath: string): Option.Option<string> =>
+  Arr.match(patternKeys.filter(keyMatches(exportPath)), {
+    onEmpty: () => Option.none(),
+    onNonEmpty: (matching) => Option.some(Arr.max(matching, patternPrecedence)),
+  })
+
+const isWinner = (patternKeys: ReadonlyArray<string>) => (item: PatternEntry): boolean =>
+  Option.exists(winningKeyOf(patternKeys, item.entry.exportPath), (key) => key === item.key)
 
 const expandPattern = (root: string, condition: string, key: string, target: ExportTarget): Effect.Effect<ReadonlyArray<PatternEntry>, WalkError, Platform> =>
   Option.match(conditionValue(target, condition), {
@@ -216,11 +231,13 @@ const expandPattern = (root: string, condition: string, key: string, target: Exp
 const entryPointsOf = (root: string, manifest: PackageManifest, condition: string): Effect.Effect<ReadonlyArray<SourceEntryPoint>, WalkError, Platform> =>
   Effect.gen(function* () {
     const entries = exportMapOf(manifest.exports)
-    const explicit = entries.filter(([exportPath]) => !isPatternKey(exportPath))
+    const explicit = entries.filter(([exportPath]) => isExplicitKey(exportPath))
     const patterns = entries.filter(([exportPath]) => isPatternKey(exportPath))
     const explicitPaths = HashSet.fromIterable(explicit.map(([exportPath]) => exportPath))
     const expanded = yield* Effect.forEach(patterns, ([key, target]) => expandPattern(root, condition, key, target), { concurrency: 1 })
-    const chosen = bestPerPath(Arr.flatten(expanded).filter((item) => !HashSet.has(explicitPaths, item.entry.exportPath)))
+    const chosen = Arr.flatten(expanded)
+      .filter((item) => !HashSet.has(explicitPaths, item.entry.exportPath))
+      .filter(isWinner(patterns.map(([key]) => key)))
     return Arr.sort([...explicit.map(entryPointOf(condition)).flatMap(Option.toArray), ...chosen.map((item) => item.entry)], byExportPath)
   })
 

@@ -406,6 +406,63 @@ Feature("A package's exports name its entry points")
     )
 
     scenario(
+      'a pattern export prunes a node_modules directory nested under its pattern prefix',
+      Gherkin.Do.pipe(
+        Given(`a package exporting every \`./src/<name>.ts\` through \`"./*"\`, whose \`src/node_modules/dep\` holds ${ALIAS_DEPTH} nested directories each with \`a\` and a symlink \`b\` to it`)(
+          'packageRoot',
+          () => aliasFanOutPackage('./src/*.ts', 'src/node_modules/dep', { 'src/mod.ts': '' }),
+        ),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('the nested fan-out is pruned and only the package\'s own source is an entry point')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: './mod', sourceFile: 'src/mod.ts' }])),
+      ),
+    )
+
+    scenario(
+      'an export path takes its entry only from the pattern key Node picks for it, even when that key names no file',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./src/*.ts` at `"./*"`, `./vendor/*.ts` at `"./a/*"` and null at `"./internal/*"`, with `src/a/x.ts`, `src/b.ts`, `src/internal/z.ts` and `vendor/y.ts`')(
+          'packageRoot',
+          () =>
+            packageOf(
+              { './*': { [condition]: './src/*.ts' }, './a/*': { [condition]: './vendor/*.ts' }, './internal/*': null },
+              { 'src/a/x.ts': '', 'src/b.ts': '', 'src/internal/z.ts': '', 'vendor/y.ts': '' },
+            ),
+        ),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('`./a/x` and `./internal/z` name no entry, since their winning keys resolve no source, while `./a/y` and `./b` do')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([
+            { exportPath: './a/y', sourceFile: 'vendor/y.ts' },
+            { exportPath: './b', sourceFile: 'src/b.ts' },
+          ])),
+      ),
+    )
+
+    scenario(
+      'an export key holding two stars names no entry point',
+      Gherkin.Do.pipe(
+        Given('a package exporting `./src/mod.ts` at `.` and `./src/*.ts` at `"./*/*.ts"`, with `src/b.ts`')('packageRoot', () =>
+          packageOf({ '.': { [condition]: './src/mod.ts' }, './*/*.ts': { [condition]: './src/*.ts' } }, { 'src/mod.ts': '', 'src/b.ts': '' })),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('only `.` is an entry point, and no export path holds a star')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])),
+      ),
+    )
+
+    scenario(
+      'a pattern whose star sits inside a file name walks only directories its prefix can lead to',
+      Gherkin.Do.pipe(
+        Given(`a package exporting \`./src<name>.ts\` through \`"./*"\`, with \`srcA.ts\` beside a \`node_modules/dep\` holding ${ALIAS_DEPTH} nested directories each with \`a\` and a symlink \`b\` to it`)(
+          'packageRoot',
+          () => aliasFanOutPackage('./src*.ts', 'node_modules/dep', { 'srcA.ts': '' }),
+        ),
+        When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
+        Then('`node_modules` is never walked and `./A` is the one entry point')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([{ exportPath: './A', sourceFile: 'srcA.ts' }])),
+      ),
+    )
+
+    scenario(
       'a package whose exports is a bare path or absent names no source entry',
       Gherkin.Do.pipe(
         Given('a package whose `exports` is the string `./src/mod.ts`')('stringExports', () =>
