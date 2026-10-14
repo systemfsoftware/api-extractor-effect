@@ -1,36 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel, FrontEnd } from '@systemfsoftware/api-extractor'
-import { Array as Arr, Effect, Layer, Option } from 'effect'
+import { Effect, Layer } from 'effect'
 import { isolatedDeclarationSync } from 'oxc-transform'
-
-type Model = ApiModel.ApiModel
-type EntryPoint = ApiModel.EntryPoint
-type Item = ApiModel.ApiItem
+import { builtOf, declarations, entryAt, itemOf, itemsNamed, type Model } from './__fixtures__/declarations.ts'
 
 const Feature = makeFeature({ it })
 
-const declarations = (
-  files: ReadonlyArray<readonly [string, string]>,
-  entryPoints: ReadonlyArray<readonly [string, string]> = [['.', 'index.d.ts']],
-): FrontEnd.Declarations => ({
-  producer: 'fixture-emitter@0.0.0',
-  package: { name: 'fixture', version: '1.0.0' },
-  entryPoints: entryPoints.map(([exportPath, declarationFile]) => ({ exportPath, declarationFile })),
-  files: files.map(([path, text]) => ({ path, text })),
-})
-
-const entryAt = (model: Model, path: string): EntryPoint =>
-  Option.getOrThrow(Arr.findFirst(model.entryPoints, (entry) => entry.path === path))
-
-const itemOf = (model: Model, path: string, name: string, kind: Item['kind']): Item =>
-  Option.getOrThrow(Arr.findFirst(entryAt(model, path).items, (item) => item.name === name && item.kind === kind))
-
-const itemsNamed = (model: Model, path: string, name: string): ReadonlyArray<Item> =>
-  entryAt(model, path).items.filter((item) => item.name === name)
-
 const itemNames = (model: Model, path: string): ReadonlyArray<string> => entryAt(model, path).items.map((item) => item.name)
-
-const builtOf = (given: FrontEnd.Declarations) => FrontEnd.buildModel(given)
 
 Feature('Building a package API model from its declaration text')
   .withLayer(Layer.empty)
@@ -287,43 +263,6 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
-      'an assignment export is refused naming the declaration file',
-      Gherkin.Do.pipe(
-        Given('an entry exporting by assignment')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'declare const value: string\nexport = value\n']]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the declaration file')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts' })),
-      ),
-    )
-
-    scenario(
-      'an enum member whose declared value is computed is refused naming the member, not silently left without a value',
-      Gherkin.Do.pipe(
-        Given('a declaration file declaring `enum Flags { Read = 1, Write = 1 << 1 }`')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare enum Flags {\n  Read = 1,\n  Write = 1 << 1\n}\n']]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file and the member')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'enum member `Write` with a computed value' })),
-      ),
-    )
-
-    scenario(
-      'an enum whose merged declarations repeat a member name is refused naming the repeated member',
-      Gherkin.Do.pipe(
-        Given('an entry declaring enum `E` with member `A` twice across two declarations')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare enum E { A = 1 }\nexport declare enum E { A = 2 }\n']]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file and the repeated member')((scope, expect) =>
-          expect({
-            _tag: scope.refusal._tag,
-            file: scope.refusal.file,
-            construct: scope.refusal.construct,
-          }).toEqual({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'enum member `A` declared twice' })),
-      ),
-    )
-
-    scenario(
       'a built model decodes as schema version two',
       Gherkin.Do.pipe(
         Given('an entry with literals, an enum and a namespace')('declarations', () =>
@@ -526,100 +465,6 @@ Feature('Building a package API model from its declaration text')
                 ],
               },
             ],
-          })),
-      ),
-    )
-
-    scenario(
-      'a global augmentation is refused naming the file and the construct',
-      Gherkin.Do.pipe(
-        Given('a declaration file augmenting the global scope')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'declare global {\n  interface Window { extra: string }\n}\nexport declare type T = string\n']]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file and the global augmentation')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`declare global`' })),
-      ),
-    )
-
-    scenario(
-      'a module augmentation is refused naming the file and the named module',
-      Gherkin.Do.pipe(
-        Given('a declaration file augmenting another module')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', 'declare module "other" {\n  interface Thing { extra: string }\n}\nexport declare type T = string\n']]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file and the module')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`declare module "other"`' })),
-      ),
-    )
-
-    scenario(
-      'a named re-export from another package is refused naming the file and the re-export',
-      Gherkin.Do.pipe(
-        Given('an entry re-exporting one name from another package')('declarations', () =>
-          Effect.succeed(declarations([['index.d.ts', "export { X } from 'other-pkg'\n"]]))),
-        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
-        Then('the refusal names the file and the re-export')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({
-            _tag: 'UnsupportedDeclaration',
-            file: 'index.d.ts',
-            construct: 're-export of "X" from "other-pkg"',
-          })),
-      ),
-    )
-
-    scenario(
-      'an untyped constant, a non-literal initialiser, an import by assignment, an exported namespace name, an expression default export, a destructuring constant, a destructuring parameter, a dotted namespace declaration, an unparseable declaration body and a bare import type are each refused naming the file and the construct',
-      Gherkin.Do.pipe(
-        Given('a file declaring `declare const x;`')('noType', () =>
-          Effect.succeed(declarations([['index.d.ts', 'declare const x;\n']]))),
-        Given('a file whose exported constant is initialised by a call')('callInitialised', () =>
-          Effect.succeed(declarations([['index.d.ts', 'declare function f(): string\nexport declare const x = f()\n']]))),
-        Given("a file importing by assignment with `import x = require('y')`")('importEquals', () =>
-          Effect.succeed(declarations([['index.d.ts', "import x = require('y')\n"]]))),
-        Given('a file exporting a namespace name with `export as namespace X`')('namespaceName', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export as namespace X\n']]))),
-        Given('a file exporting an expression as its default with `export default 1 + 1`')('defaultExpression', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export default 1 + 1\n']]))),
-        Given('a file exporting a destructuring constant with `export declare const { a }: { a: string }`')('destructured', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare const { a }: { a: string }\n']]))),
-        Given('a file declaring a function with a destructuring parameter `{ a }: { a: string }`')('destructuringParam', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare function f({ a }: { a: string }): void\n']]))),
-        Given('a file declaring a dotted namespace `A.B`')('dottedNamespace', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare namespace A.B { const x: number }\n']]))),
-        Given('a file whose declaration body is malformed `export declare const = ;`')('unparseable', () =>
-          Effect.succeed(declarations([['index.d.ts', 'export declare const = ;\n']]))),
-        Given("a file whose constant type is the bare `typeof import('./x.js')`")('bareImportType', () =>
-          Effect.succeed(
-            declarations([
-              ['index.d.ts', "export declare const v: typeof import('./x.js')\n"],
-              ['x.d.ts', 'export declare const inner: string\n'],
-            ]),
-          )),
-        When('each declaration file is built')('refusals', (scope) =>
-          Effect.all({
-            noType: Effect.flip(FrontEnd.buildModel(scope.noType)),
-            callInitialised: Effect.flip(FrontEnd.buildModel(scope.callInitialised)),
-            importEquals: Effect.flip(FrontEnd.buildModel(scope.importEquals)),
-            namespaceName: Effect.flip(FrontEnd.buildModel(scope.namespaceName)),
-            defaultExpression: Effect.flip(FrontEnd.buildModel(scope.defaultExpression)),
-            destructured: Effect.flip(FrontEnd.buildModel(scope.destructured)),
-            destructuringParam: Effect.flip(FrontEnd.buildModel(scope.destructuringParam)),
-            dottedNamespace: Effect.flip(FrontEnd.buildModel(scope.dottedNamespace)),
-            unparseable: Effect.flip(FrontEnd.buildModel(scope.unparseable)),
-            bareImportType: Effect.flip(FrontEnd.buildModel(scope.bareImportType)),
-          })),
-        Then('each refusal names the declaration file and the construct it cannot model')((scope, expect) =>
-          expect(scope.refusals).toMatchObject({
-            noType: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a variable declaration without a type' },
-            callInitialised: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a variable initialiser that is not a literal' },
-            importEquals: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`import =`' },
-            namespaceName: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`export as namespace`' },
-            defaultExpression: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`export default` of an expression' },
-            destructured: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a destructuring variable declaration' },
-            destructuringParam: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a destructuring parameter' },
-            dottedNamespace: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a dotted namespace declaration' },
-            unparseable: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: expect.stringMatching(/^unparseable declaration text/) },
-            bareImportType: { _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a bare import type' },
           })),
       ),
     )
@@ -1119,15 +964,34 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
-      'an import alias inside a namespace body is refused, as it is at the top of a file',
+      'a namespace body value does not shadow an imported type of the same name',
       Gherkin.Do.pipe(
-        Given('an entry whose namespace `N` writes `import X = M.Y`')('declarations', () =>
+        Given('an entry importing type `A` from `pkg` and declaring namespace `N` with a value `A` and a function `f` returning `A`')('declarations', () =>
           Effect.succeed(
-            declarations([['index.d.ts', 'export declare namespace N { import X = M.Y; const a: X }\ndeclare namespace M { type Y = string }\nexport {}\n']]),
+            declarations([
+              [
+                'index.d.ts',
+                "import type { A } from 'pkg'\n" +
+                  'export declare namespace N { const A: number; function f(): A }\n',
+              ],
+            ]),
           )),
-        When('the model is built')('refusal', (scope) => Effect.flip(builtOf(scope.declarations))),
-        Then('it is refused naming the file and `import =`')((scope, expect) =>
-          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: '`import =`' })),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('`N.f` returns the imported `A`, while the value stays a value')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toEqual({
+            kind: 'namespace',
+            name: 'N',
+            items: [
+              { kind: 'variable', name: 'A', constant: true, type: { kind: 'keyword', name: 'number' } },
+              {
+                kind: 'function',
+                name: 'f',
+                signatures: [
+                  { typeParameters: [], parameters: [], returns: { kind: 'reference', name: 'A', module: 'pkg', args: [] } },
+                ],
+              },
+            ],
+          })),
       ),
     )
 

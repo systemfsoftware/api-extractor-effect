@@ -55,15 +55,15 @@ export type TypeContext = {
   readonly graph: DeclarationGraph
   readonly file: string
   readonly naming: Naming
-  readonly typeParameters: HashSet.HashSet<string>
+  readonly namesInScope: HashSet.HashSet<string>
 }
 
-const withTypeParameters = (context: TypeContext, names: ReadonlyArray<string>): TypeContext => ({
+const withNamesInScope = (context: TypeContext, names: ReadonlyArray<string>): TypeContext => ({
   ...context,
-  typeParameters: HashSet.union(context.typeParameters, HashSet.fromIterable(names)),
+  namesInScope: HashSet.union(context.namesInScope, HashSet.fromIterable(names)),
 })
 
-export const KEYWORD_ENTRIES = [
+const KEYWORD_ENTRIES = [
   ['TSAnyKeyword', 'any'],
   ['TSBigIntKeyword', 'bigint'],
   ['TSBooleanKeyword', 'boolean'],
@@ -153,7 +153,7 @@ const targetOf = (context: TypeContext, file: string, segments: ReadonlyArray<st
   Arr.match(segments, {
     onEmpty: () => Effect.succeed(plainTarget(segments)),
     onNonEmpty: ([head, ...rest]) =>
-      HashSet.has(context.typeParameters, head)
+      HashSet.has(context.namesInScope, head)
         ? Effect.succeed(plainTarget(segments))
         : Option.match(resolveName(context.graph, file, head), {
             onNone: () => Effect.succeed(plainTarget(segments)),
@@ -293,7 +293,7 @@ const printSignatureLike = (
   decorate: (parts: { readonly typeParameters: string; readonly parameters: string; readonly returnType: string }) => string,
 ): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const inner = withTypeParameters(context, typeParameterNames(typeParameters))
+    const inner = withNamesInScope(context, typeParameterNames(typeParameters))
     const printedTypeParameters = yield* printTypeParameters(inner, typeParameters)
     const printedParameters = yield* printParameters(inner, params)
     const printedReturnType = yield* tail(inner, returnType)
@@ -431,7 +431,7 @@ const mappedOptionalSuffix = (optional: TSMappedType['optional']): string =>
 
 const printMappedType = (context: TypeContext, node: TSMappedType): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const inner = withTypeParameters(context, [node.key.name])
+    const inner = withNamesInScope(context, [node.key.name])
     const constraint = yield* canonicalTypeText(inner, node.constraint)
     const nameType = yield* printOptional(inner, node.nameType, (text) => ` as ${text}`)
     const value = yield* printOptional(inner, node.typeAnnotation, (text) => `: ${text}`)
@@ -448,7 +448,7 @@ const printConditional = (context: TypeContext, node: TSConditionalType): Effect
   Effect.gen(function* () {
     const check = yield* canonicalTypeText(context, node.checkType)
     const extending = yield* canonicalTypeText(context, node.extendsType)
-    const consequent = yield* canonicalTypeText(withTypeParameters(context, inferNamesFor(context, node)), node.trueType)
+    const consequent = yield* canonicalTypeText(withNamesInScope(context, inferNamesFor(context, node)), node.trueType)
     const alternate = yield* canonicalTypeText(context, node.falseType)
     return `${check} extends ${extending} ? ${consequent} : ${alternate}`
   })
@@ -537,11 +537,11 @@ export const TypePrinting: {
     segments: ReadonlyArray<string>,
     source: Option.Option<string>,
   ) => Effect.Effect<ReferenceTarget>
-  readonly withTypeParameters: (context: TypeContext, names: ReadonlyArray<string>) => TypeContext
+  readonly withNamesInScope: (context: TypeContext, names: ReadonlyArray<string>) => TypeContext
   readonly bindingName: (pattern: BindingPattern) => string
 } = {
   canonicalTypeText: canonicalTypeText,
   referenceTargetFor: referenceTargetFor,
-  withTypeParameters: withTypeParameters,
+  withNamesInScope: withNamesInScope,
   bindingName: bindingName,
 }

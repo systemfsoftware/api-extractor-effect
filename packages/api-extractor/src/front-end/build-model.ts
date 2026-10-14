@@ -38,7 +38,7 @@ import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { TypeExprs } from './type-expr-of.ts'
 
-const { withTypeParameters } = TypePrinting
+const { withNamesInScope } = TypePrinting
 
 const { classMembersOf, heritageOf, membersOf, referenceToExpression, signatureOf, typeExprOf, typeParametersOf } = TypeExprs
 
@@ -269,7 +269,7 @@ const namespacesIn = (declarations: ReadonlyArray<Declaration>): ReadonlyArray<T
 
 const typeAliasItem = (context: TypeContext, node: TSTypeAliasDeclaration, name: string): Effect.Effect<TypeAliasItem, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const inner = withTypeParameters(context, typeParameterNames(node.typeParameters))
+    const inner = withNamesInScope(context, typeParameterNames(node.typeParameters))
     const typeParameters = yield* typeParametersOf(inner, node.typeParameters)
     const type = yield* typeExprOf(inner, node.typeAnnotation)
     return { kind: 'typeAlias', name, typeParameters, type }
@@ -306,7 +306,7 @@ const interfaceItemOf = (
       Effect.asSome(
         Effect.gen(function* () {
           const first = Arr.headNonEmpty(present)
-          const inner = withTypeParameters(context, typeParameterNames(first.typeParameters))
+          const inner = withNamesInScope(context, typeParameterNames(first.typeParameters))
           const typeParameters = yield* typeParametersOf(inner, first.typeParameters)
           const extending = yield* Effect.forEach(present, (node) => Effect.forEach(node.extends, (heritage) => heritageOf(inner, heritage)))
           const members = yield* Effect.forEach(present, (node) => membersOf(inner, node.body.body))
@@ -335,7 +335,7 @@ const classItemOf = (
     onNonEmpty: ([node]) =>
       Effect.asSome(
         Effect.gen(function* () {
-          const inner = withTypeParameters(context, typeParameterNames(node.typeParameters))
+          const inner = withNamesInScope(context, typeParameterNames(node.typeParameters))
           const typeParameters = yield* typeParametersOf(inner, node.typeParameters)
           const extended = yield* extendsOf(inner, node)
           const implemented = yield* implementedClauses(inner, node)
@@ -485,12 +485,25 @@ const itemsOfGroups = (
     (items) => items.flat(),
   )
 
+const isTypeSpaceKind = (kind: Declared['kind']): boolean =>
+  Match.value(kind).pipe(
+    Match.whenOr('interface', 'typeAlias', 'class', 'enum', 'namespace', () => true),
+    Match.orElse(() => false),
+  )
+
+const declaresType = (declarations: ReadonlyArray<Declaration>): boolean =>
+  Arr.some(declarations, (declaration) => isTypeSpaceKind(declaration.declared.kind))
+
+const typeSpaceNames = (groups: HashMap.HashMap<string, ReadonlyArray<Declaration>>): ReadonlyArray<string> =>
+  Arr.filter(Arr.fromIterable(HashMap.keys(groups)), (name) =>
+    Option.match(HashMap.get(groups, name), { onNone: () => false, onSome: declaresType }))
+
 const namespaceBodyItems = (
   context: TypeContext,
   bodies: ReadonlyArray<TSModuleBlock | null>,
 ): Effect.Effect<ReadonlyArray<ApiItem>, UnsupportedDeclaration> =>
   Effect.flatMap(bodyDeclarations(context, bodies), (groups) =>
-    itemsOfGroups(withTypeParameters(context, Arr.fromIterable(HashMap.keys(groups))), groups))
+    itemsOfGroups(withNamesInScope(context, typeSpaceNames(groups)), groups))
 
 const bodyStatements = (bodies: ReadonlyArray<TSModuleBlock | null>): ReadonlyArray<Directive | Statement> =>
   bodies.flatMap((body) => Option.match(Option.fromNullishOr(body), { onNone: () => [], onSome: (block) => block.body }))
@@ -655,7 +668,7 @@ const buildEntry = (graph: DeclarationGraph, entry: EntryFile): Effect.Effect<En
     const reachable = yield* Ref.make(HashMap.empty<string, LocalDeclaration>())
     const built = yield* Ref.make(HashMap.empty<string, TypeAliasItem>())
     const naming: Naming = { localNameOf: (at, name, declarations) => localNameOf(reachable, index, at, name, declarations) }
-    const contextFor = (at: string): TypeContext => ({ graph, file: at, naming, typeParameters: HashSet.empty() })
+    const contextFor = (at: string): TypeContext => ({ graph, file: at, naming, namesInScope: HashSet.empty() })
     const items = yield* Effect.forEach(exported, (name) => itemsForExport(graph, contextFor, file, name, HashSet.empty()))
     yield* buildReachableLocals(contextFor, reachable, built)
     const rename = assignNames(exported, yield* Ref.get(reachable))

@@ -42,7 +42,7 @@ import {
 import { refuse } from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
-const { bindingName, canonicalTypeText, referenceTargetFor, withTypeParameters } = TypePrinting
+const { bindingName, canonicalTypeText, referenceTargetFor, withNamesInScope } = TypePrinting
 
 const unknownKeyword: TypeExpr = { kind: 'keyword', name: 'unknown' }
 
@@ -122,7 +122,7 @@ const typeParametersOf = (
   Option.match(Option.fromNullishOr(declaration), {
     onNone: () => Effect.succeed<ReadonlyArray<TypeParameter>>([]),
     onSome: (present) => {
-      const inner = withTypeParameters(context, typeParameterNames(present))
+      const inner = withNamesInScope(context, typeParameterNames(present))
       return Effect.forEach(present.params, (parameter) => typeParameterOf(inner, parameter))
     },
   })
@@ -157,7 +157,7 @@ const signatureOf = (
   returnType: TSTypeAnnotation | null | undefined,
 ): Effect.Effect<Signature, UnsupportedDeclaration> =>
   Effect.gen(function* () {
-    const inner = withTypeParameters(context, typeParameterNames(typeParameters))
+    const inner = withNamesInScope(context, typeParameterNames(typeParameters))
     const bound = yield* typeParametersOf(inner, typeParameters)
     const parameters = yield* parametersOf(inner, params)
     const returns = yield* annotationTypeOrDefault(inner, returnType, 'any')

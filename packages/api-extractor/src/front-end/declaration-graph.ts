@@ -71,7 +71,7 @@ const candidatesForBase = (base: string): ReadonlyArray<string> =>
 const joinedSpecifier = (fromDeclaration: string, specifier: string): string =>
   [directoryOf(fromDeclaration), specifier].filter((part) => part !== '').join('/')
 
-export const declarationCandidates: {
+const declarationCandidates: {
   (specifier: string): (fromDeclaration: string) => ReadonlyArray<string>
   (fromDeclaration: string, specifier: string): ReadonlyArray<string>
 } = Fn.dual(2, (fromDeclaration: string, specifier: string): ReadonlyArray<string> =>
@@ -132,7 +132,7 @@ const moduleNameOf = (name: ModuleExportName): string => (name.type === 'Literal
 
 const sourceOfExport = (node: ExportNamedDeclaration): ReadonlyArray<string> => (node.source === null ? [] : [node.source.value])
 
-export const specifiersOf = (program: Program): ReadonlyArray<string> => {
+const specifiersOf = (program: Program): ReadonlyArray<string> => {
   const found: Array<string> = []
   new Visitor({
     ImportDeclaration: (node) => void found.push(node.source.value),
