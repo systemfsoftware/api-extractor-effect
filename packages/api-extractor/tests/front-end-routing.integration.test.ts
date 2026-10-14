@@ -39,6 +39,17 @@ const tsxEntryBesideTsPackage = packageOf(sourceManifest('tsx-entry', './src/mod
   'mod.ts': 'export const fromTs: number = 2\n',
 })
 
+const directoryBesideTsxImportPackage = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const root = yield* packageOf(sourceManifest('directory-import', './src/mod.ts'), {
+    'mod.ts': "export { a } from './a.js'\n",
+    'a.tsx': 'export const a: number = 1\n',
+  })
+  yield* fileSystem.makeDirectory(path.join(root, 'src', 'a.ts'))
+  return root
+})
+
 const entryOutsidePackage = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -176,6 +187,20 @@ Feature('A package is routed to the front-end its declarations allow')
             route: scope.analysis.route._tag,
             exports: scope.analysis.model.entryPoints.flatMap((entry) => entry.items.map((item) => `${item.kind}:${item.name}`)),
           }).toEqual({ route: 'FastPath', exports: ['variable:fromTsx'] })
+        ),
+      ),
+    )
+
+    scenario(
+      'an import whose .ts candidate is a directory is read from its .tsx source',
+      Gherkin.Do.pipe(
+        Given('a package whose entry re-exports `a` from `./a.js`, where `src/a.ts` is a directory beside `src/a.tsx`')('packageRoot', () => directoryBesideTsxImportPackage),
+        When('the engine analyses it')('analysis', (scope) => Effect.flatMap(FrontEnd.readPackage({ packageRoot: scope.packageRoot }), FrontEnd.analyse)),
+        Then('the fast path models `a` from the .tsx source')((scope, expect) =>
+          expect({
+            route: scope.analysis.route._tag,
+            exports: scope.analysis.model.entryPoints.flatMap((entry) => entry.items.map((item) => `${item.kind}:${item.name}`)),
+          }).toEqual({ route: 'FastPath', exports: ['variable:a'] })
         ),
       ),
     )
