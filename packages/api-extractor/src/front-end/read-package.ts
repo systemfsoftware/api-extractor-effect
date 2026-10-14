@@ -129,7 +129,7 @@ const walkStep = (pattern: WalkPattern, relative: string, ancestors: HashSet.Has
     const names = yield* (listed > MAX_PATTERN_DIRECTORIES
       ? Effect.fail(overBudget(pattern))
       : listNames(path.join(pattern.root, relative)))
-    return yield* Effect.reduce(Arr.sort(names, Order.String), () => ({ names: walk.names, listed }), stepChild(pattern, relative, ancestors))
+    return yield* Effect.reduce(names, () => ({ names: walk.names, listed }), stepChild(pattern, relative, ancestors))
   })
 
 const enterDirectory = (
