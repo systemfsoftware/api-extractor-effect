@@ -4,6 +4,10 @@ queue_rules:
   - name: default
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
+      # Kiro merge authority: only a Kiro approval or the review-gate check run (posted by kiro-systemf) lets a PR queue.
+      - or:
+          - check-success = review-gate
+          - approved-reviews-by = kiro-systemf[bot]
       - check-success = checks / the gate
       - or:
           - check-success = check / a publishable-package change needs an intent
@@ -11,5 +15,8 @@ queue_rules:
       - check-success = Same bytes on every host
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
+      - or:
+          - check-success = review-gate
+          - approved-reviews-by = kiro-systemf[bot]
       - check-success = checks / the gate
       - check-success = Same bytes on every host
