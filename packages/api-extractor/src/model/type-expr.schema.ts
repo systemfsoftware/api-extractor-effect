@@ -1,8 +1,7 @@
 import { Array as Arr, Order, Schema } from 'effect'
 import { canonicalKey, type Json } from '../canonical-json.schema.ts'
 
-/** TypeScript keyword types the model names directly. */
-export const KeywordName = Schema.Literals([
+const KEYWORD_NAMES = [
   'any',
   'bigint',
   'boolean',
@@ -15,7 +14,10 @@ export const KeywordName = Schema.Literals([
   'undefined',
   'unknown',
   'void',
-])
+] as const
+
+/** TypeScript keyword types the model names directly. */
+export const KeywordName: Schema.Literals<typeof KEYWORD_NAMES> = Schema.Literals(KEYWORD_NAMES)
 export type KeywordName = typeof KeywordName.Type
 
 export type KeywordType = {

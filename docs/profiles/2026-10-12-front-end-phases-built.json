@@ -1,0 +1,3160 @@
+{
+  "corpus": {
+    "repository": "https://github.com/systemfsoftware/systemfsoftware",
+    "commit": "732f66a0c85819b2005f9e0930a595bc4de91ee1"
+  },
+  "ownPackage": {
+    "repository": "https://github.com/systemfsoftware/api-extractor-effect",
+    "commit": "d4d55d3cbbf0d412114d00da3c398dbb7f3938e4"
+  },
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "cores": 32,
+    "platform": "linux-x64",
+    "node": "v24.21.0"
+  },
+  "tools": {
+    "oxc-transform": "0.150.0",
+    "oxc-parser": "0.150.0",
+    "typescript": "7.0.2",
+    "typescript-5.9": "5.9.3"
+  },
+  "runs": {
+    "cold": 1,
+    "warm": 5,
+    "emit:tsc5.9.3": "cold only"
+  },
+  "totals": {
+    "discover": 420.71,
+    "emit:oxc-transform": 31.1,
+    "emit:transpileDeclaration": 1418.48,
+    "emit:tsc7": 13646.71,
+    "emit:tsc5.9.3": 93836.87,
+    "parse:oxc-parser": 68.45,
+    "parse:createSourceFile": 66.95,
+    "build:model": 414.23,
+    "resolve:messages": 190.24
+  },
+  "packages": [
+    {
+      "name": "@systemfsoftware/api-extractor",
+      "version": "0.0.0",
+      "origin": "api-extractor-effect",
+      "entryPoints": 1,
+      "sourceFiles": 34,
+      "sourceBytes": 237788,
+      "declarationFiles": 34,
+      "declarationStatements": 344,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 34,
+        "differing": 3,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 3,
+        "locals": 70,
+        "messages": 119
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 46.12,
+          "warmMedianMs": 59.85
+        },
+        "emit:oxc-transform": {
+          "coldMs": 13.78,
+          "warmMedianMs": 1.79
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 213.63,
+          "warmMedianMs": 97.52
+        },
+        "emit:tsc7": {
+          "coldMs": 416.43,
+          "warmMedianMs": 464.81
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2996.49,
+          "warmMedianMs": 2996.49
+        },
+        "parse:oxc-parser": {
+          "coldMs": 2.32,
+          "warmMedianMs": 1.91
+        },
+        "parse:createSourceFile": {
+          "coldMs": 5.28,
+          "warmMedianMs": 4.17
+        },
+        "build:model": {
+          "coldMs": 46.14,
+          "warmMedianMs": 32.27
+        },
+        "resolve:messages": {
+          "coldMs": 15.93,
+          "warmMedianMs": 14.15
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-atom",
+      "version": "6.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 35,
+      "sourceBytes": 388509,
+      "declarationFiles": 35,
+      "declarationStatements": 667,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 145,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 145,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 184,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 35,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "UnsupportedDeclaration: src/atom-http-api.service.d.ts: `declare global` is not supported",
+        "items": 0,
+        "locals": 0,
+        "messages": 0
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 57.35,
+          "warmMedianMs": 22.54
+        },
+        "emit:oxc-transform": {
+          "coldMs": 3.95,
+          "warmMedianMs": 3.95
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 208.66,
+          "warmMedianMs": 142.47
+        },
+        "emit:tsc7": {
+          "coldMs": 545.38,
+          "warmMedianMs": 599.92
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3468.25,
+          "warmMedianMs": 3468.25
+        },
+        "parse:oxc-parser": {
+          "coldMs": 11.94,
+          "warmMedianMs": 7.5
+        },
+        "parse:createSourceFile": {
+          "coldMs": 13.62,
+          "warmMedianMs": 9.23
+        },
+        "build:model": {
+          "coldMs": 4.36,
+          "warmMedianMs": 2.93
+        },
+        "resolve:messages": {
+          "coldMs": 7.06,
+          "warmMedianMs": 3.27
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-atom-react",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 10,
+      "sourceBytes": 45423,
+      "declarationFiles": 10,
+      "declarationStatements": 86,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 20,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 20,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 29,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 10,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 5,
+        "messages": 27
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 4.3,
+          "warmMedianMs": 3.37
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.74,
+          "warmMedianMs": 0.41
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 22.96,
+          "warmMedianMs": 20.95
+        },
+        "emit:tsc7": {
+          "coldMs": 679.82,
+          "warmMedianMs": 673.56
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 5016.37,
+          "warmMedianMs": 5016.37
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.14,
+          "warmMedianMs": 0.67
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.36,
+          "warmMedianMs": 1.57
+        },
+        "build:model": {
+          "coldMs": 10.72,
+          "warmMedianMs": 8.29
+        },
+        "resolve:messages": {
+          "coldMs": 2.23,
+          "warmMedianMs": 2.1
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-cluster",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 5,
+      "sourceBytes": 10261,
+      "declarationFiles": 5,
+      "declarationStatements": 35,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 1,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 5,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 6,
+        "messages": 18
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 4.17,
+          "warmMedianMs": 2.91
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.49,
+          "warmMedianMs": 0.16
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 12.68,
+          "warmMedianMs": 7.59
+        },
+        "emit:tsc7": {
+          "coldMs": 375.23,
+          "warmMedianMs": 374.65
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2501.52,
+          "warmMedianMs": 2501.52
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.41,
+          "warmMedianMs": 0.21
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.61,
+          "warmMedianMs": 0.14
+        },
+        "build:model": {
+          "coldMs": 2.73,
+          "warmMedianMs": 3.01
+        },
+        "resolve:messages": {
+          "coldMs": 1.55,
+          "warmMedianMs": 1.59
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-conformance",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 15,
+      "sourceBytes": 50561,
+      "declarationFiles": 15,
+      "declarationStatements": 146,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 47,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 47,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 96,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 15,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 38,
+        "messages": 61
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 8.61,
+          "warmMedianMs": 5.23
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.87,
+          "warmMedianMs": 0.72
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 23.11,
+          "warmMedianMs": 21.78
+        },
+        "emit:tsc7": {
+          "coldMs": 261.68,
+          "warmMedianMs": 290.61
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2360.78,
+          "warmMedianMs": 2360.78
+        },
+        "parse:oxc-parser": {
+          "coldMs": 2.1,
+          "warmMedianMs": 1.43
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.59,
+          "warmMedianMs": 1.27
+        },
+        "build:model": {
+          "coldMs": 23.62,
+          "warmMedianMs": 26.27
+        },
+        "resolve:messages": {
+          "coldMs": 7.07,
+          "warmMedianMs": 6.2
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-microvm",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 9,
+      "sourceBytes": 20513,
+      "declarationFiles": 9,
+      "declarationStatements": 71,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 21,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 21,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 28,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 9,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 4,
+        "messages": 11
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 7.78,
+          "warmMedianMs": 9.12
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.67,
+          "warmMedianMs": 0.28
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 14.08,
+          "warmMedianMs": 15.99
+        },
+        "emit:tsc7": {
+          "coldMs": 621.71,
+          "warmMedianMs": 536.51
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3944.73,
+          "warmMedianMs": 3944.73
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.95,
+          "warmMedianMs": 0.32
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.63,
+          "warmMedianMs": 0.32
+        },
+        "build:model": {
+          "coldMs": 3.2,
+          "warmMedianMs": 2.8
+        },
+        "resolve:messages": {
+          "coldMs": 1.5,
+          "warmMedianMs": 1.18
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-process",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 9,
+      "sourceBytes": 19021,
+      "declarationFiles": 9,
+      "declarationStatements": 64,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 22,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 22,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 29,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 9,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 0,
+        "messages": 7
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 9.37,
+          "warmMedianMs": 2.24
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.43,
+          "warmMedianMs": 0.2
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 11.86,
+          "warmMedianMs": 12.73
+        },
+        "emit:tsc7": {
+          "coldMs": 717.17,
+          "warmMedianMs": 553.31
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3235.75,
+          "warmMedianMs": 3235.75
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.98,
+          "warmMedianMs": 0.34
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.62,
+          "warmMedianMs": 0.32
+        },
+        "build:model": {
+          "coldMs": 1.35,
+          "warmMedianMs": 0.94
+        },
+        "resolve:messages": {
+          "coldMs": 0.57,
+          "warmMedianMs": 0.59
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-socket",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 12,
+      "sourceBytes": 35576,
+      "declarationFiles": 12,
+      "declarationStatements": 101,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 19,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 19,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 31,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 12,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 2,
+        "messages": 25
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 38.92,
+          "warmMedianMs": 14.47
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1,
+          "warmMedianMs": 0.34
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 27.63,
+          "warmMedianMs": 15.86
+        },
+        "emit:tsc7": {
+          "coldMs": 508.4,
+          "warmMedianMs": 530.3
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3545.59,
+          "warmMedianMs": 3545.59
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.57,
+          "warmMedianMs": 0.65
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.08,
+          "warmMedianMs": 0.81
+        },
+        "build:model": {
+          "coldMs": 5.34,
+          "warmMedianMs": 7.22
+        },
+        "resolve:messages": {
+          "coldMs": 3.12,
+          "warmMedianMs": 2.51
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-daemon-spec",
+      "version": "6.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 22,
+      "sourceBytes": 138120,
+      "declarationFiles": 22,
+      "declarationStatements": 400,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 138,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 138,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 279,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 22,
+        "differing": 4,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 41,
+        "messages": 96
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 51.29,
+          "warmMedianMs": 27.43
+        },
+        "emit:oxc-transform": {
+          "coldMs": 12.58,
+          "warmMedianMs": 1.56
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 89.69,
+          "warmMedianMs": 76.72
+        },
+        "emit:tsc7": {
+          "coldMs": 657.77,
+          "warmMedianMs": 373.01
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2723.85,
+          "warmMedianMs": 2723.85
+        },
+        "parse:oxc-parser": {
+          "coldMs": 9.92,
+          "warmMedianMs": 10.39
+        },
+        "parse:createSourceFile": {
+          "coldMs": 8.38,
+          "warmMedianMs": 6.75
+        },
+        "build:model": {
+          "coldMs": 48.72,
+          "warmMedianMs": 34.21
+        },
+        "resolve:messages": {
+          "coldMs": 43.88,
+          "warmMedianMs": 36.26
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/discern",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 40,
+      "sourceBytes": 255997,
+      "declarationFiles": 40,
+      "declarationStatements": 732,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 144,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 144,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 355,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 40,
+        "differing": 14,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 66,
+        "messages": 266
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 99.17,
+          "warmMedianMs": 56.66
+        },
+        "emit:oxc-transform": {
+          "coldMs": 5.63,
+          "warmMedianMs": 4.15
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 184.88,
+          "warmMedianMs": 157.12
+        },
+        "emit:tsc7": {
+          "coldMs": 698.98,
+          "warmMedianMs": 655.53
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3615.29,
+          "warmMedianMs": 3615.29
+        },
+        "parse:oxc-parser": {
+          "coldMs": 11.22,
+          "warmMedianMs": 8.76
+        },
+        "parse:createSourceFile": {
+          "coldMs": 9.96,
+          "warmMedianMs": 8.79
+        },
+        "build:model": {
+          "coldMs": 86.03,
+          "warmMedianMs": 73.26
+        },
+        "resolve:messages": {
+          "coldMs": 35.47,
+          "warmMedianMs": 36.27
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-cell-types",
+      "version": "12.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 7,
+      "sourceBytes": 68241,
+      "declarationFiles": 7,
+      "declarationStatements": 187,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 2,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 7,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 5,
+        "locals": 88,
+        "messages": 141
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 11.59,
+          "warmMedianMs": 5.98
+        },
+        "emit:oxc-transform": {
+          "coldMs": 8.25,
+          "warmMedianMs": 0.82
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 42.22,
+          "warmMedianMs": 31.01
+        },
+        "emit:tsc7": {
+          "coldMs": 384.28,
+          "warmMedianMs": 295.72
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2482.58,
+          "warmMedianMs": 2482.58
+        },
+        "parse:oxc-parser": {
+          "coldMs": 6.96,
+          "warmMedianMs": 3.37
+        },
+        "parse:createSourceFile": {
+          "coldMs": 4,
+          "warmMedianMs": 4.06
+        },
+        "build:model": {
+          "coldMs": 78.22,
+          "warmMedianMs": 52.07
+        },
+        "resolve:messages": {
+          "coldMs": 26.41,
+          "warmMedianMs": 15.17
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-memfs",
+      "version": "6.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 19,
+      "sourceBytes": 63433,
+      "declarationFiles": 19,
+      "declarationStatements": 198,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 68,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 68,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 104,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 19,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 6,
+        "messages": 23
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 10.64,
+          "warmMedianMs": 6.92
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.68,
+          "warmMedianMs": 1.04
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 48.92,
+          "warmMedianMs": 50.41
+        },
+        "emit:tsc7": {
+          "coldMs": 349.77,
+          "warmMedianMs": 307.14
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2874.8,
+          "warmMedianMs": 2874.8
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.85,
+          "warmMedianMs": 1.32
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.4,
+          "warmMedianMs": 0.99
+        },
+        "build:model": {
+          "coldMs": 4.35,
+          "warmMedianMs": 11.16
+        },
+        "resolve:messages": {
+          "coldMs": 1.98,
+          "warmMedianMs": 1.96
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-microsandbox",
+      "version": "5.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 22,
+      "sourceBytes": 60081,
+      "declarationFiles": 22,
+      "declarationStatements": 271,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 94,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 93,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 222,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 22,
+        "differing": 9,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 22,
+        "messages": 77
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 10.22,
+          "warmMedianMs": 7.24
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.87,
+          "warmMedianMs": 1.24
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 43.93,
+          "warmMedianMs": 42.07
+        },
+        "emit:tsc7": {
+          "coldMs": 376.69,
+          "warmMedianMs": 347.58
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2526.87,
+          "warmMedianMs": 2526.87
+        },
+        "parse:oxc-parser": {
+          "coldMs": 3.87,
+          "warmMedianMs": 2.52
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.46,
+          "warmMedianMs": 2.14
+        },
+        "build:model": {
+          "coldMs": 33.51,
+          "warmMedianMs": 19.23
+        },
+        "resolve:messages": {
+          "coldMs": 10.46,
+          "warmMedianMs": 9.29
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-readiness",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 19,
+      "sourceBytes": 29487,
+      "declarationFiles": 19,
+      "declarationStatements": 145,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 53,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 53,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 83,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 19,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 12,
+        "messages": 43
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 5.56,
+          "warmMedianMs": 4.43
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.82,
+          "warmMedianMs": 0.48
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 26.49,
+          "warmMedianMs": 21.13
+        },
+        "emit:tsc7": {
+          "coldMs": 289.99,
+          "warmMedianMs": 278.2
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2114.77,
+          "warmMedianMs": 2114.77
+        },
+        "parse:oxc-parser": {
+          "coldMs": 2.18,
+          "warmMedianMs": 1.6
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.86,
+          "warmMedianMs": 1.45
+        },
+        "build:model": {
+          "coldMs": 7.44,
+          "warmMedianMs": 7.7
+        },
+        "resolve:messages": {
+          "coldMs": 4.13,
+          "warmMedianMs": 3.83
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-spec-runtime",
+      "version": "1.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 6,
+      "sourceBytes": 33771,
+      "declarationFiles": 6,
+      "declarationStatements": 49,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 2,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 6,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 3,
+        "locals": 4,
+        "messages": 21
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 11.96,
+          "warmMedianMs": 2.63
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.75,
+          "warmMedianMs": 0.28
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 11.03,
+          "warmMedianMs": 10.05
+        },
+        "emit:tsc7": {
+          "coldMs": 223.69,
+          "warmMedianMs": 294.08
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1923.32,
+          "warmMedianMs": 1923.32
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.15,
+          "warmMedianMs": 0.47
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.83,
+          "warmMedianMs": 0.54
+        },
+        "build:model": {
+          "coldMs": 15.12,
+          "warmMedianMs": 15.68
+        },
+        "resolve:messages": {
+          "coldMs": 1.56,
+          "warmMedianMs": 1.63
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-gherkin-spec",
+      "version": "7.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 9,
+      "sourceBytes": 67914,
+      "declarationFiles": 9,
+      "declarationStatements": 138,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 15,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 19,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 24,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 9,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "UnsupportedDeclaration: src/mod.d.ts: re-export of \"it\" from \"@systemfsoftware/vitest\" is not supported",
+        "items": 0,
+        "locals": 0,
+        "messages": 104
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 10.67,
+          "warmMedianMs": 10.11
+        },
+        "emit:oxc-transform": {
+          "coldMs": 2.24,
+          "warmMedianMs": 0.66
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 33.64,
+          "warmMedianMs": 30.85
+        },
+        "emit:tsc7": {
+          "coldMs": 325.32,
+          "warmMedianMs": 247.12
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2148.33,
+          "warmMedianMs": 2148.33
+        },
+        "parse:oxc-parser": {
+          "coldMs": 3.34,
+          "warmMedianMs": 2.58
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.3,
+          "warmMedianMs": 2.09
+        },
+        "build:model": {
+          "coldMs": 24.85,
+          "warmMedianMs": 13.01
+        },
+        "resolve:messages": {
+          "coldMs": 12.63,
+          "warmMedianMs": 9.31
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/storybook-gherkin",
+      "version": "5.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 5,
+      "sourceBytes": 37687,
+      "declarationFiles": 5,
+      "declarationStatements": 92,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 12,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 11,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 34,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 5,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 47,
+        "locals": 7,
+        "messages": 66
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 6.82,
+          "warmMedianMs": 5.04
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.05,
+          "warmMedianMs": 0.74
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 15.32,
+          "warmMedianMs": 14.19
+        },
+        "emit:tsc7": {
+          "coldMs": 174.42,
+          "warmMedianMs": 166.71
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1064.4,
+          "warmMedianMs": 1064.4
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.44,
+          "warmMedianMs": 0.82
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.06,
+          "warmMedianMs": 0.72
+        },
+        "build:model": {
+          "coldMs": 8.19,
+          "warmMedianMs": 8.4
+        },
+        "resolve:messages": {
+          "coldMs": 3.73,
+          "warmMedianMs": 3.86
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/npm-package",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 11,
+      "sourceBytes": 31182,
+      "declarationFiles": 11,
+      "declarationStatements": 74,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 29,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 29,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 41,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 11,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 9,
+        "locals": 1,
+        "messages": 9
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 11.99,
+          "warmMedianMs": 4.53
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.95,
+          "warmMedianMs": 0.57
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 21.54,
+          "warmMedianMs": 18.5
+        },
+        "emit:tsc7": {
+          "coldMs": 431.74,
+          "warmMedianMs": 227.32
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1795.68,
+          "warmMedianMs": 1795.68
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.09,
+          "warmMedianMs": 0.43
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.25,
+          "warmMedianMs": 0.54
+        },
+        "build:model": {
+          "coldMs": 4.31,
+          "warmMedianMs": 3.06
+        },
+        "resolve:messages": {
+          "coldMs": 0.78,
+          "warmMedianMs": 0.59
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-plugin-cell-architecture",
+      "version": "5.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 43,
+      "sourceBytes": 133875,
+      "declarationFiles": 43,
+      "declarationStatements": 256,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 65,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 65,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 71,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 43,
+        "differing": 19,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 2,
+        "locals": 0,
+        "messages": 1
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 20.32,
+          "warmMedianMs": 14.52
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.37,
+          "warmMedianMs": 1.03
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 73.87,
+          "warmMedianMs": 58.88
+        },
+        "emit:tsc7": {
+          "coldMs": 361.73,
+          "warmMedianMs": 363.99
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2209.8,
+          "warmMedianMs": 2209.8
+        },
+        "parse:oxc-parser": {
+          "coldMs": 2.7,
+          "warmMedianMs": 1.75
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.18,
+          "warmMedianMs": 1.27
+        },
+        "build:model": {
+          "coldMs": 2.01,
+          "warmMedianMs": 0.98
+        },
+        "resolve:messages": {
+          "coldMs": 0.87,
+          "warmMedianMs": 0.25
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-plugin-dmmf-workflow",
+      "version": "7.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 19,
+      "sourceBytes": 106678,
+      "declarationFiles": 19,
+      "declarationStatements": 161,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 65,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 65,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 65,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 19,
+        "differing": 8,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 2,
+        "locals": 0,
+        "messages": 1
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 8.92,
+          "warmMedianMs": 6.61
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.72,
+          "warmMedianMs": 0.64
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 31.54,
+          "warmMedianMs": 26.39
+        },
+        "emit:tsc7": {
+          "coldMs": 254.43,
+          "warmMedianMs": 290.23
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1846.85,
+          "warmMedianMs": 1846.85
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.37,
+          "warmMedianMs": 0.71
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.31,
+          "warmMedianMs": 0.78
+        },
+        "build:model": {
+          "coldMs": 0.85,
+          "warmMedianMs": 0.64
+        },
+        "resolve:messages": {
+          "coldMs": 0.54,
+          "warmMedianMs": 0.17
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-plugin-effect-platform",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 21,
+      "sourceBytes": 56432,
+      "declarationFiles": 21,
+      "declarationStatements": 126,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 52,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 52,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 62,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 21,
+        "differing": 10,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 3,
+        "locals": 0,
+        "messages": 2
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 7.15,
+          "warmMedianMs": 3.83
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.8,
+          "warmMedianMs": 0.44
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 28.79,
+          "warmMedianMs": 26.23
+        },
+        "emit:tsc7": {
+          "coldMs": 287.95,
+          "warmMedianMs": 310.64
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1621.41,
+          "warmMedianMs": 1621.41
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.01,
+          "warmMedianMs": 0.65
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.97,
+          "warmMedianMs": 0.5
+        },
+        "build:model": {
+          "coldMs": 1.22,
+          "warmMedianMs": 0.84
+        },
+        "resolve:messages": {
+          "coldMs": 0.41,
+          "warmMedianMs": 0.29
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-plugin-effect-schema",
+      "version": "6.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 23,
+      "sourceBytes": 139000,
+      "declarationFiles": 23,
+      "declarationStatements": 139,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 42,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 42,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 45,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 23,
+        "differing": 10,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 2,
+        "locals": 0,
+        "messages": 1
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 32.97,
+          "warmMedianMs": 12.08
+        },
+        "emit:oxc-transform": {
+          "coldMs": 2.12,
+          "warmMedianMs": 0.88
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 42.21,
+          "warmMedianMs": 40.6
+        },
+        "emit:tsc7": {
+          "coldMs": 410.82,
+          "warmMedianMs": 459.41
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2165.39,
+          "warmMedianMs": 2165.39
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.65,
+          "warmMedianMs": 0.97
+        },
+        "parse:createSourceFile": {
+          "coldMs": 7.02,
+          "warmMedianMs": 0.75
+        },
+        "build:model": {
+          "coldMs": 1.15,
+          "warmMedianMs": 0.66
+        },
+        "resolve:messages": {
+          "coldMs": 0.69,
+          "warmMedianMs": 0.16
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-plugin-test-discipline",
+      "version": "5.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 65,
+      "sourceBytes": 206741,
+      "declarationFiles": 65,
+      "declarationStatements": 343,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 147,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 147,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 150,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 65,
+        "differing": 31,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 2,
+        "locals": 0,
+        "messages": 1
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 89.32,
+          "warmMedianMs": 43.88
+        },
+        "emit:oxc-transform": {
+          "coldMs": 3.79,
+          "warmMedianMs": 1.47
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 262.07,
+          "warmMedianMs": 105.85
+        },
+        "emit:tsc7": {
+          "coldMs": 342.13,
+          "warmMedianMs": 264.85
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1687.84,
+          "warmMedianMs": 1687.84
+        },
+        "parse:oxc-parser": {
+          "coldMs": 3.34,
+          "warmMedianMs": 3
+        },
+        "parse:createSourceFile": {
+          "coldMs": 2.56,
+          "warmMedianMs": 2.55
+        },
+        "build:model": {
+          "coldMs": 2.51,
+          "warmMedianMs": 2.41
+        },
+        "resolve:messages": {
+          "coldMs": 1.87,
+          "warmMedianMs": 0.83
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-config-cell-architecture",
+      "version": "4.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 1,
+      "sourceBytes": 928,
+      "declarationFiles": 1,
+      "declarationStatements": 7,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 1,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 6,
+        "locals": 0,
+        "messages": 5
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 0.74,
+          "warmMedianMs": 0.42
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.13,
+          "warmMedianMs": 0.01
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 2.38,
+          "warmMedianMs": 0.82
+        },
+        "emit:tsc7": {
+          "coldMs": 453.16,
+          "warmMedianMs": 391.96
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2099.96,
+          "warmMedianMs": 2099.96
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.23,
+          "warmMedianMs": 0.04
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.21,
+          "warmMedianMs": 0.03
+        },
+        "build:model": {
+          "coldMs": 2.16,
+          "warmMedianMs": 0.76
+        },
+        "resolve:messages": {
+          "coldMs": 0.85,
+          "warmMedianMs": 0.35
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-config-dmmf",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 1,
+      "sourceBytes": 3230,
+      "declarationFiles": 1,
+      "declarationStatements": 8,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 1,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 7,
+        "locals": 0,
+        "messages": 6
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 0.47,
+          "warmMedianMs": 0.19
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.1,
+          "warmMedianMs": 0.01
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 1.55,
+          "warmMedianMs": 0.95
+        },
+        "emit:tsc7": {
+          "coldMs": 545.43,
+          "warmMedianMs": 436.29
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2102.05,
+          "warmMedianMs": 2102.05
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.18,
+          "warmMedianMs": 0.05
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.25,
+          "warmMedianMs": 0.03
+        },
+        "build:model": {
+          "coldMs": 0.96,
+          "warmMedianMs": 0.66
+        },
+        "resolve:messages": {
+          "coldMs": 0.36,
+          "warmMedianMs": 0.19
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-config-recommended",
+      "version": "4.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 1,
+      "sourceBytes": 4333,
+      "declarationFiles": 1,
+      "declarationStatements": 8,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 2,
+        "diagnostics": 1
+      },
+      "divergence": {
+        "compared": 1,
+        "differing": 1,
+        "typescript59ExitCode": 2
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 7,
+        "locals": 0,
+        "messages": 6
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 1.22,
+          "warmMedianMs": 0.49
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.25,
+          "warmMedianMs": 0.03
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 2.64,
+          "warmMedianMs": 1.95
+        },
+        "emit:tsc7": {
+          "coldMs": 541.53,
+          "warmMedianMs": 587.78
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 3769.44,
+          "warmMedianMs": 3769.44
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.26,
+          "warmMedianMs": 0.05
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.38,
+          "warmMedianMs": 0.04
+        },
+        "build:model": {
+          "coldMs": 0.94,
+          "warmMedianMs": 0.51
+        },
+        "resolve:messages": {
+          "coldMs": 0.4,
+          "warmMedianMs": 0.3
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/oxlint-config-rule-authoring",
+      "version": "1.1.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 1,
+      "sourceBytes": 1395,
+      "declarationFiles": 1,
+      "declarationStatements": 6,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 1,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 5,
+        "locals": 0,
+        "messages": 4
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 0.5,
+          "warmMedianMs": 0.18
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.1,
+          "warmMedianMs": 0.01
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 1.46,
+          "warmMedianMs": 0.83
+        },
+        "emit:tsc7": {
+          "coldMs": 82.79,
+          "warmMedianMs": 88.06
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 521.48,
+          "warmMedianMs": 521.48
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.24,
+          "warmMedianMs": 0.04
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.22,
+          "warmMedianMs": 0.02
+        },
+        "build:model": {
+          "coldMs": 0.53,
+          "warmMedianMs": 0.24
+        },
+        "resolve:messages": {
+          "coldMs": 0.22,
+          "warmMedianMs": 0.12
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/vitest",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 5,
+      "sourceFiles": 32,
+      "sourceBytes": 292776,
+      "declarationFiles": 32,
+      "declarationStatements": 451,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 52,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 52,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 126,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 32,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "UnsupportedDeclaration: src/mod.d.ts: `declare module \"vitest\"` is not supported",
+        "items": 0,
+        "locals": 0,
+        "messages": 0
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 45.45,
+          "warmMedianMs": 18.35
+        },
+        "emit:oxc-transform": {
+          "coldMs": 5.37,
+          "warmMedianMs": 2.62
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 137.86,
+          "warmMedianMs": 136.61
+        },
+        "emit:tsc7": {
+          "coldMs": 348.98,
+          "warmMedianMs": 246.1
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2071.43,
+          "warmMedianMs": 2071.43
+        },
+        "parse:oxc-parser": {
+          "coldMs": 5.72,
+          "warmMedianMs": 4.66
+        },
+        "parse:createSourceFile": {
+          "coldMs": 5.69,
+          "warmMedianMs": 5.22
+        },
+        "build:model": {
+          "coldMs": 10.74,
+          "warmMedianMs": 11.89
+        },
+        "resolve:messages": {
+          "coldMs": 10.19,
+          "warmMedianMs": 9.34
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/rx-effect",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 2,
+      "sourceBytes": 705,
+      "declarationFiles": 2,
+      "declarationStatements": 6,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 2,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 1,
+        "locals": 1,
+        "messages": 2
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 5.55,
+          "warmMedianMs": 0.89
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.17,
+          "warmMedianMs": 0.01
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 4.31,
+          "warmMedianMs": 1.43
+        },
+        "emit:tsc7": {
+          "coldMs": 107.53,
+          "warmMedianMs": 107.75
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 819.86,
+          "warmMedianMs": 819.86
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.23,
+          "warmMedianMs": 0.05
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.24,
+          "warmMedianMs": 0.03
+        },
+        "build:model": {
+          "coldMs": 0.5,
+          "warmMedianMs": 0.4
+        },
+        "resolve:messages": {
+          "coldMs": 0.2,
+          "warmMedianMs": 0.11
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-schema-discovery",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 2,
+      "sourceBytes": 8481,
+      "declarationFiles": 2,
+      "declarationStatements": 9,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 2,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 6,
+        "locals": 0,
+        "messages": 6
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 5.2,
+          "warmMedianMs": 0.96
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.2,
+          "warmMedianMs": 0.05
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 4.03,
+          "warmMedianMs": 2.66
+        },
+        "emit:tsc7": {
+          "coldMs": 103.28,
+          "warmMedianMs": 111.02
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 711.63,
+          "warmMedianMs": 711.63
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.28,
+          "warmMedianMs": 0.07
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.39,
+          "warmMedianMs": 0.06
+        },
+        "build:model": {
+          "coldMs": 0.77,
+          "warmMedianMs": 0.41
+        },
+        "resolve:messages": {
+          "coldMs": 0.35,
+          "warmMedianMs": 0.21
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-schema-extensions",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 2,
+      "sourceFiles": 2,
+      "sourceBytes": 88,
+      "declarationFiles": 2,
+      "declarationStatements": 2,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 2,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 0,
+        "locals": 0,
+        "messages": 0
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 1.25,
+          "warmMedianMs": 0.45
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.1,
+          "warmMedianMs": 0.01
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 1.6,
+          "warmMedianMs": 0.97
+        },
+        "emit:tsc7": {
+          "coldMs": 114.19,
+          "warmMedianMs": 95.31
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 883.34,
+          "warmMedianMs": 883.34
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.13,
+          "warmMedianMs": 0.02
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.16,
+          "warmMedianMs": 0.01
+        },
+        "build:model": {
+          "coldMs": 0.56,
+          "warmMedianMs": 0.06
+        },
+        "resolve:messages": {
+          "coldMs": 0.14,
+          "warmMedianMs": 0.05
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-schema-law",
+      "version": "5.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 3,
+      "sourceBytes": 26541,
+      "declarationFiles": 3,
+      "declarationStatements": 6,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 3,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 2,
+        "locals": 0,
+        "messages": 2
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 2.7,
+          "warmMedianMs": 1.09
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.48,
+          "warmMedianMs": 0.27
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 8.11,
+          "warmMedianMs": 7
+        },
+        "emit:tsc7": {
+          "coldMs": 897.69,
+          "warmMedianMs": 338.68
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2163.27,
+          "warmMedianMs": 2163.27
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.52,
+          "warmMedianMs": 0.06
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.3,
+          "warmMedianMs": 0.03
+        },
+        "build:model": {
+          "coldMs": 1.51,
+          "warmMedianMs": 0.91
+        },
+        "resolve:messages": {
+          "coldMs": 0.38,
+          "warmMedianMs": 0.49
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-schema-recursion-budget",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 2,
+      "sourceFiles": 3,
+      "sourceBytes": 13872,
+      "declarationFiles": 3,
+      "declarationStatements": 7,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 3,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 5,
+        "locals": 0,
+        "messages": 5
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 2.75,
+          "warmMedianMs": 1.73
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.35,
+          "warmMedianMs": 0.11
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 4.86,
+          "warmMedianMs": 4.63
+        },
+        "emit:tsc7": {
+          "coldMs": 245.17,
+          "warmMedianMs": 218.18
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1639.17,
+          "warmMedianMs": 1639.17
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.28,
+          "warmMedianMs": 0.06
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.22,
+          "warmMedianMs": 0.04
+        },
+        "build:model": {
+          "coldMs": 0.73,
+          "warmMedianMs": 0.59
+        },
+        "resolve:messages": {
+          "coldMs": 0.26,
+          "warmMedianMs": 0.17
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-schema-vite",
+      "version": "3.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 2,
+      "sourceBytes": 5828,
+      "declarationFiles": 2,
+      "declarationStatements": 9,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 1,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 1,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 2,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 4,
+        "locals": 1,
+        "messages": 5
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 1.42,
+          "warmMedianMs": 0.42
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.2,
+          "warmMedianMs": 0.03
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 3.03,
+          "warmMedianMs": 1.99
+        },
+        "emit:tsc7": {
+          "coldMs": 110.08,
+          "warmMedianMs": 103.31
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 853.52,
+          "warmMedianMs": 853.52
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.19,
+          "warmMedianMs": 0.05
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.25,
+          "warmMedianMs": 0.04
+        },
+        "build:model": {
+          "coldMs": 1.56,
+          "warmMedianMs": 0.85
+        },
+        "resolve:messages": {
+          "coldMs": 0.36,
+          "warmMedianMs": 0.39
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/hex-schema",
+      "version": "2.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 7,
+      "sourceBytes": 3921,
+      "declarationFiles": 7,
+      "declarationStatements": 22,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 6,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 6,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 6,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 7,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 10,
+        "locals": 0,
+        "messages": 6
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 2.86,
+          "warmMedianMs": 1.89
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.24,
+          "warmMedianMs": 0.09
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 6.74,
+          "warmMedianMs": 4.26
+        },
+        "emit:tsc7": {
+          "coldMs": 128.76,
+          "warmMedianMs": 89.21
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 785.18,
+          "warmMedianMs": 785.18
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.53,
+          "warmMedianMs": 0.19
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.62,
+          "warmMedianMs": 0.15
+        },
+        "build:model": {
+          "coldMs": 3.43,
+          "warmMedianMs": 1.82
+        },
+        "resolve:messages": {
+          "coldMs": 1.69,
+          "warmMedianMs": 1.2
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/conformance-spec",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 8,
+      "sourceBytes": 48889,
+      "declarationFiles": 8,
+      "declarationStatements": 68,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 2,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 2,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 4,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 8,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 7,
+        "messages": 39
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 4.74,
+          "warmMedianMs": 2.11
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.62,
+          "warmMedianMs": 0.32
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 16.32,
+          "warmMedianMs": 16.71
+        },
+        "emit:tsc7": {
+          "coldMs": 189.48,
+          "warmMedianMs": 205.07
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2681.11,
+          "warmMedianMs": 2681.11
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.61,
+          "warmMedianMs": 0.98
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.8,
+          "warmMedianMs": 0.86
+        },
+        "build:model": {
+          "coldMs": 29.78,
+          "warmMedianMs": 6.57
+        },
+        "resolve:messages": {
+          "coldMs": 5.15,
+          "warmMedianMs": 3.48
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/differential-spec",
+      "version": "1.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 11,
+      "sourceBytes": 32396,
+      "declarationFiles": 11,
+      "declarationStatements": 85,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 21,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 21,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 27,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 11,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 16,
+        "locals": 0,
+        "messages": 21
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 18.15,
+          "warmMedianMs": 3.72
+        },
+        "emit:oxc-transform": {
+          "coldMs": 1.27,
+          "warmMedianMs": 0.4
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 21.97,
+          "warmMedianMs": 31.97
+        },
+        "emit:tsc7": {
+          "coldMs": 712.83,
+          "warmMedianMs": 482.83
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2881.73,
+          "warmMedianMs": 2881.73
+        },
+        "parse:oxc-parser": {
+          "coldMs": 2.12,
+          "warmMedianMs": 1.1
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.92,
+          "warmMedianMs": 0.52
+        },
+        "build:model": {
+          "coldMs": 14.89,
+          "warmMedianMs": 10.37
+        },
+        "resolve:messages": {
+          "coldMs": 3.57,
+          "warmMedianMs": 2.32
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/effect-sim-kernel",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 16,
+      "sourceBytes": 115718,
+      "declarationFiles": 16,
+      "declarationStatements": 137,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 2,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 2,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 2,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 16,
+        "differing": 2,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 1,
+        "locals": 17,
+        "messages": 45
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 12.91,
+          "warmMedianMs": 11.35
+        },
+        "emit:oxc-transform": {
+          "coldMs": 2.66,
+          "warmMedianMs": 1.45
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 43.58,
+          "warmMedianMs": 36.78
+        },
+        "emit:tsc7": {
+          "coldMs": 213.67,
+          "warmMedianMs": 215.74
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 1958.97,
+          "warmMedianMs": 1958.97
+        },
+        "parse:oxc-parser": {
+          "coldMs": 1.51,
+          "warmMedianMs": 1.11
+        },
+        "parse:createSourceFile": {
+          "coldMs": 1.48,
+          "warmMedianMs": 1.94
+        },
+        "build:model": {
+          "coldMs": 22.85,
+          "warmMedianMs": 14.5
+        },
+        "resolve:messages": {
+          "coldMs": 5.5,
+          "warmMedianMs": 5.37
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/trace-spec",
+      "version": "1.0.1",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 31,
+      "sourceBytes": 123477,
+      "declarationFiles": 31,
+      "declarationStatements": 342,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 94,
+          "clean": false
+        },
+        "transpileDeclaration": {
+          "diagnostics": 93,
+          "clean": false
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 235,
+          "clean": false
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 31,
+        "differing": 1,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "Fallback",
+        "outcome": "model",
+        "items": 9,
+        "locals": 26,
+        "messages": 102
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 31.95,
+          "warmMedianMs": 43.48
+        },
+        "emit:oxc-transform": {
+          "coldMs": 2.21,
+          "warmMedianMs": 1.77
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 108.66,
+          "warmMedianMs": 115.85
+        },
+        "emit:tsc7": {
+          "coldMs": 847.82,
+          "warmMedianMs": 773.01
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 5712.03,
+          "warmMedianMs": 5712.03
+        },
+        "parse:oxc-parser": {
+          "coldMs": 5.66,
+          "warmMedianMs": 7.37
+        },
+        "parse:createSourceFile": {
+          "coldMs": 8.56,
+          "warmMedianMs": 6.04
+        },
+        "build:model": {
+          "coldMs": 38.1,
+          "warmMedianMs": 33.18
+        },
+        "resolve:messages": {
+          "coldMs": 20.55,
+          "warmMedianMs": 13.28
+        }
+      }
+    },
+    {
+      "name": "@systemfsoftware/trace-taxonomy",
+      "version": "1.0.0",
+      "origin": "systemfsoftware",
+      "entryPoints": 1,
+      "sourceFiles": 3,
+      "sourceBytes": 7226,
+      "declarationFiles": 3,
+      "declarationStatements": 28,
+      "clean": {
+        "oxc-transform": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "transpileDeclaration": {
+          "diagnostics": 0,
+          "clean": true
+        },
+        "tsc --isolatedDeclarations": {
+          "diagnostics": 0,
+          "clean": true
+        }
+      },
+      "fallback": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "divergence": {
+        "compared": 3,
+        "differing": 0,
+        "typescript59ExitCode": 0
+      },
+      "frontEnd": {
+        "route": "FastPath",
+        "outcome": "model",
+        "items": 2,
+        "locals": 2,
+        "messages": 18
+      },
+      "phases": {
+        "discover": {
+          "coldMs": 1.23,
+          "warmMedianMs": 1.37
+        },
+        "emit:oxc-transform": {
+          "coldMs": 0.25,
+          "warmMedianMs": 0.06
+        },
+        "emit:transpileDeclaration": {
+          "coldMs": 5.58,
+          "warmMedianMs": 8.18
+        },
+        "emit:tsc7": {
+          "coldMs": 290.08,
+          "warmMedianMs": 251.21
+        },
+        "emit:tsc5.9.3": {
+          "coldMs": 2312.04,
+          "warmMedianMs": 2312.04
+        },
+        "parse:oxc-parser": {
+          "coldMs": 0.57,
+          "warmMedianMs": 0.18
+        },
+        "parse:createSourceFile": {
+          "coldMs": 0.43,
+          "warmMedianMs": 0.14
+        },
+        "build:model": {
+          "coldMs": 2.59,
+          "warmMedianMs": 3.47
+        },
+        "resolve:messages": {
+          "coldMs": 1.95,
+          "warmMedianMs": 1.41
+        }
+      }
+    }
+  ]
+}
