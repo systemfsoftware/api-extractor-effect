@@ -126,16 +126,54 @@ export const expressionPath = (expression: Expression): Option.Option<ReadonlyAr
     Match.orElse(() => Option.none()),
   )
 
-export const propertyKeyName = (key: PropertyKey): Option.Option<string> =>
-  Match.value(key).pipe(
-    Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
-    Match.when({ type: 'Literal', value: Match.string }, (literal) => Option.some(JSON.stringify(literal.value))),
-    Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(String(literal.value))),
-    Match.when({ type: 'PrivateIdentifier' }, (identifier) => Option.some(`#${identifier.name}`)),
-    Match.when({ type: 'MemberExpression', computed: false, property: { type: 'Identifier' } }, (member) =>
-      Option.map(expressionPath(member.object), (base) => `[${[...base, member.property.name].join('.')}]`)),
-    Match.orElse(() => Option.none()),
-  )
+const inRange = (code: number, low: number, high: number): boolean => code >= low && code <= high
+
+const isIdentifierStart = (code: number): boolean =>
+  Arr.some([inRange(code, 65, 90), inRange(code, 97, 122), code === 36, code === 95], (matched) => matched)
+
+const isIdentifierPart = (code: number): boolean => isIdentifierStart(code) || inRange(code, 48, 57)
+
+const hasCharacters = (name: string): boolean => name.length > 0
+
+const startsWithIdentifier = (name: string): boolean => isIdentifierStart(name.charCodeAt(0))
+
+const everyPartIsIdentifier = (name: string): boolean =>
+  Arr.every(name.slice(1).split(''), (character) => isIdentifierPart(character.charCodeAt(0)))
+
+const identifierChecks = [hasCharacters, startsWithIdentifier, everyPartIsIdentifier] as const
+
+const isIdentifierName = (name: string): boolean => Arr.every(identifierChecks, (check) => check(name))
+
+const isPrivateOrComputedName = (name: string): boolean => name.startsWith('#') || name.startsWith('[')
+
+const isPrintableAsWritten = (name: string): boolean => isPrivateOrComputedName(name) || isIdentifierName(name)
+
+/** Prints a member name: an identifier, private name or bracketed computed name as written, anything else as a string literal. */
+const printPropertyName = (name: string): string => (isPrintableAsWritten(name) ? name : JSON.stringify(name))
+
+export type PropertyKeyName = { readonly key: PropertyKey; readonly computed: boolean }
+
+const computedIdentifierName = (key: PropertyKey, computed: boolean): Option.Option<string> =>
+  Option.flatMap(Option.liftPredicate(key, () => computed), (present) =>
+    Match.value(present).pipe(
+      Match.when({ type: 'Identifier' }, (identifier) => Option.some(`[${identifier.name}]`)),
+      Match.orElse(() => Option.none()),
+    ))
+
+export const propertyKeyName = ({ key, computed }: PropertyKeyName): Option.Option<string> =>
+  Option.match(computedIdentifierName(key, computed), {
+    onNone: () =>
+      Match.value(key).pipe(
+        Match.when({ type: 'Identifier' }, (identifier) => Option.some(identifier.name)),
+        Match.when({ type: 'Literal', value: Match.string }, (literal) => Option.some(literal.value)),
+        Match.when({ type: 'Literal', value: Match.number }, (literal) => Option.some(String(literal.value))),
+        Match.when({ type: 'PrivateIdentifier' }, (identifier) => Option.some(`#${identifier.name}`)),
+        Match.when({ type: 'MemberExpression', computed: false, property: { type: 'Identifier' } }, (member) =>
+          Option.map(expressionPath(member.object), (base) => `[${[...base, member.property.name].join('.')}]`)),
+        Match.orElse(() => Option.none()),
+      ),
+    onSome: Option.some,
+  })
 
 export const nameSegments = (name: TSTypeName): ReadonlyArray<string> =>
   Match.value(name).pipe(
@@ -320,20 +358,23 @@ const printSignatureLike = (
     return decorate({ typeParameters: printedTypeParameters, parameters: printedParameters, returnType: printedReturnType })
   })
 
+const memberNameRefusal = (type: string, computed: boolean, kind: string): string =>
+  computed ? 'a computed member name' : `a ${type} ${kind} name`
+
 const printPropertySignature = (context: TypeContext, member: TSPropertySignature): Effect.Effect<string, UnsupportedDeclaration> =>
-  Option.match(propertyKeyName(member.key), {
-    onNone: () => refuse(context.file, `a ${member.key.type} member name`),
+  Option.match(propertyKeyName(member), {
+    onNone: () => refuse(context.file, memberNameRefusal(member.key.type, member.computed, 'member')),
     onSome: (name) =>
       Effect.map(printAnnotationOrDefault(context, member.typeAnnotation, 'any'), (type) =>
-        `${readonlyPrefix(member.readonly)}${name}${optionalMark(member.optional)}: ${type}`),
+        `${readonlyPrefix(member.readonly)}${printPropertyName(name)}${optionalMark(member.optional)}: ${type}`),
   })
 
 const printMethodSignature = (context: TypeContext, member: TSMethodSignature): Effect.Effect<string, UnsupportedDeclaration> =>
-  Option.match(propertyKeyName(member.key), {
-    onNone: () => refuse(context.file, `a ${member.key.type} method name`),
+  Option.match(propertyKeyName(member), {
+    onNone: () => refuse(context.file, memberNameRefusal(member.key.type, member.computed, 'method')),
     onSome: (name) =>
       printSignatureLike(context, member.typeParameters, member.params, member.returnType, methodTail(member.kind), (parts) =>
-        `${methodPrefix(member.kind)}${name}${optionalMark(member.optional)}${parts.typeParameters}(${parts.parameters})${parts.returnType}`),
+        `${methodPrefix(member.kind)}${printPropertyName(name)}${optionalMark(member.optional)}${parts.typeParameters}(${parts.parameters})${parts.returnType}`),
   })
 
 const methodPrefix = (kind: TSMethodSignatureKind): string =>
@@ -388,7 +429,7 @@ const printSpecialTupleElement = (
       Effect.map(printTupleElement(context, named.elementType), (type) => `${named.label.name}${optionalMark(named.optional)}: ${type}`)),
     Match.when({ type: 'TSOptionalType' }, (optional) =>
       Effect.map(canonicalTypeText(context, optional.typeAnnotation), (type) => `${type}?`)),
-    Match.orElse((rest) => Effect.map(canonicalTypeText(context, rest.typeAnnotation), (type) => `...${type}`)),
+    Match.orElse((rest) => Effect.map(printTupleElement(context, rest.typeAnnotation), (text) => `...${text}`)),
   )
 
 const printTupleElement = (context: TypeContext, element: TSTupleElement): Effect.Effect<string, UnsupportedDeclaration> =>
@@ -426,11 +467,18 @@ const printImportType = (context: TypeContext, node: TSImportType): Effect.Effec
       }),
   })
 
+const queryText = (target: ReferenceTarget): Option.Option<string> =>
+  Option.map(Option.liftPredicate(target, (present) => present.name !== ''), (present) => `typeof ${printReference(present, '')}`)
+
 const printQuery = (context: TypeContext, node: TSTypeQuery): Effect.Effect<string, UnsupportedDeclaration> =>
   Match.value(node.exprName).pipe(
     Match.when({ type: 'TSImportType' }, (imported) => Effect.map(printImportType(context, imported), (text) => `typeof ${text}`)),
     Match.orElse((name) =>
-      Effect.map(referenceTargetFor(inValueSpace(context), nameSegments(name), Option.none()), (target) => `typeof ${printReference(target, '')}`)),
+      Effect.flatMap(referenceTargetFor(inValueSpace(context), nameSegments(name), Option.none()), (target) =>
+        Option.match(queryText(target), {
+          onNone: () => refuse(context.file, 'a module namespace type'),
+          onSome: Effect.succeed,
+        }))),
   )
 
 const mappedReadonlyPrefix = (readonly: TSMappedType['readonly']): string =>

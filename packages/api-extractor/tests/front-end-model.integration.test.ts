@@ -343,6 +343,57 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
+      'a named rest tuple member keeps its label and ellipsis',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `[head: string, ...rest: number[]]`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare type Args = [head: string, ...rest: number[]]\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the canonical text marks the rest member')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Args', 'typeAlias')).toMatchObject({
+            kind: 'typeAlias',
+            type: { kind: 'text', text: '[head: string, ...rest: number[]]' },
+          })),
+      ),
+    )
+
+    scenario(
+      'a quoted member key is the same member as its identifier spelling',
+      Gherkin.Do.pipe(
+        Given('an entry declaring `{ \'mode\': string; "foo-bar": number }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'export declare type Config = { \'mode\': string; "foo-bar": number }\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the members are named by the key values')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'Config', 'typeAlias')).toMatchObject({
+            kind: 'typeAlias',
+            type: {
+              kind: 'object',
+              members: [
+                { kind: 'property', name: 'mode' },
+                { kind: 'property', name: 'foo-bar' },
+              ],
+            },
+          })),
+      ),
+    )
+
+    scenario(
+      'a computed identifier member key is kept bracketed and is distinct from the string key of the same name',
+      Gherkin.Do.pipe(
+        Given('a declaration file with `declare const sym: unique symbol` and `interface I { [sym]: string; sym: string }`')('declarations', () =>
+          Effect.succeed(declarations([['index.d.ts', 'declare const sym: unique symbol\nexport interface I { [sym]: string; sym: string }\n']]))),
+        When('the model is built')('model', (scope) => builtOf(scope.declarations)),
+        Then('the members are bracketed and plain, not merged')((scope, expect) =>
+          expect(itemOf(scope.model, '.', 'I', 'interface')).toMatchObject({
+            kind: 'interface',
+            members: [
+              { kind: 'property', name: '[sym]' },
+              { kind: 'property', name: 'sym' },
+            ],
+          })),
+      ),
+    )
+
+    scenario(
       'an interface item keeps its type parameters, heritage and every member kind',
       Gherkin.Do.pipe(
         Given('an entry declaring an interface with a bounded default parameter, two extensions and property, method members')('declarations', () =>

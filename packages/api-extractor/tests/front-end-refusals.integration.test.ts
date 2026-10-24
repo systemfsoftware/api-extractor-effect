@@ -20,6 +20,22 @@ Feature('Refusing declaration text the model cannot hold')
     )
 
     scenario(
+      'a typeof naming a module namespace import is refused rather than printed with an empty name',
+      Gherkin.Do.pipe(
+        Given('an entry importing a module namespace and declaring `typeof ns`')('declarations', () =>
+          Effect.succeed(
+            declarations([
+              ['index.d.ts', "import * as ns from './impl.js'\nexport declare const api: typeof ns\n"],
+              ['impl.d.ts', 'export declare const x: number\n'],
+            ]),
+          )),
+        When('the model is built')('refusal', (scope) => Effect.flip(FrontEnd.buildModel(scope.declarations))),
+        Then('the refusal names the file and the namespace type')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'UnsupportedDeclaration', file: 'index.d.ts', construct: 'a module namespace type' })),
+      ),
+    )
+
+    scenario(
       'an enum member whose declared value is computed is refused naming the member, not silently left without a value',
       Gherkin.Do.pipe(
         Given('a declaration file declaring `enum Flags { Read = 1, Write = 1 << 1 }`')('declarations', () =>

@@ -132,13 +132,14 @@ is the whole list:
 - `declare global`, module augmentation (`declare module 'vitest'`) and a dotted
   namespace (`declare namespace A.B`)
 - `export =`
-- an import type that names a module without a member (`typeof import('./x.js')`)
+- an import type that names a module without a member (`typeof import('./x.js')`), and a `typeof` naming a module namespace import
 - an enum member whose declared value is computed rather than a literal, for example a
   hand-written `.d.ts` with `Write = 1 << 1`, and an enum member declared twice across
   merged declarations of one enum. Both emitters write constant members as literals and
   `tsc` refuses a repeated member, so these happen only with declaration text written by hand.
 - an index signature without a parameter, a computed member or method name other than a
-  literal or a dotted name (`[Symbol.iterator]` is kept), an enum member named by neither
+  literal, a dotted name or an identifier (`[Symbol.iterator]` and `[sym]` are kept as
+  written), an enum member named by neither
   an identifier nor a string, a heritage clause that is not a name (`extends
   mixin(Base)`), a type node the printer has no form for, and text that does not parse as
   a declaration file

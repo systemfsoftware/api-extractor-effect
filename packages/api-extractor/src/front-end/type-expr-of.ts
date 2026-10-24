@@ -59,10 +59,10 @@ const referenceExpr = (name: string, module: Option.Option<string>, args: Readon
 const textExpr = (context: TypeContext, node: TSType): Effect.Effect<TypeExpr, UnsupportedDeclaration> =>
   Effect.map(canonicalTypeText(context, node), (text): TypeExpr => ({ kind: 'text', text }))
 
-const propertyKeyNameOf = (key: PropertyKey): Option.Option<string> =>
+const propertyKeyNameOf = (key: PropertyKey, computed: boolean): Option.Option<string> =>
   Match.value(key).pipe(
     Match.when({ type: 'PrivateIdentifier' }, () => Option.none()),
-    Match.orElse(() => propertyKeyName(key)),
+    Match.orElse(() => propertyKeyName({ key, computed })),
   )
 
 const typeArgumentsOf = (
@@ -273,9 +273,12 @@ const finalise = (draft: Draft): Member =>
 const assembleMembers = (drafts: ReadonlyArray<Draft>): ReadonlyArray<Member> =>
   Arr.reduce<Draft, DraftState>(drafts, { ordered: [], index: HashMap.empty<string, number>() }, mergeDraft).ordered.map(finalise)
 
+const memberNameRefusal = (type: string, computed: boolean, kind: string): string =>
+  computed ? 'a computed member name' : `a ${type} ${kind} name`
+
 const memberPropertyOf = (context: TypeContext, member: TSPropertySignature): Effect.Effect<Member, UnsupportedDeclaration> =>
-  Option.match(propertyKeyNameOf(member.key), {
-    onNone: () => refuse(context.file, `a ${member.key.type} member name`),
+  Option.match(propertyKeyNameOf(member.key, member.computed), {
+    onNone: () => refuse(context.file, memberNameRefusal(member.key.type, member.computed, 'member')),
     onSome: (name) =>
       Effect.map(annotationTypeOrDefault(context, member.typeAnnotation, 'any'), (type): Member => ({
         kind: 'property',
@@ -287,8 +290,8 @@ const memberPropertyOf = (context: TypeContext, member: TSPropertySignature): Ef
   })
 
 const memberMethodDraftOf = (context: TypeContext, member: TSMethodSignature): Effect.Effect<Draft, UnsupportedDeclaration> =>
-  Option.match(propertyKeyNameOf(member.key), {
-    onNone: () => refuse(context.file, `a ${member.key.type} method name`),
+  Option.match(propertyKeyNameOf(member.key, member.computed), {
+    onNone: () => refuse(context.file, memberNameRefusal(member.key.type, member.computed, 'method')),
     onSome: (name) =>
       Effect.map(signatureOf(context, member.typeParameters, member.params, member.returnType), (signature): Draft =>
         Match.value(member.kind).pipe(
@@ -375,11 +378,12 @@ const accessibleName = (
   accessibility: TSAccessibility | null | undefined,
   isStatic: boolean,
   isAbstract: boolean,
+  computed: boolean,
 ): Option.Option<string> =>
   Match.value(accessibility).pipe(
     Match.when('private', () => Option.none()),
     Match.orElse(() =>
-      Option.map(propertyKeyNameOf(key), (name) => prefixedName(modifierWords(accessibility, isStatic, isAbstract), name)),
+      Option.map(propertyKeyNameOf(key, computed), (name) => prefixedName(modifierWords(accessibility, isStatic, isAbstract), name)),
     ),
   )
 
@@ -388,7 +392,7 @@ const classMethodName = (method: MethodDefinition): Option.Option<string> =>
     Match.when({ kind: 'constructor' }, (constructor) =>
       Option.some(prefixedName(accessibilityWord(constructor.accessibility), 'constructor')),
     ),
-    Match.orElse(() => accessibleName(method.key, method.accessibility, method.static, isAbstractElement(method.type))),
+    Match.orElse(() => accessibleName(method.key, method.accessibility, method.static, isAbstractElement(method.type), method.computed)),
   )
 
 const classMethodDraftOf = (context: TypeContext, method: MethodDefinition): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
@@ -419,14 +423,14 @@ const propertyDraft = (name: string, property: PropertyDefinition, type: TypeExp
 })
 
 const classPropertyDraftOf = (context: TypeContext, property: PropertyDefinition): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
-  Option.match(accessibleName(property.key, property.accessibility, property.static, isAbstractElement(property.type)), {
+  Option.match(accessibleName(property.key, property.accessibility, property.static, isAbstractElement(property.type), property.computed), {
     onNone: () => Effect.succeedNone,
     onSome: (name) =>
       Effect.asSome(Effect.map(annotationTypeOrDefault(context, property.typeAnnotation, 'any'), (type) => propertyDraft(name, property, type))),
   })
 
 const classAccessorDraftOf = (context: TypeContext, accessor: AccessorProperty): Effect.Effect<Option.Option<Draft>, UnsupportedDeclaration> =>
-  Option.match(accessibleName(accessor.key, accessor.accessibility, accessor.static, isAbstractElement(accessor.type)), {
+  Option.match(accessibleName(accessor.key, accessor.accessibility, accessor.static, isAbstractElement(accessor.type), accessor.computed), {
     onNone: () => Effect.succeedNone,
     onSome: (name) =>
       Effect.asSome(Effect.map(annotationTypeOrDefault(context, accessor.typeAnnotation, 'any'), (type): Draft => ({
