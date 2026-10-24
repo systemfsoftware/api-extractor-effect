@@ -1,10 +1,11 @@
 import { Array as Arr, Effect, FileSystem, HashSet, Match, Option, Order, Path, Schema } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
+import type { AnchorBase, ManifestEntry, PackageSurface } from '../model/api-model.schema.ts'
 import type { PackageSource, SourceEntryPoint } from './declarations.schema.ts'
 import { directoryOf, relativeWithin } from './declaration-graph.ts'
 import { ManifestRejected, NoSourceEntry } from './front-end-error.schema.ts'
 import { isAbsent } from './package-file.ts'
-import { type ExportTarget, PackageManifest } from './package-source.schema.ts'
+import { type ExportTarget, PackageManifest, pathTargetOf, type ResolvedTarget, targetPathOf } from './package-source.schema.ts'
 
 export const FAMILY_SOURCE_CONDITION = '@systemfsoftware/source'
 
@@ -21,33 +22,46 @@ const isTypeScriptSource = (value: string): boolean => TYPESCRIPT_SOURCE.test(va
 
 const stripRelativePrefix = (value: string): string => value.replace(/^\.\//, '')
 
-const sourcePathOf = (target: ExportTarget): Option.Option<string> =>
-  Match.value(target).pipe(
-    Match.tag('Path', ({ path }) => Option.some(path)),
-    Match.orElse(() => Option.none()),
-  )
-
-const conditionValue = (target: ExportTarget, condition: string): Option.Option<string> =>
-  Match.value(target).pipe(
-    Match.tag('Conditions', ({ conditions }) => Option.flatMap(Option.fromNullishOr(conditions[condition]), sourcePathOf)),
-    Match.orElse(() => Option.none()),
-  )
-
-const entryPointOf = (condition: string) =>
-  ([exportPath, target]: readonly [string, ExportTarget]): Option.Option<SourceEntryPoint> =>
-    Option.map(Option.filter(conditionValue(target, condition), isTypeScriptSource), (sourceFile) => ({
-      exportPath,
-      sourceFile: stripRelativePrefix(sourceFile),
-    }))
-
 const byExportPath: Order.Order<SourceEntryPoint> = Order.mapInput(Order.String, (entry: SourceEntryPoint) => entry.exportPath)
 
 const exportMapOf = (exports: PackageManifest['exports']): ReadonlyArray<readonly [string, ExportTarget]> =>
   Match.value(exports).pipe(
-    Match.when(Match.string, () => []),
-    Match.when(Match.undefined, () => []),
+    Match.when(Match.string, (path) => [['.', pathTargetOf(path)] as const]),
+    Match.when(Match.undefined, () => Arr.empty<readonly [string, ExportTarget]>()),
     Match.orElse((record) => Object.entries(record).filter(([exportPath]) => exportPath !== './package.json')),
   )
+
+const importMapOf = (imports: PackageManifest['imports']): ReadonlyArray<readonly [string, ExportTarget]> =>
+  Match.value(imports).pipe(
+    Match.when(Match.undefined, () => Arr.empty<readonly [string, ExportTarget]>()),
+    Match.orElse((record) => Object.entries(record)),
+  )
+
+const manifestEntryOf = (preferred: string) =>
+  ([key, target]: readonly [string, ExportTarget]): ManifestEntry =>
+    Option.match(targetPathOf(target, preferred), {
+      onNone: () => ({ key, target: null, condition: null }),
+      onSome: (resolved) => ({ key, target: resolved.path, condition: resolved.condition }),
+    })
+
+const surfaceOf = (manifest: PackageManifest, preferred: string): PackageSurface => ({
+  name: manifest.name,
+  version: manifest.version,
+  exports: exportMapOf(manifest.exports).map(manifestEntryOf(preferred)),
+  imports: importMapOf(manifest.imports).map(manifestEntryOf(preferred)),
+})
+
+const normalisedTarget = (path: string): string => (path.startsWith('./') ? path : `./${path}`)
+
+type ResolvedEntry = ResolvedTarget & { readonly key: string }
+
+const entryPointOf = (entry: ResolvedEntry): SourceEntryPoint => ({
+  exportPath: entry.key,
+  sourceFile: stripRelativePrefix(entry.path),
+  key: entry.key,
+  condition: entry.condition,
+  target: normalisedTarget(entry.path),
+})
 
 const starCountOf = (exportPath: string): number => exportPath.split('*').length - 1
 
@@ -75,10 +89,16 @@ const INVALID_SEGMENT = /^(?:|\.|\.\.|node_modules)$/i
 
 const isValidPatternMatch = (substring: string): boolean => !substring.split(/[/\\]/).some((segment) => INVALID_SEGMENT.test(segment))
 
-const patternEntryOf = (key: string, prefix: string, suffix: string) =>
+const patternEntryOf = (key: string, prefix: string, suffix: string, condition: string | null) =>
   (candidate: string): Option.Option<PatternEntry> =>
     Option.map(Option.filter(matchedSubstring(prefix, suffix, candidate), isValidPatternMatch), (substring) => ({
-      entry: { exportPath: key.replace('*', () => substring), sourceFile: candidate },
+      entry: {
+        exportPath: key.replace('*', () => substring),
+        sourceFile: candidate,
+        key,
+        condition,
+        target: normalisedTarget(candidate),
+      },
       key,
     }))
 
@@ -214,31 +234,71 @@ const winningKeyOf = (patternKeys: ReadonlyArray<string>, exportPath: string): O
 const isWinner = (patternKeys: ReadonlyArray<string>) => (item: PatternEntry): boolean =>
   Option.exists(winningKeyOf(patternKeys, item.entry.exportPath), (key) => key === item.key)
 
-const expandPattern = (root: string, condition: string, key: string, target: ExportTarget): Effect.Effect<ReadonlyArray<PatternEntry>, WalkError, Platform> =>
-  Option.match(conditionValue(target, condition), {
-    onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
-    onSome: (targetText) =>
+type PatternExpansion = {
+  readonly key: string
+  readonly resolved: boolean
+  readonly entries: ReadonlyArray<PatternEntry>
+}
+
+const expandPattern = (root: string, preferred: string, key: string, target: ExportTarget): Effect.Effect<PatternExpansion, WalkError, Platform> =>
+  Option.match(targetPathOf(target, preferred), {
+    onNone: () => Effect.succeed<PatternExpansion>({ key, resolved: false, entries: [] }),
+    onSome: ({ path: targetText, condition }) =>
       Option.match(patternPartsOf(targetText), {
-        onNone: () => Effect.succeed<ReadonlyArray<PatternEntry>>([]),
+        onNone: () => Effect.succeed<PatternExpansion>({ key, resolved: true, entries: [] }),
         onSome: (parts) => {
           const prefix = stripRelativePrefix(parts.prefix)
-          return Effect.map(walkDirectory({ root, key, prefix }, directoryOf(prefix)), (candidates) =>
-            Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, prefix, parts.suffix))))
+          return Effect.map(walkDirectory({ root, key, prefix }, directoryOf(prefix)), (candidates) => ({
+            key,
+            resolved: true,
+            entries: Arr.getSomes(candidates.filter(isTypeScriptSource).map(patternEntryOf(key, prefix, parts.suffix, condition))),
+          }))
         },
       }),
   })
 
-const entryPointsOf = (root: string, manifest: PackageManifest, condition: string): Effect.Effect<ReadonlyArray<SourceEntryPoint>, WalkError, Platform> =>
+const resolvedExplicit = (preferred: string) =>
+  ([key, target]: readonly [string, ExportTarget]): Option.Option<ResolvedEntry> =>
+    Option.map(targetPathOf(target, preferred), (resolved) => ({ ...resolved, key }))
+
+const notSource = (entry: ResolvedEntry): boolean => !isTypeScriptSource(entry.path)
+
+type ReadEntryPoints = {
+  readonly entryPoints: ReadonlyArray<SourceEntryPoint>
+  readonly patternEmpties: ReadonlyArray<string>
+}
+
+const hasDeclaredSurface = (read: ReadEntryPoints, surface: PackageSurface): boolean =>
+  read.entryPoints.length > 0 || surface.imports.length > 0
+
+const preferredConditionOf = (request: ReadPackageRequest): string => request.sourceCondition ?? FAMILY_SOURCE_CONDITION
+
+const entryPointsOf = (
+  root: string,
+  manifest: PackageManifest,
+  preferred: string,
+): Effect.Effect<ReadEntryPoints, NoSourceEntry | WalkError, Platform> =>
   Effect.gen(function* () {
     const entries = exportMapOf(manifest.exports)
     const explicit = entries.filter(([exportPath]) => isExplicitKey(exportPath))
     const patterns = entries.filter(([exportPath]) => isPatternKey(exportPath))
+    const resolved = Arr.getSomes(explicit.map(resolvedExplicit(preferred)))
+    yield* Option.match(Arr.findFirst(resolved, notSource), {
+      onNone: () => Effect.void,
+      onSome: (entry) => Effect.fail(new NoSourceEntry({ packageRoot: root, exportKey: entry.key, target: entry.path })),
+    })
     const explicitPaths = HashSet.fromIterable(explicit.map(([exportPath]) => exportPath))
-    const expanded = yield* Effect.forEach(patterns, ([key, target]) => expandPattern(root, condition, key, target), { concurrency: 1 })
-    const chosen = Arr.flatten(expanded)
+    const expanded = yield* Effect.forEach(patterns, ([key, target]) => expandPattern(root, preferred, key, target), { concurrency: 1 })
+    const chosen = Arr.flatten(expanded.map((expansion) => expansion.entries))
       .filter((item) => !HashSet.has(explicitPaths, item.entry.exportPath))
       .filter(isWinner(patterns.map(([key]) => key)))
-    return Arr.sort([...explicit.map(entryPointOf(condition)).flatMap(Option.toArray), ...chosen.map((item) => item.entry)], byExportPath)
+    const explicitEntries = resolved.filter((entry) => !notSource(entry)).map(entryPointOf)
+    return {
+      entryPoints: Arr.sort([...explicitEntries, ...chosen.map((item) => item.entry)], byExportPath),
+      patternEmpties: expanded
+        .filter((expansion) => expansion.resolved && expansion.entries.length === 0)
+        .map((expansion) => expansion.key),
+    }
   })
 
 const workspaceRootFrom = (directory: string, packageRoot: string): Effect.Effect<string, PlatformError, Platform> =>
@@ -260,15 +320,35 @@ const tsconfigOf = (root: string): Effect.Effect<string, PlatformError, Platform
     return (yield* fileSystem.exists(buildConfig)) ? buildConfig : path.join(root, 'tsconfig.json')
   })
 
-const sourceOf = (root: string, manifest: PackageManifest, entryPoints: Arr.NonEmptyReadonlyArray<SourceEntryPoint>): Effect.Effect<PackageSource, PlatformError, Platform> =>
+type SourceReading = {
+  readonly root: string
+  readonly manifest: PackageManifest
+  readonly surface: PackageSurface
+  readonly entryPoints: ReadonlyArray<SourceEntryPoint>
+  readonly patternEmpties: ReadonlyArray<string>
+}
+
+const anchorBaseOf = (insideWorkspace: boolean): AnchorBase => (insideWorkspace ? 'workspace' : 'package')
+
+const anchorPrefixOf = (insideWorkspace: boolean, relative: string): string => (insideWorkspace ? relative : '')
+
+const sourceOf = (reading: SourceReading): Effect.Effect<PackageSource, PlatformError, Platform> =>
   Effect.gen(function* () {
+    const path = yield* Path.Path
+    const workspaceRoot = yield* workspaceRootFrom(reading.root, reading.root)
+    const insideWorkspace = workspaceRoot !== reading.root
+    const relative = path.relative(workspaceRoot, reading.root).split(path.sep).join('/')
     const source: PackageSource = {
-      name: manifest.name,
-      version: manifest.version,
-      packageRoot: root,
-      workspaceRoot: yield* workspaceRootFrom(root, root),
-      tsconfigPath: yield* tsconfigOf(root),
-      entryPoints,
+      name: reading.manifest.name,
+      version: reading.manifest.version,
+      packageRoot: reading.root,
+      workspaceRoot,
+      tsconfigPath: yield* tsconfigOf(reading.root),
+      anchorBase: anchorBaseOf(insideWorkspace),
+      anchorPrefix: anchorPrefixOf(insideWorkspace, relative),
+      manifest: reading.surface,
+      patternEmpties: reading.patternEmpties,
+      entryPoints: reading.entryPoints,
     }
     return source
   })
@@ -281,9 +361,11 @@ export const readPackage = (request: ReadPackageRequest): Effect.Effect<PackageS
     const manifest = yield* decodeManifest(yield* fileSystem.readFileString(path.join(root, 'package.json'))).pipe(
       Effect.catchTag('SchemaError', (error) => Effect.fail(new ManifestRejected({ packageRoot: root, issue: error.message }))),
     )
-    const entryPoints = yield* entryPointsOf(root, manifest, request.sourceCondition ?? FAMILY_SOURCE_CONDITION)
-    return yield* Arr.match(entryPoints, {
-      onEmpty: () => Effect.fail(new NoSourceEntry({ packageRoot: root })),
-      onNonEmpty: (nonEmpty) => sourceOf(root, manifest, nonEmpty),
-    })
+    const preferred = preferredConditionOf(request)
+    const surface = surfaceOf(manifest, preferred)
+    const read = yield* entryPointsOf(root, manifest, preferred)
+    return yield* Match.value(hasDeclaredSurface(read, surface)).pipe(
+      Match.when(true, () => sourceOf({ root, manifest, surface, entryPoints: read.entryPoints, patternEmpties: read.patternEmpties })),
+      Match.orElse(() => Effect.fail(new NoSourceEntry({ packageRoot: root }))),
+    )
   })

@@ -7,6 +7,30 @@ const Feature = makeFeature({ it })
 
 const condition = FrontEnd.FAMILY_SOURCE_CONDITION
 
+const sourceEntry = (exportPath: string, sourceFile: string) => ({
+  exportPath,
+  sourceFile,
+  key: exportPath,
+  condition,
+  target: `./${sourceFile}`,
+})
+
+const patternEntry = (exportPath: string, sourceFile: string, key = './*') => ({
+  exportPath,
+  sourceFile,
+  key,
+  condition,
+  target: `./${sourceFile}`,
+})
+
+const bareEntry = (exportPath: string, sourceFile: string) => ({
+  exportPath,
+  sourceFile,
+  key: exportPath,
+  condition: null,
+  target: `./${sourceFile}`,
+})
+
 const writeSource = (root: string) =>
   ([file, text]: readonly [string, string]) =>
     Effect.gen(function* () {
@@ -88,9 +112,11 @@ const nestedPatternPackage = packageOf(
 )
 
 const excludedTargetPackage = packageOf(
-  { '.': { [condition]: './src/mod.ts' }, './internal/*': null, './legacy': ['./dist/legacy.js'], './nested': { [condition]: { import: './src/nested.ts' } } },
+  { '.': { [condition]: './src/mod.ts' }, './internal/*': null, './nested': { [condition]: { import: './src/nested.ts' } } },
   { 'src/mod.ts': 'export const mod: number = 1\n', 'src/nested.ts': 'export const nested: number = 1\n' },
 )
+
+const builtTargetPackage = packageOf({ '.': { default: './dist/mod.js' } }, {})
 
 const rootPatternPackage = packageOf(
   { './*': { [condition]: './*.ts' } },
@@ -190,8 +216,8 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('both sources are read, `.` from the `.ts` file and `./legacy` from the `.cts` file')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: '.', sourceFile: 'src/mod.ts' },
-            { exportPath: './legacy', sourceFile: 'src/legacy.cts' },
+            sourceEntry('.', 'src/mod.ts'),
+            sourceEntry('./legacy', 'src/legacy.cts'),
           ])
         ),
       ),
@@ -212,9 +238,9 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('each declaration file, `.d.ts` and `.d.mts` alike, is its own entry source in export path order')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: '.', sourceFile: 'src/index.d.ts' },
-            { exportPath: './legacy', sourceFile: 'src/legacy.d.cts' },
-            { exportPath: './modern', sourceFile: 'src/modern.d.mts' },
+            sourceEntry('.', 'src/index.d.ts'),
+            sourceEntry('./legacy', 'src/legacy.d.cts'),
+            sourceEntry('./modern', 'src/modern.d.mts'),
           ])
         ),
       ),
@@ -227,9 +253,9 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('one entry is read per matching source, the `*` taking the nested name whole')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: './a', sourceFile: 'src/a.ts' },
-            { exportPath: './b', sourceFile: 'src/b.ts' },
-            { exportPath: './nested/c', sourceFile: 'src/nested/c.ts' },
+            patternEntry('./a', 'src/a.ts'),
+            patternEntry('./b', 'src/b.ts'),
+            patternEntry('./nested/c', 'src/nested/c.ts'),
           ])
         ),
       ),
@@ -241,7 +267,7 @@ Feature("A package's exports name its entry points")
         Given('a package exporting every `./src/<name>.ts` through `"./*"` where `src/loop` is a symlink back to `src`')('packageRoot', () => loopPatternPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the real source is read, the symlink loop contributing no entry')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './a', sourceFile: 'src/a.ts' }])
+          expect(scope.entryPoints).toEqual([patternEntry('./a', 'src/a.ts')])
         ),
       ),
     )
@@ -252,7 +278,7 @@ Feature("A package's exports name its entry points")
         Given('a package exporting every `./src/<name>.ts` through `"./*"` where `src/a/b/up` is a symlink back to `src/a`')('packageRoot', () => parentLoopPatternPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the real source is read, the upward symlink contributing no entry')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './a/x', sourceFile: 'src/a/x.ts' }])
+          expect(scope.entryPoints).toEqual([patternEntry('./a/x', 'src/a/x.ts')])
         ),
       ),
     )
@@ -264,8 +290,8 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('the sibling directory is walked under both its real name and its alias')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: './a/x', sourceFile: 'src/a/x.ts' },
-            { exportPath: './b/x', sourceFile: 'src/b/x.ts' },
+            patternEntry('./a/x', 'src/a/x.ts'),
+            patternEntry('./b/x', 'src/b/x.ts'),
           ])
         ),
       ),
@@ -278,9 +304,9 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('`./special` reads from the explicit source rather than the pattern match of the same export path')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: './a', sourceFile: 'src/a.ts' },
-            { exportPath: './b', sourceFile: 'src/b.ts' },
-            { exportPath: './special', sourceFile: 'src/b.ts' },
+            patternEntry('./a', 'src/a.ts'),
+            patternEntry('./b', 'src/b.ts'),
+            sourceEntry('./special', 'src/b.ts'),
           ])
         ),
       ),
@@ -293,7 +319,7 @@ Feature("A package's exports name its entry points")
           missingPatternDirectoryPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the explicit `.` entry is read')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/index.ts' }])
+          expect(scope.entryPoints).toEqual([sourceEntry('.', 'src/index.ts')])
         ),
       ),
     )
@@ -304,7 +330,7 @@ Feature("A package's exports name its entry points")
         Given('a package exporting `./src/<name>.ts` through `"./*"` while `./other/b.ts` also exists')('packageRoot', () => outsidePatternPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the source under the target directory is read')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './a', sourceFile: 'src/a.ts' }])
+          expect(scope.entryPoints).toEqual([patternEntry('./a', 'src/a.ts')])
         ),
       ),
     )
@@ -315,18 +341,32 @@ Feature("A package's exports name its entry points")
         Given('a package exporting `./*` from `./src/*.ts` and `./x/*` from `./lib/*.ts`')('packageRoot', () => nestedPatternPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('the shared `./x/y` entry reads from the longer-prefixed pattern')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './x/y', sourceFile: 'lib/y.ts' }])
+          expect(scope.entryPoints).toEqual([patternEntry('./x/y', 'lib/y.ts', './x/*')])
         ),
       ),
     )
 
     scenario(
-      'a null, array or non-path export target is skipped, and the package is still read',
+      'a null export target is skipped and a nested condition is resolved, and the package is still read',
       Gherkin.Do.pipe(
-        Given('a package exporting `./src/mod.ts` at `.`, excluding `./internal/*` with null, listing `./legacy` as a fallback array and nesting conditions under the source condition at `./nested`')('packageRoot', () => excludedTargetPackage),
+        Given('a package exporting `./src/mod.ts` at `.`, excluding `./internal/*` with null and nesting an `import` condition under the source condition at `./nested`')('packageRoot', () => excludedTargetPackage),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
-        Then('only the `.` entry is read')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])
+        Then('`.` and `./nested`, whose inner target the source condition selects, are read')((scope, expect) =>
+          expect(scope.entryPoints).toEqual([
+            sourceEntry('.', 'src/mod.ts'),
+            sourceEntry('./nested', 'src/nested.ts'),
+          ])
+        ),
+      ),
+    )
+
+    scenario(
+      'an export whose only target is a built JavaScript file is refused, naming the export and its target',
+      Gherkin.Do.pipe(
+        Given('a package whose `.` export resolves only to `./dist/mod.js`')('packageRoot', () => builtTargetPackage),
+        When('the package reader reads it')('refusal', (scope) => refusalOfReading(scope.packageRoot)),
+        Then('it is refused as having no source entry, naming `.` and `./dist/mod.js`')((scope, expect) =>
+          expect(scope.refusal).toMatchObject({ _tag: 'NoSourceEntry', exportKey: '.', target: './dist/mod.js' })
         ),
       ),
     )
@@ -340,8 +380,8 @@ Feature("A package's exports name its entry points")
           Effect.all({ rootPattern: entryPointsOf(scope.rootPattern), suffixless: entryPointsOf(scope.suffixless) })),
         Then('each reads only its TypeScript sources inside the package')((scope, expect) =>
           expect(scope.entryPoints).toEqual({
-            rootPattern: [{ exportPath: './mod', sourceFile: 'mod.ts' }],
-            suffixless: [{ exportPath: './mod.ts', sourceFile: 'src/mod.ts' }, { exportPath: './sub/x.ts', sourceFile: 'src/sub/x.ts' }],
+            rootPattern: [patternEntry('./mod', 'mod.ts')],
+            suffixless: [patternEntry('./mod.ts', 'src/mod.ts'), patternEntry('./sub/x.ts', 'src/sub/x.ts')],
           })
         ),
       ),
@@ -418,7 +458,7 @@ Feature("A package's exports name its entry points")
         ),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only the package\'s own source is an entry point')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './mod', sourceFile: 'mod.ts' }])),
+          expect(scope.entryPoints).toEqual([patternEntry('./mod', 'mod.ts')])),
       ),
     )
 
@@ -431,7 +471,7 @@ Feature("A package's exports name its entry points")
         ),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('the nested fan-out is pruned and only the package\'s own source is an entry point')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './mod', sourceFile: 'src/mod.ts' }])),
+          expect(scope.entryPoints).toEqual([patternEntry('./mod', 'src/mod.ts')])),
       ),
     )
 
@@ -449,8 +489,8 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('`./a/x` and `./internal/z` name no entry, since their winning keys resolve no source, while `./a/y` and `./b` do')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: './a/y', sourceFile: 'vendor/y.ts' },
-            { exportPath: './b', sourceFile: 'src/b.ts' },
+            patternEntry('./a/y', 'vendor/y.ts', './a/*'),
+            patternEntry('./b', 'src/b.ts'),
           ])),
       ),
     )
@@ -465,7 +505,7 @@ Feature("A package's exports name its entry points")
           )),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('only `.` is an entry point, and no export path holds a star')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: '.', sourceFile: 'src/mod.ts' }])),
+          expect(scope.entryPoints).toEqual([sourceEntry('.', 'src/mod.ts')])),
       ),
     )
 
@@ -478,12 +518,12 @@ Feature("A package's exports name its entry points")
         ),
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('`node_modules` is never walked and `./A` is the one entry point')((scope, expect) =>
-          expect(scope.entryPoints).toEqual([{ exportPath: './A', sourceFile: 'srcA.ts' }])),
+          expect(scope.entryPoints).toEqual([patternEntry('./A', 'srcA.ts')])),
       ),
     )
 
     scenario(
-      'a package whose exports is a bare path or absent names no source entry',
+      'a package whose exports is a bare path names `.`, while a package with no exports names no source entry',
       Gherkin.Do.pipe(
         Given('a package whose `exports` is the string `./src/mod.ts`')('stringExports', () =>
           rawPackageOf(JSON.stringify({ name: 'fixture', version: '1.0.0', exports: './src/mod.ts' })),
@@ -492,18 +532,22 @@ Feature("A package's exports name its entry points")
         Given('a package whose `exports` maps `.` straight to the path `./src/mod.ts`, with no source condition')('bareSubpathTarget', () =>
           rawPackageOf(JSON.stringify({ name: 'fixture', version: '1.0.0', exports: { '.': './src/mod.ts' } })),
         ),
-        When('the package reader reads all three')('refusals', (scope) =>
+        When('the package reader reads all three')('reads', (scope) =>
           Effect.all({
-            stringExports: refusalOfReading(scope.stringExports),
+            stringExports: entryPointsOf(scope.stringExports),
             absentExports: refusalOfReading(scope.absentExports),
-            bareSubpathTarget: refusalOfReading(scope.bareSubpathTarget),
+            bareSubpathTarget: entryPointsOf(scope.bareSubpathTarget),
           }),
         ),
-        Then('each is refused as having no source entry, naming its own package root')((scope, expect) =>
-          expect(scope.refusals).toMatchObject({
-            stringExports: { _tag: 'NoSourceEntry', packageRoot: scope.stringExports },
-            absentExports: { _tag: 'NoSourceEntry', packageRoot: scope.absentExports },
-            bareSubpathTarget: { _tag: 'NoSourceEntry', packageRoot: scope.bareSubpathTarget },
+        Then('the two bare paths resolve `.` with no condition, and the package with no exports is refused naming its root')((scope, expect) =>
+          expect({
+            stringExports: scope.reads.stringExports,
+            absentExports: scope.reads.absentExports,
+            bareSubpathTarget: scope.reads.bareSubpathTarget,
+          }).toEqual({
+            stringExports: [bareEntry('.', 'src/mod.ts')],
+            absentExports: expect.objectContaining({ _tag: 'NoSourceEntry', packageRoot: scope.absentExports }),
+            bareSubpathTarget: [bareEntry('.', 'src/mod.ts')],
           }),
         ),
       ),
@@ -527,8 +571,8 @@ Feature("A package's exports name its entry points")
           })),
         Then('each read takes the source its condition names')((scope, expect) =>
           expect(scope.entryPoints).toEqual({
-            family: [{ exportPath: '.', sourceFile: 'src/mod.ts' }],
-            development: [{ exportPath: '.', sourceFile: 'src/other.ts' }],
+            family: [sourceEntry('.', 'src/mod.ts')],
+            development: [{ ...sourceEntry('.', 'src/other.ts'), condition: 'development' }],
           })
         ),
       ),
@@ -551,9 +595,9 @@ Feature("A package's exports name its entry points")
           })),
         Then('each reads only the entries whose export name is one real path segment')((scope, expect) =>
           expect(scope.entryPoints).toEqual({
-            dotSegment: [{ exportPath: '.', sourceFile: 'entry.ts' }, { exportPath: './a', sourceFile: 'src/a.ts' }],
-            starlessTarget: [{ exportPath: '.', sourceFile: 'entry.ts' }],
-            twoStarTarget: [{ exportPath: '.', sourceFile: 'entry.ts' }],
+            dotSegment: [sourceEntry('.', 'entry.ts'), patternEntry('./a', 'src/a.ts')],
+            starlessTarget: [sourceEntry('.', 'entry.ts')],
+            twoStarTarget: [sourceEntry('.', 'entry.ts')],
           })
         ),
       ),
@@ -567,8 +611,8 @@ Feature("A package's exports name its entry points")
         When('the package reader reads its entry points')('entryPoints', (scope) => entryPointsOf(scope.packageRoot)),
         Then('each export name is the file name, dollar signs and all')((scope, expect) =>
           expect(scope.entryPoints).toEqual([
-            { exportPath: './a$$b', sourceFile: 'src/a$$b.ts' },
-            { exportPath: './c$&d', sourceFile: 'src/c$&d.ts' },
+            patternEntry('./a$$b', 'src/a$$b.ts'),
+            patternEntry('./c$&d', 'src/c$&d.ts'),
           ])
         ),
       ),
@@ -610,7 +654,16 @@ Feature("A package's exports name its entry points")
               packageRoot: scope.withBuildConfig.packageRoot,
               workspaceRoot: scope.withBuildConfig.workspaceRoot,
               tsconfigPath: scope.withBuildConfig.tsconfigPath,
-              entryPoints: [{ exportPath: '.', sourceFile: 'src/mod.ts' }],
+              anchorBase: 'workspace',
+              anchorPrefix: 'packs/with-build-config',
+              manifest: {
+                name: 'fixture',
+                version: '1.0.0',
+                exports: [{ key: '.', target: './src/mod.ts', condition }],
+                imports: [],
+              },
+              patternEmpties: [],
+              entryPoints: [sourceEntry('.', 'src/mod.ts')],
             },
             withDefaultConfig: {
               name: 'fixture',
@@ -618,7 +671,16 @@ Feature("A package's exports name its entry points")
               packageRoot: scope.withDefaultConfig.packageRoot,
               workspaceRoot: scope.withDefaultConfig.workspaceRoot,
               tsconfigPath: scope.withDefaultConfig.tsconfigPath,
-              entryPoints: [{ exportPath: '.', sourceFile: 'src/mod.ts' }],
+              anchorBase: 'workspace',
+              anchorPrefix: 'packs/with-default-config',
+              manifest: {
+                name: 'fixture',
+                version: '1.0.0',
+                exports: [{ key: '.', target: './src/mod.ts', condition }],
+                imports: [],
+              },
+              patternEmpties: [],
+              entryPoints: [sourceEntry('.', 'src/mod.ts')],
             },
           })
         ),

@@ -7,6 +7,7 @@ import {
   empty,
   fn,
   functionItem,
+  META,
   never,
   parameter,
   ref,
@@ -36,6 +37,7 @@ const classItem = (overrides: Partial<ApiModel.ClassItem> = {}): Item => ({
   extends: [],
   implements: [],
   members: [],
+  ...META,
   ...overrides,
 })
 const property = (name: string, type: TypeExpr, { optional = false, readonly = false } = {}): Member => ({
@@ -47,9 +49,21 @@ const property = (name: string, type: TypeExpr, { optional = false, readonly = f
 })
 const method = (name: string, returns: TypeExpr): Member => ({ kind: 'method', name, optional: false, signatures: [signature([], returns)] })
 const object = (...members: ReadonlyArray<Member>): TypeExpr => ({ kind: 'object', members })
-const enumItem = (...members: ReadonlyArray<string>): Item => ({ kind: 'enum', name: TARGET, const: false, members: members.map((name) => ({ name })) })
-const valuedEnum = (value: string, isConst = false): Item => ({ kind: 'enum', name: TARGET, const: isConst, members: [{ name: 'A', value }] })
-const variable = (constant: boolean, type: TypeExpr): Item => ({ kind: 'variable', name: TARGET, constant, type })
+const enumItem = (...members: ReadonlyArray<string>): Item => ({
+  kind: 'enum',
+  name: TARGET,
+  const: false,
+  members: members.map((name) => ({ name })),
+  ...META,
+})
+const valuedEnum = (value: string, isConst = false): Item => ({
+  kind: 'enum',
+  name: TARGET,
+  const: isConst,
+  members: [{ name: 'A', value }],
+  ...META,
+})
+const variable = (constant: boolean, type: TypeExpr): Item => ({ kind: 'variable', name: TARGET, constant, type, ...META })
 const returning = (type: TypeExpr) => functionItem(signature([], type))
 const taking = (type: TypeExpr) => functionItem(signature([parameter('self', type)], voidType))
 const callback = (...parameters: ReadonlyArray<Parameter>) => taking(fn(signature(parameters, voidType)))
@@ -88,7 +102,10 @@ const twoArgumentDualForms: readonly [Signature, Signature] = (() => {
 })()
 const dual = (...forms: ReadonlyArray<Signature>): Item => variable(true, object(...forms.map((sig): Member => ({ kind: 'call', signature: sig }))))
 const servicesLayer = (services: TypeExpr) => returning(ref('Layer', services, never, never))
-const withEntryPoint: Model = withEntryPoints(empty, [...empty.entryPoints, { path: './extra', items: [], locals: [] }])
+const withEntryPoint: Model = withEntryPoints(empty, [
+  ...empty.entryPoints,
+  { path: './extra', target: { key: './extra', condition: null, path: './src/extra.ts' }, items: [], locals: [] },
+])
 
 type Row = readonly [string, Item | Model, Item | Model, Bump, string]
 const rows: ReadonlyArray<Row> = [

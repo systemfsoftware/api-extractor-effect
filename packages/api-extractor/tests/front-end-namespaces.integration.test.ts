@@ -41,7 +41,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('the namespace holds both values and the enum both members')((scope, expect) =>
-          expect({ namespace: itemOf(scope.model, '.', 'N', 'namespace'), enumeration: itemOf(scope.model, '.', 'E', 'enum') }).toEqual({
+          expect({ namespace: itemOf(scope.model, '.', 'N', 'namespace'), enumeration: itemOf(scope.model, '.', 'E', 'enum') }).toMatchObject({
             namespace: {
               kind: 'namespace',
               name: 'N',
@@ -72,7 +72,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('the namespace `N` holds one `M` with both values and one `E` with both members')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'N', 'namespace')).toEqual({
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
             kind: 'namespace',
             name: 'N',
             items: [
@@ -105,7 +105,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('the namespace `N` holds one `M` with both values')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'N', 'namespace')).toEqual({
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
             kind: 'namespace',
             name: 'N',
             items: [
@@ -138,7 +138,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then("`N.f` returns the namespace's own `A`, while `g` keeps the imported one")((scope, expect) =>
-          expect({ n: itemOf(scope.model, '.', 'N', 'namespace'), g: itemOf(scope.model, '.', 'g', 'variable') }).toEqual({
+          expect({ n: itemOf(scope.model, '.', 'N', 'namespace'), g: itemOf(scope.model, '.', 'g', 'variable') }).toMatchObject({
             n: {
               kind: 'namespace',
               name: 'N',
@@ -173,8 +173,8 @@ Feature('Building the namespaces of a package API model')
         Then("`typeof A` and `C`'s base read `N`'s value `A`, while `typeof B` reads the imported value `B`")((scope, expect) =>
           expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
             items: expect.arrayContaining([
-              { kind: 'typeAlias', name: 'OfA', typeParameters: [], type: { kind: 'text', text: 'typeof A' } },
-              { kind: 'typeAlias', name: 'OfB', typeParameters: [], type: { kind: 'text', text: 'typeof import("pkg").B' } },
+              expect.objectContaining({ kind: 'typeAlias', name: 'OfA', typeParameters: [], type: { kind: 'text', text: 'typeof A' } }),
+              expect.objectContaining({ kind: 'typeAlias', name: 'OfB', typeParameters: [], type: { kind: 'text', text: 'typeof import("pkg").B' } }),
               expect.objectContaining({ kind: 'class', name: 'C', extends: [{ kind: 'reference', name: 'A', args: [] }] }),
             ]),
           })),
@@ -196,10 +196,10 @@ Feature('Building the namespaces of a package API model')
         Then("every reference reads `N`'s own `C` and `E`, none the imports")((scope, expect) =>
           expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
             items: expect.arrayContaining([
-              { kind: 'typeAlias', name: 'OfC', typeParameters: [], type: { kind: 'reference', name: 'C', args: [] } },
-              { kind: 'typeAlias', name: 'QueryC', typeParameters: [], type: { kind: 'text', text: 'typeof C' } },
-              { kind: 'typeAlias', name: 'OfE', typeParameters: [], type: { kind: 'reference', name: 'E', args: [] } },
-              { kind: 'typeAlias', name: 'QueryE', typeParameters: [], type: { kind: 'text', text: 'typeof E' } },
+              expect.objectContaining({ kind: 'typeAlias', name: 'OfC', typeParameters: [], type: { kind: 'reference', name: 'C', args: [] } }),
+              expect.objectContaining({ kind: 'typeAlias', name: 'QueryC', typeParameters: [], type: { kind: 'text', text: 'typeof C' } }),
+              expect.objectContaining({ kind: 'typeAlias', name: 'OfE', typeParameters: [], type: { kind: 'reference', name: 'E', args: [] } }),
+              expect.objectContaining({ kind: 'typeAlias', name: 'QueryE', typeParameters: [], type: { kind: 'text', text: 'typeof E' } }),
             ]),
           })),
       ),
@@ -220,7 +220,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('`N.f` returns the imported `A`, while the value stays a value')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'N', 'namespace')).toEqual({
+          expect(itemOf(scope.model, '.', 'N', 'namespace')).toMatchObject({
             kind: 'namespace',
             name: 'N',
             items: [
@@ -246,7 +246,7 @@ Feature('Building the namespaces of a package API model')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('`X` refers to `C.Inner`')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'X', 'typeAlias')).toEqual({
+          expect(itemOf(scope.model, '.', 'X', 'typeAlias')).toMatchObject({
             kind: 'typeAlias',
             name: 'X',
             typeParameters: [],

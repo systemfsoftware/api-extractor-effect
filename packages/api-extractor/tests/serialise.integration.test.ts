@@ -1,15 +1,15 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel } from '@systemfsoftware/api-extractor'
 import { Arbitrary, Effect, Layer, Schema } from 'effect'
-import { empty, functionItem, ref, rootedWith, signature } from './__fixtures__/surfaces.ts'
+import { empty, functionItem, META, ref, rootedWith, signature } from './__fixtures__/surfaces.ts'
 
 type Model = ApiModel.ApiModel
 type Item = ApiModel.ApiItem
 
 const Feature = makeFeature({ it })
 
-const value: Item = { kind: 'variable', name: 'Shared', constant: true, type: ref('A') }
-const type: Item = { kind: 'typeAlias', name: 'Shared', typeParameters: [], type: ref('B') }
+const value: Item = { kind: 'variable', name: 'Shared', constant: true, type: ref('A'), ...META }
+const type: Item = { kind: 'typeAlias', name: 'Shared', typeParameters: [], type: ref('B'), ...META }
 const first: Item = functionItem(signature([], ref('A')))
 const second: Item = functionItem(signature([], ref('B')))
 
@@ -32,6 +32,16 @@ const otherVersion: Schema.Json = {
   producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
   package: { name: 'fixture', version: '1.0.0' },
   entryPoints: [],
+}
+
+const previousVersion: Schema.Json = {
+  schemaVersion: 2,
+  producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
+  package: { name: 'fixture', version: '1.0.0', exports: [], imports: [] },
+  anchorBase: 'package',
+  entryPoints: [],
+  messages: [],
+  coverage: { complete: true, reasons: [] },
 }
 
 Feature('The serialised model is a canonical, versioned form of the surface')
@@ -85,6 +95,19 @@ Feature('The serialised model is a canonical, versioned form of the surface')
       'a model declaring an older schema version is refused',
       Gherkin.Do.pipe(
         Given('an encoded model declaring schema version 1')('encoded', () => Effect.succeed(otherVersion)),
+        When('the model is decoded')('refusal', (scope) =>
+          Effect.flip(Effect.try({ try: () => ApiModel.decode(scope.encoded), catch: String })),
+        ),
+        Then('the refusal names the schema version')((scope, expect) =>
+          expect(scope.refusal).toSatisfy((message: string) => message.includes('schemaVersion'), 'the refusal names schemaVersion'),
+        ),
+      ),
+    )
+
+    scenario(
+      'a model declaring the previous schema version, version 2, is refused',
+      Gherkin.Do.pipe(
+        Given('an encoded model declaring schema version 2')('encoded', () => Effect.succeed(previousVersion)),
         When('the model is decoded')('refusal', (scope) =>
           Effect.flip(Effect.try({ try: () => ApiModel.decode(scope.encoded), catch: String })),
         ),

@@ -1,7 +1,7 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { ApiModel, Verdict } from '@systemfsoftware/api-extractor'
 import { Array as Arr, Effect, Layer, Option, Result } from 'effect'
-import { decodeVerdict, effect, empty, functionItem, ref, signature, union, withEntryPoints, withExport } from './__fixtures__/surfaces.ts'
+import { decodeVerdict, effect, empty, functionItem, META, ref, signature, union, withEntryPoints, withExport } from './__fixtures__/surfaces.ts'
 
 type Model = ApiModel.ApiModel
 type Item = ApiModel.ApiItem
@@ -11,9 +11,15 @@ const Feature = makeFeature({ it })
 const before = withExport(empty, functionItem(signature([], effect(ref('User'), ref('NotFound')))))
 const after = withExport(empty, functionItem(signature([], effect(ref('User'), union([ref('NotFound'), ref('Timeout')])))))
 
-const entry: ApiModel.EntryPoint = { path: '.', items: [], locals: [] }
+const entry: ApiModel.EntryPoint = { path: '.', target: { key: '.', condition: null, path: './src/mod.ts' }, items: [], locals: [] }
 const entryRepeated: Model = withEntryPoints(empty, [entry, entry])
-const enumOf = (...names: ReadonlyArray<string>): Item => ({ kind: 'enum', name: 'Mode', const: false, members: names.map((name) => ({ name })) })
+const enumOf = (...names: ReadonlyArray<string>): Item => ({
+  kind: 'enum',
+  name: 'Mode',
+  const: false,
+  members: names.map((name) => ({ name })),
+  ...META,
+})
 const enumRepeated = withExport(empty, enumOf('On', 'On'))
 const enumDistinct = withExport(empty, enumOf('On', 'Off'))
 
