@@ -19,12 +19,37 @@ const listedLine: (diagnostic: Diagnostic) => string = Match.type<Diagnostic>().
 
 const listed = (diagnostics: ReadonlyArray<Diagnostic>): string => diagnostics.map(listedLine).join('\n')
 
-const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', { readonly packageRoot: Schema.String }>, Cause.YieldableError> =
-  Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', { packageRoot: Schema.String })
+type NoSourceEntryFields = {
+  readonly packageRoot: Schema.String
+  readonly exportKey: Schema.optionalKey<Schema.String>
+  readonly target: Schema.optionalKey<Schema.String>
+}
+
+type NoSourceEntryDetails = {
+  readonly packageRoot: string
+  readonly exportKey?: string
+  readonly target?: string
+}
+
+const noSourceMessage = (packageRoot: string): string =>
+  `${packageRoot}: no export resolves to a TypeScript source through its source condition`
+
+const targetMessage = (details: NoSourceEntryDetails & { readonly exportKey: string }): string =>
+  `${details.packageRoot}: the export "${details.exportKey}" resolves to "${details.target ?? ''}", which is not a TypeScript source`
+
+const sourceEntryMessage = (details: NoSourceEntryDetails): string =>
+  details.exportKey === undefined ? noSourceMessage(details.packageRoot) : targetMessage({ ...details, exportKey: details.exportKey })
+
+const NoSourceEntryBase: Schema.Class<NoSourceEntry, Schema.TaggedStruct<'NoSourceEntry', NoSourceEntryFields>, Cause.YieldableError> =
+  Schema.TaggedError<NoSourceEntry>()('NoSourceEntry', {
+    packageRoot: Schema.String,
+    exportKey: Schema.optionalKey(Schema.String),
+    target: Schema.optionalKey(Schema.String),
+  })
 
 export class NoSourceEntry extends NoSourceEntryBase {
   override get message(): string {
-    return `${this.packageRoot}: no export resolves to a TypeScript source through its source condition`
+    return sourceEntryMessage(this)
   }
 }
 

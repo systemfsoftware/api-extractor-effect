@@ -89,10 +89,18 @@ export type TypeExpr =
   | ObjectType
   | TextType
 
+const TYPE_PARAMETER_MODIFIERS = ['in', 'out', 'const'] as const
+
+/** A type parameter's variance or const modifier. */
+export const TypeParameterModifier: Schema.Literals<typeof TYPE_PARAMETER_MODIFIERS> = Schema.Literals(TYPE_PARAMETER_MODIFIERS)
+export type TypeParameterModifier = typeof TypeParameterModifier.Type
+
 export type TypeParameter = {
   readonly name: string
   readonly constraint?: TypeExpr
   readonly default?: TypeExpr
+  /** The modifiers written before the name, in source order. */
+  readonly modifiers?: ReadonlyArray<TypeParameterModifier>
 }
 
 export type Parameter = {
@@ -138,6 +146,7 @@ export const TypeParameter: Schema.Codec<TypeParameter> = Schema.Struct({
   name: Schema.String,
   constraint: Schema.optionalKey(typeExpr),
   default: Schema.optionalKey(typeExpr),
+  modifiers: Schema.optionalKey(Schema.Array(TypeParameterModifier)),
 })
 
 export const Parameter: Schema.Codec<Parameter> = Schema.Struct({
@@ -216,8 +225,12 @@ const constraintOf = (parameter: TypeParameter): Pick<TypeParameter, 'constraint
 const defaultOf = (parameter: TypeParameter): Pick<TypeParameter, 'default'> =>
   parameter.default === undefined ? {} : { default: normaliseType(parameter.default) }
 
+const modifierFields = (parameter: TypeParameter): Pick<TypeParameter, 'modifiers'> =>
+  parameter.modifiers === undefined ? {} : { modifiers: parameter.modifiers }
+
 const normaliseTypeParameter = (parameter: TypeParameter): TypeParameter => ({
   name: parameter.name,
+  ...modifierFields(parameter),
   ...constraintOf(parameter),
   ...defaultOf(parameter),
 })

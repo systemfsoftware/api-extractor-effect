@@ -113,11 +113,22 @@ const defaultOf = (context: TypeContext, node: TSType | null): Effect.Effect<Pic
     onSome: (type) => Effect.map(typeExprOf(context, type), (fallback) => ({ default: fallback })),
   })
 
+const MODIFIER_FLAGS = [
+  { flag: 'in', modifier: 'in' },
+  { flag: 'out', modifier: 'out' },
+  { flag: 'const', modifier: 'const' },
+] as const
+
+const modifierFields = (parameter: TSTypeParameter): Pick<TypeParameter, 'modifiers'> => {
+  const modifiers = MODIFIER_FLAGS.filter(({ flag }) => parameter[flag]).map(({ modifier }) => modifier)
+  return modifiers.length === 0 ? {} : { modifiers }
+}
+
 const typeParameterOf = (context: TypeContext, parameter: TSTypeParameter): Effect.Effect<TypeParameter, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const constraint = yield* constraintOf(context, parameter.constraint)
     const fallback = yield* defaultOf(context, parameter.default)
-    return { name: parameter.name.name, ...constraint, ...fallback }
+    return { name: parameter.name.name, ...modifierFields(parameter), ...constraint, ...fallback }
   })
 
 const typeParametersOf = (

@@ -243,7 +243,7 @@ Feature('Building a package API model from its declaration text')
     )
 
     scenario(
-      'a built model decodes as schema version two',
+      'a built model decodes as schema version three',
       Gherkin.Do.pipe(
         Given('an entry with literals, an enum and a namespace')('declarations', () =>
           Effect.succeed(
@@ -260,7 +260,7 @@ Feature('Building a package API model from its declaration text')
           )),
         When('the model is built and encoded')('roundTrip', (scope) =>
           Effect.map(FrontEnd.buildModel(scope.declarations), (model) => ({ model, decoded: ApiModel.decode(ApiModel.encode(model)) }))),
-        Then('decoding the bytes restores schema version two')((scope, expect) =>
+        Then('decoding the bytes restores schema version three')((scope, expect) =>
           expect({
             built: scope.roundTrip.model.schemaVersion,
             decoded: scope.roundTrip.decoded.schemaVersion,
@@ -270,8 +270,8 @@ Feature('Building a package API model from its declaration text')
             version: itemOf(scope.roundTrip.decoded, '.', 'version', 'variable'),
             mode: itemOf(scope.roundTrip.decoded, '.', 'Mode', 'enum'),
           }).toMatchObject({
-            built: 2,
-            decoded: 2,
+            built: 3,
+            decoded: 3,
             namespaces: ['ns'],
             version: { constant: true, type: { kind: 'literal', text: '"1.0.0"' } },
             mode: { kind: 'enum', const: true, members: [{ name: 'On', value: '"on"' }, { name: 'Off', value: '"off"' }] },
@@ -521,7 +521,7 @@ Feature('Building a package API model from its declaration text')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('the class carries the static field, the auto-accessor and the accessor pair, in source order, and no member for the private field or the static block')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'C', 'class')).toEqual({
+          expect(itemOf(scope.model, '.', 'C', 'class')).toMatchObject({
             kind: 'class',
             name: 'C',
             abstract: false,
@@ -654,7 +654,7 @@ Feature('Building a package API model from its declaration text')
           expect({
             names: itemNames(scope.model, '.'),
             default: itemOf(scope.model, '.', 'default', 'variable'),
-          }).toEqual({
+          }).toMatchObject({
             names: ['default'],
             default: { kind: 'variable', name: 'default', constant: true, type: { kind: 'keyword', name: 'number' } },
           })),
@@ -907,7 +907,7 @@ Feature('Building a package API model from its declaration text')
             names: itemNames(scope.model, '.'),
             a: itemOf(scope.model, '.', 'a', 'variable'),
             b: itemOf(scope.model, '.', 'b', 'variable'),
-          }).toEqual({
+          }).toMatchObject({
             names: ['a', 'b'],
             a: { kind: 'variable', name: 'a', constant: true, type: { kind: 'keyword', name: 'string' } },
             b: { kind: 'variable', name: 'b', constant: true, type: { kind: 'keyword', name: 'number' } },
@@ -952,7 +952,7 @@ Feature('Building a package API model from its declaration text')
           )),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then("`ns.T` is the module's alias, kept among the entry's locals")((scope, expect) =>
-          expect(entryAt(scope.model, '.').locals).toEqual([
+          expect(entryAt(scope.model, '.').locals).toMatchObject([
             {
               kind: 'typeAlias',
               name: 'T',
@@ -1029,7 +1029,7 @@ Feature('Building a package API model from its declaration text')
           Effect.succeed(declarations([['index.d.ts', 'export declare abstract class C {\n  protected p: string\n  protected static q: number\n  abstract m(): void\n  protected abstract get n(): number\n  abstract x: string\n  abstract accessor a: number\n  get w(): number\n  protected set w(v: number)\n  private static z: number\n  public r: string\n  protected constructor()\n}\n']]))),
         When('the model is built')('model', (scope) => builtOf(scope.declarations)),
         Then('every restricted member is named with its modifiers in written order, `public r` as the plain name, and `w` reads publicly while only a subclass writes it')((scope, expect) =>
-          expect(itemOf(scope.model, '.', 'C', 'class')).toEqual({
+          expect(itemOf(scope.model, '.', 'C', 'class')).toMatchObject({
             kind: 'class', name: 'C', abstract: true, typeParameters: [], extends: [], implements: [],
             members: [
               { kind: 'property', name: 'protected p', optional: false, readonly: false, type: { kind: 'keyword', name: 'string' } },

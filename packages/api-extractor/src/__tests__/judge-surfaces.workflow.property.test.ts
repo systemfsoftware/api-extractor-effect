@@ -13,6 +13,7 @@ import {
   effect,
   fn,
   functionItem,
+  META,
   never,
   parameter,
   ref,
@@ -73,7 +74,7 @@ describe('verdict on Effect channels', (it) => {
       const names = [one, `${one}+`, ...others].map((label, index) => `fn${index}:${label}`)
       const exportsOf = (failure: TypeExpr) => {
         const signatures = [signature([], effect(value, failure))]
-        return rootedWith(surrounding, names.map((name): ApiItem => ({ kind: 'function', name, signatures })))
+        return rootedWith(surrounding, names.map((name): ApiItem => ({ kind: 'function', name, signatures, ...META })))
       }
       return same(
         located(judge(exportsOf(smaller), exportsOf(larger))),
@@ -151,6 +152,7 @@ describe('verdict on dual APIs', (it) => {
     name: TARGET,
     constant: true,
     type: { kind: 'object', members: forms.map((sig) => ({ kind: 'call', signature: sig })) },
+    ...META,
   })
 
   it.prop(
@@ -201,7 +203,12 @@ describe('verdict on exports and parameters', (it) => {
     '∀x_EntryPoint_≡RemovedAndAdded',
     { of: [ApiModel], subject: judge },
     (judge, [model]) => {
-      const extra = { path: `${model.entryPoints.map((entry) => entry.path).join('')}/extra`, items: [], locals: [] }
+      const extra = {
+        path: `${model.entryPoints.map((entry) => entry.path).join('')}/extra`,
+        target: { key: './extra', condition: null, path: './src/extra.ts' },
+        items: [],
+        locals: [],
+      }
       const withExtra = { ...model, entryPoints: [...model.entryPoints, extra] }
       return same(
         [reasons(judge(withExtra, model)), reasons(judge(model, withExtra))],
@@ -259,6 +266,7 @@ describe('verdict through local type aliases', (it) => {
     name,
     typeParameters: [{ name: parameterName, default: defaultType }],
     type,
+    ...META,
   })
 
   it.prop(
@@ -288,8 +296,8 @@ describe('verdict through local type aliases', (it) => {
 })
 
 describe('verdict on a value and a type sharing a name', (it) => {
-  const value = (type: TypeExpr): ApiItem => ({ kind: 'variable', name: TARGET, constant: true, type })
-  const type = (body: TypeExpr): ApiItem => ({ kind: 'typeAlias', name: TARGET, typeParameters: [], type: body })
+  const value = (type: TypeExpr): ApiItem => ({ kind: 'variable', name: TARGET, constant: true, type, ...META })
+  const type = (body: TypeExpr): ApiItem => ({ kind: 'typeAlias', name: TARGET, typeParameters: [], type: body, ...META })
 
   it.prop(
     '∀m_NameValueTypeOrder_≡Unchanged',
