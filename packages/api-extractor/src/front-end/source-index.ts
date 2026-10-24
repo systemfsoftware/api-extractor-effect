@@ -136,6 +136,13 @@ type Context = {
   /** The namespaces the current statement sits in, outermost first. */
   readonly namePath: ReadonlyArray<string>
   readonly cursor: LineCursor
+  /**
+   * The offset a leading doc comment may start at. A statement's own comments sit
+   * after its preceding sibling, but the first statement in a block has no sibling,
+   * so the block's opening brace is the floor there; without it the lookup would
+   * reach back past the namespace into an unrelated top-level comment.
+   */
+  readonly floor: number
 }
 
 type StatementNode = Directive | Statement
@@ -145,7 +152,7 @@ const factsOf = (
   siblings: ReadonlyArray<{ readonly end: number }>,
   at: number,
 ): { readonly releaseTag: ReleaseTag; readonly stability: string | null } =>
-  Option.match(leadingDocComment(context.comments, precedingEnd(siblings, at), at), {
+  Option.match(leadingDocComment(context.comments, Math.max(context.floor, precedingEnd(siblings, at)), at), {
     onNone: (): { readonly releaseTag: ReleaseTag; readonly stability: string | null } => ({ releaseTag: 'untagged', stability: null }),
     onSome: (comment) => {
       const facts = docFactsOf(comment.value)
@@ -268,8 +275,10 @@ const recordAmbient = (context: Context, kind: 'global' | 'module', module: stri
 
 const recordBlock = (context: Context, body: TSModuleBlock | TSModuleDeclaration | null): void => {
   Match.value(body).pipe(
-    Match.when({ type: 'TSModuleBlock' }, (block: TSModuleBlock) =>
-      Arr.forEach(block.body, (statement) => recordStatement(context, block.body, statement))),
+    Match.when({ type: 'TSModuleBlock' }, (block: TSModuleBlock) => {
+      const scoped: Context = { ...context, floor: block.start }
+      Arr.forEach(block.body, (statement) => recordStatement(scoped, block.body, statement))
+    }),
     Match.orElse(() => undefined),
   )
 }
@@ -340,6 +349,7 @@ const collectSource = (file: SourceFile, anchorPrefix: string, program: Program,
     collected,
     namePath: [],
     cursor: { offset: 0, line: 1 },
+    floor: 0,
   }
   Arr.forEach(program.body, (statement) => recordStatement(context, program.body, statement))
   return { path: file.path, ...collected, reasons: [] }

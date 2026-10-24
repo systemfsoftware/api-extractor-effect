@@ -54,6 +54,22 @@ const importsOnlyPackage = packageOf(
   { 'src/queue.ts': 'export const writer: number = 1\n' },
 )
 
+const taggedNamespacePackage = packageOf(sourceManifest('tagged-namespace', './src/mod.ts'), {
+  'src/mod.ts': `/** @beta */
+export namespace Config {
+  export const load = 1
+  /** @internal */
+  export const reset = 2
+}
+
+/** @internal */
+export const previous = 1
+export namespace Later {
+  export const first = 1
+}
+`,
+})
+
 Feature('The version 3 model carries anchors, release tags and manifest facts')
   .withLayer(emitters)
   .live('the emitters and the source index read real package files from disk')
@@ -192,6 +208,31 @@ Feature('The version 3 model carries anchors, release tags and manifest facts')
             coverage: { complete: true, reasons: [] },
           })
         ),
+      ),
+    )
+
+    scenario(
+      'a namespace member takes its tag from its own doc comment, never from the namespace comment or an earlier declaration',
+      Gherkin.Do.pipe(
+        Given('a `@beta` namespace whose first member is untagged and second is `@internal`, followed by an `@internal` constant and a namespace whose first member is untagged')(
+          'packageRoot',
+          () => taggedNamespacePackage,
+        ),
+        When('the engine analyses it')('analysis', (scope) => analysed(scope.packageRoot)),
+        Then('the namespace keeps its tag, its first member is untagged, its second member is internal, and the later namespace member stays untagged')((scope, expect) =>
+          expect({
+            namespace: itemNamed(scope.analysis.model, 'Config'),
+            first: itemNamed(scope.analysis.model, 'load'),
+            second: itemNamed(scope.analysis.model, 'reset'),
+            previous: itemNamed(scope.analysis.model, 'previous'),
+            later: itemNamed(scope.analysis.model, 'first'),
+          }).toMatchObject({
+            namespace: { kind: 'namespace', name: 'Config', releaseTag: 'beta' },
+            first: { kind: 'variable', name: 'load', releaseTag: 'untagged' },
+            second: { kind: 'variable', name: 'reset', releaseTag: 'internal' },
+            previous: { kind: 'variable', name: 'previous', releaseTag: 'internal' },
+            later: { kind: 'variable', name: 'first', releaseTag: 'untagged' },
+          })),
       ),
     )
   })
