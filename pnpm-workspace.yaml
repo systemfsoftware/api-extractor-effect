@@ -6,14 +6,14 @@ allowBuilds:
   protobufjs: false
 
 catalog:
-  "@effect/platform-node": 4.0.2
-  "@effect/tsgo": 0.50.0
+  "@effect/platform-node": 4.1.0
+  "@effect/tsgo": 0.63.0
   "@microsoft/api-extractor": 7.59.1
   "@microsoft/tsdoc": 0.16.0
   "@types/node": 24.19.1
-  effect: 4.0.2
-  oxlint: 1.82.0
-  oxlint-tsgolint: 7.0.2001
+  effect: 4.1.0
+  oxlint: ~1.90.0
+  oxlint-tsgolint: 7.0.2005
   oxc-parser: 0.150.0
   oxc-transform: 0.150.0
   tsdown: 0.23.0
@@ -22,7 +22,15 @@ catalog:
   vite: 8.2.1
   vitest: 5.0.3
 
+minimumReleaseAgeExclude:
+  - effect
+  - "@effect/*"
+
 overrides:
+  "@effect/platform-node": "catalog:"
+  "@effect/platform-node-shared": 4.1.0
+  "@effect/tsgo": "catalog:"
+  effect: "catalog:"
   "@systemfsoftware/effect-cell-types": file:.sfs-deps/effect-cell-types-12.0.0.tgz
   "@systemfsoftware/effect-gherkin-spec": file:.sfs-deps/effect-gherkin-spec-7.0.1.tgz
   "@systemfsoftware/effect-schema-discovery": file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
