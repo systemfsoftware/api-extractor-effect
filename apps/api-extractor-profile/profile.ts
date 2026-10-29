@@ -30,9 +30,9 @@ type Manifest = typeof Manifest.Type
 
 type ProfileError = PlatformError | Schema.SchemaError | UsageError | GitError
 
-class UsageError extends Schema.TaggedError<UsageError>()('UsageError', { usage: Schema.String }) {}
+class UsageError extends Schema.TaggedError<UsageError, { readonly brand: unique symbol }>()('UsageError', { usage: Schema.String }) {}
 
-class GitError extends Schema.TaggedError<GitError>()('GitError', { args: Schema.Array(Schema.String), exitCode: Schema.Int, stderr: Schema.String }) {
+class GitError extends Schema.TaggedError<GitError, { readonly brand: unique symbol }>()('GitError', { args: Schema.Array(Schema.String), exitCode: Schema.Int, stderr: Schema.String }) {
   override get message(): string {
     return `git ${this.args.join(' ')} exited with code ${this.exitCode}: ${this.stderr}`
   }
