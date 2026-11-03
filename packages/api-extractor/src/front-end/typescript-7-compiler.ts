@@ -3,9 +3,9 @@ import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { API, DiagnosticCategory, type Diagnostic as ApiDiagnostic, type Program } from 'typescript/unstable/async'
 import typescriptManifest from 'typescript/package.json' with { type: 'json' }
-import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, relativeWithin, sharedDeclarations, type EntryDeclaration, type SharedDeclaration, type UnresolvedImport } from './declaration-graph.ts'
+import { closeDeclarations, entryPointDeclarations, missingEntryDeclarations, relativeWithin, sharedDeclarations, sourceCandidatesOf, type EntryDeclaration, type SharedDeclaration, type UnresolvedImport, uniqueSources } from './declaration-graph.ts'
 import { CompilerEmitter, type CompilerEmitterId, type DeclarationEmitter } from './declaration-emitter.service.ts'
-import type { Declarations, Diagnostic, PackageSource, SourceEntryPoint } from './declarations.schema.ts'
+import type { DeclarationFile, Declarations, Diagnostic, PackageSource, SourceEntryPoint, SourceFile } from './declarations.schema.ts'
 import { CompilerRejected, UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { isDeclarationFile, readPackageFile } from './package-file.ts'
 
@@ -265,9 +265,47 @@ const handWrittenOr = (source: PackageSource, realRoot: string, emitted: HashMap
     onSome: Effect.succeedSome,
   })
 
+const readSource = (
+  source: PackageSource,
+  realRoot: string,
+  candidates: ReadonlyArray<string>,
+): Effect.Effect<Option.Option<SourceFile>, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Arr.match(candidates, {
+    onEmpty: () => Effect.succeedNone,
+    onNonEmpty: ([candidate, ...rest]) =>
+      Effect.flatMap(readPackageFile({ packageRoot: source.packageRoot, realRoot, file: candidate }), (text) =>
+        Option.match(text, {
+          onNone: () => readSource(source, realRoot, rest),
+          onSome: (value) => Effect.succeedSome({ path: candidate, text: value }),
+        })),
+  })
+
+const sourceFileOf = (
+  source: PackageSource,
+  realRoot: string,
+  emitted: HashMap.HashMap<string, string>,
+  file: DeclarationFile,
+): Effect.Effect<Option.Option<SourceFile>, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  HashMap.has(emitted, file.path)
+    ? readSource(source, realRoot, sourceCandidatesOf(file.path))
+    : Effect.succeedSome({ path: file.path, text: file.text })
+
+const sourcesOf = (
+  source: PackageSource,
+  realRoot: string,
+  emitted: HashMap.HashMap<string, string>,
+  files: ReadonlyArray<DeclarationFile>,
+): Effect.Effect<ReadonlyArray<SourceFile>, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.map(
+    Effect.forEach(files, (file) => sourceFileOf(source, realRoot, emitted, file)),
+    (sources) => uniqueSources(Arr.getSomes(sources)),
+  )
+
 const declarationsOf = (
   source: PackageSource,
   entryPoints: ReadonlyArray<EntryDeclaration>,
+  realRoot: string,
+  emitted: HashMap.HashMap<string, string>,
   load: (declarationFile: string) => Effect.Effect<Option.Option<string>, PlatformError, FileSystem.FileSystem | Path.Path>,
 ): Effect.Effect<Declarations, UnsupportedDeclaration | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.flatMap(
@@ -278,12 +316,15 @@ const declarationsOf = (
     (report) =>
       Arr.match(report.unresolvedImports, {
         onEmpty: (): Effect.Effect<Declarations, UnsupportedDeclaration | PlatformError, FileSystem.FileSystem | Path.Path> =>
-          Effect.succeed({
+          Effect.map(sourcesOf(source, realRoot, emitted, report.files), (sources) => ({
             producer: TYPESCRIPT_PRODUCER,
             package: { name: source.name, version: source.version },
+            anchorBase: source.anchorBase,
+            anchorPrefix: source.anchorPrefix,
             entryPoints,
             files: report.files,
-          }),
+            sources,
+          })),
         onNonEmpty: ([unresolved]) => Effect.fail(unsupportedImport(unresolved)),
       }),
   )
@@ -312,7 +353,8 @@ const declarationsFrom = (source: PackageSource, run: CompilerRun) =>
     const entryPoints = entryPointDeclarations(source.entryPoints)
     const emittedEntries = compilerEntryDeclarations(source.entryPoints).map((entry) => entry.declarationFile)
     return yield* Arr.match(missingEntryDeclarations(HashSet.fromIterable(HashMap.keys(emitted)), emittedEntries), {
-      onEmpty: () => Effect.flatMap(fileSystem.realPath(source.packageRoot), (realRoot) => declarationsOf(source, entryPoints, handWrittenOr(source, realRoot, emitted))),
+      onEmpty: () => Effect.flatMap(fileSystem.realPath(source.packageRoot), (realRoot) =>
+        declarationsOf(source, entryPoints, realRoot, emitted, handWrittenOr(source, realRoot, emitted))),
       onNonEmpty: (missing) => Effect.fail(new CompilerRejected({ diagnostics: missing.map(missingEntryDiagnostic) })),
     })
   })

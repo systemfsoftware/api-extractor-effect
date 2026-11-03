@@ -1,8 +1,6 @@
-import { type StandardModifierTagSet, TSDocParser } from '@microsoft/tsdoc'
-import { Array as Arr, Effect, HashMap, HashSet, Match, Option, Order, Predicate } from 'effect'
+import { Array as Arr, Effect, Function as Fn, HashMap, HashSet, Match, Option, Order } from 'effect'
 import {
   type Class,
-  type Comment,
   type Expression,
   type Program,
   type TSClassImplements,
@@ -20,45 +18,25 @@ import {
   type TSTypeReference,
   Visitor,
 } from 'oxc-parser'
-import type { AnalysisMessage, AnalysisMessageId } from './analysis-message.schema.ts'
+import type { Anchor } from '../model/anchor.schema.ts'
+import type { AnalysisMessage, AnalysisMessageId } from '../model/message.schema.ts'
 import { typeParameterNames } from './canonical-type-text.ts'
 import type { Declaration, DeclarationGraph, EntryDeclaration, FileScope, ResolvedSymbol } from './declaration-graph.ts'
 import { declarationGraph, exportedNames, exportedSymbol, namespaceSpacesOf, resolveName } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import type { UnsupportedDeclaration } from './front-end-error.schema.ts'
+import { sourceIndexOf, type SourceIndex } from './source-index.ts'
+import { docFactsOf, leadingDocComment, precedingEnd, type TSDocReleaseTag } from './tsdoc.ts'
 
-type ReleaseTag = 'internal' | 'alpha' | 'beta' | 'public'
+type ReleaseTag = TSDocReleaseTag
 
 const RELEASE_TAG_RANK: Record<ReleaseTag, number> = { internal: 1, alpha: 2, beta: 3, public: 4 }
 
-const releaseTagParser: TSDocParser = new TSDocParser()
-
-const docCommentText = (comment: string): string => `/*${comment}*/`
-
-const tagIn = (tags: StandardModifierTagSet): Option.Option<ReleaseTag> =>
-  Match.value(tags).pipe(
-    Match.when((candidate) => candidate.isPublic(), () => Option.some<ReleaseTag>('public')),
-    Match.when((candidate) => candidate.isBeta(), () => Option.some<ReleaseTag>('beta')),
-    Match.when((candidate) => candidate.isAlpha(), () => Option.some<ReleaseTag>('alpha')),
-    Match.when((candidate) => candidate.isInternal(), () => Option.some<ReleaseTag>('internal')),
-    Match.orElse(() => Option.none<ReleaseTag>()),
-  )
-
-const tagOfComment = (comment: string): Option.Option<ReleaseTag> =>
-  tagIn(releaseTagParser.parseString(docCommentText(comment)).docComment.modifierTagSet)
-
-const isDocComment = (comment: Comment): boolean => comment.type === 'Block' && comment.value.startsWith('*')
-
-const precedingEndOf = (scope: FileScope, statementStart: number): number =>
-  Arr.reduce(scope.program.body, 0, (end, statement) => (statement.end <= statementStart ? Math.max(end, statement.end) : end))
-
-const isBetween = (floor: number, ceiling: number) => (comment: Comment): boolean => comment.start >= floor && comment.end <= ceiling
-
-const leadingCommentOf = (scope: FileScope, statementStart: number): Option.Option<Comment> =>
-  Arr.findLast(scope.comments, Predicate.and(isDocComment, isBetween(precedingEndOf(scope, statementStart), statementStart)))
+const leadingCommentOf = (scope: FileScope, statementStart: number) =>
+  leadingDocComment(scope.comments, precedingEnd(scope.program.body, statementStart), statementStart)
 
 const declaredTagOf = (scope: FileScope, declaration: Declaration): Option.Option<ReleaseTag> =>
-  Option.flatMap(leadingCommentOf(scope, declaration.statementStart), (comment) => tagOfComment(comment.value))
+  Option.flatMap(leadingCommentOf(scope, declaration.statementStart), (comment) => docFactsOf(comment.value).releaseTag)
 
 const tagOf = (graph: DeclarationGraph, file: string, declaration: Declaration): Option.Option<ReleaseTag> =>
   Option.flatMap(HashMap.get(graph.files, file), (scope) => declaredTagOf(scope, declaration))
@@ -380,26 +358,37 @@ const mergeByKey = (items: ReadonlyArray<ExportedItem>): HashMap.HashMap<string,
   Arr.reduce(items, HashMap.empty<string, ExportedItem>(), (merged, item) =>
     HashMap.set(merged, itemKey(item.file, item.name), intoItem(HashMap.get(merged, itemKey(item.file, item.name)), item)))
 
-const analysisMessage = (messageId: AnalysisMessageId, entryPoint: string, item: string, symbol: string): AnalysisMessage => ({
+const analysisMessage = (anchor: Anchor | null, messageId: AnalysisMessageId, entryPoint: string, item: string, symbol: string): AnalysisMessage => ({
   messageId,
   entryPoint,
   item,
   symbol,
+  anchor,
 })
 
-const untagged = (graph: DeclarationGraph, item: ExportedItem): ReadonlyArray<Declaration> =>
-  Arr.filter(item.declarations, (declaration) => Option.isNone(tagOf(graph, item.file, declaration)))
+type ItemContext = {
+  readonly resolution: Resolution
+  readonly entry: EntryDeclaration
+  readonly consumable: HashMap.HashMap<string, ExportedItem>
+  readonly item: ExportedItem
+  readonly anchor: Anchor | null
+}
 
-const missingTagMessages = (graph: DeclarationGraph, entry: EntryDeclaration, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
-  Arr.map(untagged(graph, item), (declaration) => analysisMessage('ae-missing-release-tag', entry.exportPath, item.namePath, declaration.declared.name))
+const untagged = (context: ItemContext): ReadonlyArray<Declaration> =>
+  Arr.filter(context.item.declarations, (declaration) => Option.isNone(tagOf(context.resolution.graph, context.item.file, declaration)))
+
+const missingTagMessages = (context: ItemContext): ReadonlyArray<AnalysisMessage> =>
+  Arr.map(untagged(context), (declaration) =>
+    analysisMessage(context.anchor, 'ae-missing-release-tag', context.entry.exportPath, context.item.namePath, declaration.declared.name))
 
 const needsUnderscore = (maxTag: ReleaseTag, item: ExportedItem): boolean => maxTag === 'internal' && !item.namePath.includes('.')
 
 const lacksUnderscore = (name: string): boolean => !name.startsWith('_')
 
-const underscoreMessages = (maxTag: ReleaseTag, entry: EntryDeclaration, item: ExportedItem): ReadonlyArray<AnalysisMessage> =>
-  needsUnderscore(maxTag, item)
-    ? Arr.map(Arr.filter(item.exportNames, lacksUnderscore), (name) => analysisMessage('ae-internal-missing-underscore', entry.exportPath, item.namePath, name))
+const underscoreMessages = (maxTag: ReleaseTag, context: ItemContext): ReadonlyArray<AnalysisMessage> =>
+  needsUnderscore(maxTag, context.item)
+    ? Arr.map(Arr.filter(context.item.exportNames, lacksUnderscore), (name) =>
+      analysisMessage(context.anchor, 'ae-internal-missing-underscore', context.entry.exportPath, context.item.namePath, name))
     : []
 
 const allTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean => Arr.every(tags, (tag) => tag === maxTag)
@@ -407,8 +396,10 @@ const allTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean
 const mixedTagged = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): boolean =>
   !allTagged(maxTag, tags) && Arr.some(tags, (tag) => tag === 'internal')
 
-const mixedMessages = (entry: EntryDeclaration, item: ExportedItem, maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>): ReadonlyArray<AnalysisMessage> =>
-  mixedTagged(maxTag, tags) ? [analysisMessage('ae-internal-mixed-release-tag', entry.exportPath, item.namePath, item.name)] : []
+const mixedMessages = (maxTag: ReleaseTag, tags: ReadonlyArray<ReleaseTag>, context: ItemContext): ReadonlyArray<AnalysisMessage> =>
+  mixedTagged(maxTag, tags)
+    ? [analysisMessage(context.anchor, 'ae-internal-mixed-release-tag', context.entry.exportPath, context.item.namePath, context.item.name)]
+    : []
 
 const effectiveTagsOf = (graph: DeclarationGraph, item: ExportedItem): ReadonlyArray<ReleaseTag> =>
   Arr.map(item.declarations, (declaration) => effectiveTagOf(tagOf(graph, item.file, declaration)))
@@ -424,96 +415,82 @@ const morePublic = (declaring: ReleaseTag, referenced: ReleaseTag): boolean => R
 const declaringTag = (graph: DeclarationGraph, file: string, declaration: Declaration): ReleaseTag => effectiveTagOf(tagOf(graph, file, declaration))
 
 const incompatibleMessages = (
-  graph: DeclarationGraph,
-  entry: EntryDeclaration,
-  item: ExportedItem,
+  context: ItemContext,
   declaration: Declaration,
   referenced: ExportedItem,
 ): ReadonlyArray<AnalysisMessage> =>
-  morePublic(declaringTag(graph, item.file, declaration), maxTagIn(graph, referenced))
-    ? [analysisMessage('ae-incompatible-release-tags', entry.exportPath, item.namePath, item.name)]
+  morePublic(declaringTag(context.resolution.graph, context.item.file, declaration), maxTagIn(context.resolution.graph, referenced))
+    ? [analysisMessage(context.anchor, 'ae-incompatible-release-tags', context.entry.exportPath, context.item.namePath, context.item.name)]
     : []
 
 const localMessages = (
-  resolution: Resolution,
-  entry: EntryDeclaration,
-  consumable: HashMap.HashMap<string, ExportedItem>,
-  item: ExportedItem,
+  context: ItemContext,
   declaration: Declaration,
   symbol: Extract<ResolvedSymbol, { kind: 'local' }>,
 ): ReadonlyArray<AnalysisMessage> =>
-  Option.match(HashMap.get(consumable, itemKey(symbol.file, symbol.name)), {
-    onNone: () => [analysisMessage('ae-forgotten-export', entry.exportPath, item.namePath, symbol.name)],
-    onSome: (referenced) => incompatibleMessages(resolution.graph, entry, item, declaration, referenced),
+  Option.match(HashMap.get(context.consumable, itemKey(symbol.file, symbol.name)), {
+    onNone: () => [analysisMessage(context.anchor, 'ae-forgotten-export', context.entry.exportPath, context.item.namePath, symbol.name)],
+    onSome: (referenced) => incompatibleMessages(context, declaration, referenced),
   })
 
 const resolvedNameMessages = (
-  resolution: Resolution,
-  entry: EntryDeclaration,
-  consumable: HashMap.HashMap<string, ExportedItem>,
-  item: ExportedItem,
+  context: ItemContext,
   declaration: Declaration,
   symbol: ResolvedSymbol,
 ): ReadonlyArray<AnalysisMessage> =>
   Match.value(symbol).pipe(
-    Match.when({ kind: 'local' }, (local) => localMessages(resolution, entry, consumable, item, declaration, local)),
+    Match.when({ kind: 'local' }, (local) => localMessages(context, declaration, local)),
     Match.orElse(() => []),
   )
 
-const nameMessages = (
-  resolution: Resolution,
-  entry: EntryDeclaration,
-  consumable: HashMap.HashMap<string, ExportedItem>,
-  item: ExportedItem,
-  declaration: Declaration,
-  name: string,
-): ReadonlyArray<AnalysisMessage> =>
-  Option.match(resolveName(resolution.graph, item.file, name), {
+const nameMessages = (context: ItemContext, declaration: Declaration, name: string): ReadonlyArray<AnalysisMessage> =>
+  Option.match(resolveName(context.resolution.graph, context.item.file, name), {
     onNone: () => [],
-    onSome: (symbol) => resolvedNameMessages(resolution, entry, consumable, item, declaration, symbol),
+    onSome: (symbol) => resolvedNameMessages(context, declaration, symbol),
   })
 
-const declarationMessages = (
-  resolution: Resolution,
-  entry: EntryDeclaration,
-  consumable: HashMap.HashMap<string, ExportedItem>,
-  item: ExportedItem,
-  declaration: Declaration,
-): ReadonlyArray<AnalysisMessage> =>
-  Option.match(HashMap.get(resolution.graph.files, item.file), {
+const declarationMessages = (context: ItemContext, declaration: Declaration): ReadonlyArray<AnalysisMessage> =>
+  Option.match(HashMap.get(context.resolution.graph.files, context.item.file), {
     onNone: () => [],
     onSome: (scope) =>
-      Arr.flatMap(referenceNames(scanFor(resolution, item.file), scope, declaration), (name) =>
-        nameMessages(resolution, entry, consumable, item, declaration, name)),
+      Arr.flatMap(referenceNames(scanFor(context.resolution, context.item.file), scope, declaration), (name) =>
+        nameMessages(context, declaration, name)),
   })
 
-const referenceMessages = (
-  resolution: Resolution,
-  entry: EntryDeclaration,
-  consumable: HashMap.HashMap<string, ExportedItem>,
-  item: ExportedItem,
-): ReadonlyArray<AnalysisMessage> =>
-  Arr.flatMap(item.declarations, (declaration) => declarationMessages(resolution, entry, consumable, item, declaration))
+const referenceMessages = (context: ItemContext): ReadonlyArray<AnalysisMessage> =>
+  Arr.flatMap(context.item.declarations, (declaration) => declarationMessages(context, declaration))
+
+const declaredAnchor = (index: SourceIndex, item: ExportedItem, declaration: Declaration): Option.Option<Anchor> =>
+  Option.fromNullishOr(index.metaOf(item.file, declaration.declared.name, declaration.declared.kind, item.namePath).anchor)
+
+/** The anchor of the first declaration of an exported item. */
+const itemAnchor = (index: SourceIndex, item: ExportedItem): Anchor | null =>
+  Arr.match(Arr.getSomes(item.declarations.map((declaration) => declaredAnchor(index, item, declaration))), {
+    onEmpty: () => null,
+    onNonEmpty: (anchors) => Arr.headNonEmpty(anchors),
+  })
 
 const itemMessages = (
   resolution: Resolution,
+  index: SourceIndex,
   entry: EntryDeclaration,
   consumable: HashMap.HashMap<string, ExportedItem>,
   item: ExportedItem,
 ): ReadonlyArray<AnalysisMessage> => {
   const tags = effectiveTagsOf(resolution.graph, item)
   const maxTag = maxTagOf(tags)
+  const context: ItemContext = { resolution, entry, consumable, item, anchor: itemAnchor(index, item) }
   return [
-    ...missingTagMessages(resolution.graph, entry, item),
-    ...underscoreMessages(maxTag, entry, item),
-    ...mixedMessages(entry, item, maxTag, tags),
-    ...referenceMessages(resolution, entry, consumable, item),
+    ...missingTagMessages(context),
+    ...underscoreMessages(maxTag, context),
+    ...mixedMessages(maxTag, tags, context),
+    ...referenceMessages(context),
   ]
 }
 
-const entryMessages = (resolution: Resolution, entry: EntryDeclaration): ReadonlyArray<AnalysisMessage> => {
+const entryMessages = (resolution: Resolution, index: SourceIndex, entry: EntryDeclaration): ReadonlyArray<AnalysisMessage> => {
   const consumable = mergeByKey(itemList(resolution.graph, entry.declarationFile))
-  return Arr.flatMap(Arr.fromIterable(HashMap.values(consumable)), (item) => itemMessages(resolution, entry, consumable, item))
+  return Arr.flatMap(Arr.fromIterable(HashMap.values(consumable)), (item) => itemMessages(resolution, index, entry, consumable, item))
 }
 
 const messageKey = (message: AnalysisMessage): string => [message.messageId, message.entryPoint, message.item, message.symbol].join('\u0000')
@@ -528,13 +505,17 @@ const analysisMessageOrder: Order.Order<AnalysisMessage> = Order.combineAll([
   Order.mapInput(Order.String, (message: AnalysisMessage) => message.symbol),
 ])
 
-const messagesFor = (graph: DeclarationGraph): ReadonlyArray<AnalysisMessage> => {
+const messagesFor = (graph: DeclarationGraph, index: SourceIndex): ReadonlyArray<AnalysisMessage> => {
   const resolution = resolutionOf(graph)
-  return Arr.sort(deduped(Arr.flatMap(graph.entryPoints, (entry) => entryMessages(resolution, entry))), analysisMessageOrder)
+  return Arr.sort(deduped(Arr.flatMap(graph.entryPoints, (entry) => entryMessages(resolution, index, entry))), analysisMessageOrder)
 }
 
-export const messagesOfGraph = (graph: DeclarationGraph): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration> =>
-  Effect.succeed(messagesFor(graph))
+export const messagesOfGraph: {
+  (graph: DeclarationGraph, index: SourceIndex): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration>
+  (graph: DeclarationGraph): (index: SourceIndex) => Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration>
+} = Fn.dual(2, (graph: DeclarationGraph, index: SourceIndex): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration> =>
+  Effect.succeed(messagesFor(graph, index)))
 
 export const resolveMessages = (declarations: Declarations): Effect.Effect<ReadonlyArray<AnalysisMessage>, UnsupportedDeclaration> =>
-  Effect.map(declarationGraph(declarations), messagesFor)
+  Effect.map(declarationGraph(declarations), (graph) =>
+    messagesFor(graph, sourceIndexOf({ sources: declarations.sources, anchorPrefix: declarations.anchorPrefix })))

@@ -19,23 +19,48 @@ import type {
 import {
   API_MODEL_SCHEMA_VERSION,
   sortModel,
+  type AnchorBase,
   type ApiItem,
   type ApiModel,
+  type CoverageReason,
   type EntryPoint,
   type EnumMember,
+  type PackageSurface,
   type TypeAliasItem,
 } from '../model/api-model.schema.ts'
+import type { ItemMeta } from '../model/anchor.schema.ts'
+import type { AnalysisMessage } from '../model/message.schema.ts'
 import type { Member, Signature, TypeExpr, TypeParameter } from '../model/type-expr.schema.ts'
 import { ENGINE } from '../version.ts'
 import { literalTextOf, type Naming, type TypeContext, typeParameterNames, TypePrinting } from './canonical-type-text.ts'
 import { declarationGraph, declaredOf, exportedNames, exportedSymbol, exportOrigin, grouped, namespaceSpacesOf, refuse, statementsIn, type Declaration, type Declared, type DeclarationGraph, type EntryDeclaration } from './declaration-graph.ts'
 import type { Declarations } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
+import { messagesOfGraph } from './resolve-messages.ts'
+import { emptySourceIndex, type SourceIndex, type SourceKind } from './source-index.ts'
 import { TypeExprs } from './type-expr-of.ts'
 
 const { withNamesInScope, withNamespaceScope } = TypePrinting
 
 const { classMembersOf, heritageOf, membersOf, superClassOf, signatureOf, typeExprOf, typeParametersOf } = TypeExprs
+
+/** The item metadata the source index holds for the declaration this item was built from. */
+const metaOf = (context: TypeContext, name: string, kind: SourceKind): ItemMeta =>
+  context.index.metaOf(context.file, name, kind, [...context.namePath, name].join('.'))
+
+const inNamespace = (context: TypeContext, name: string): TypeContext => ({ ...context, namePath: [...context.namePath, name] })
+
+const named = (name: string | undefined): string => Option.getOrElse(Option.fromNullishOr(name), () => 'default')
+
+const functionName = (node: FunctionNode): string => named(node.id?.name)
+
+const classNodeName = (node: Class): string => named(node.id?.name)
+
+const variableName = (declarator: VariableDeclarator): Option.Option<string> =>
+  declarator.id.type === 'Identifier' ? Option.some(declarator.id.name) : Option.none()
+
+const namespaceName = (node: TSModuleDeclaration): Option.Option<string> =>
+  node.id.type === 'Identifier' ? Option.some(node.id.name) : Option.none()
 
 type LocalDeclaration = {
   readonly key: string
@@ -87,8 +112,12 @@ const constraintField = (parameter: TypeParameter, rename: HashMap.HashMap<strin
 const defaultField = (parameter: TypeParameter, rename: HashMap.HashMap<string, string>): Pick<TypeParameter, 'default'> =>
   Option.match(Option.fromNullishOr(parameter.default), { onNone: () => ({}), onSome: (fallback) => ({ default: renameType(fallback, rename) }) })
 
+const modifierFields = (parameter: TypeParameter): Pick<TypeParameter, 'modifiers'> =>
+  parameter.modifiers === undefined ? {} : { modifiers: parameter.modifiers }
+
 const renameTypeParameter = (parameter: TypeParameter, rename: HashMap.HashMap<string, string>): TypeParameter => ({
   name: parameter.name,
+  ...modifierFields(parameter),
   ...constraintField(parameter, rename),
   ...defaultField(parameter, rename),
 })
@@ -131,7 +160,7 @@ const renameType = (type: TypeExpr, rename: HashMap.HashMap<string, string>): Ty
   )
 
 const renameAlias = (alias: TypeAliasItem, rename: HashMap.HashMap<string, string>): TypeAliasItem => ({
-  kind: 'typeAlias',
+  ...alias,
   name: Option.getOrElse(HashMap.get(rename, alias.name), () => alias.name),
   typeParameters: alias.typeParameters.map((parameter) => renameTypeParameter(parameter, rename)),
   type: renameType(alias.type, rename),
@@ -266,7 +295,7 @@ const typeAliasItem = (context: TypeContext, node: TSTypeAliasDeclaration, name:
     const inner = withNamesInScope(context, typeParameterNames(node.typeParameters))
     const typeParameters = yield* typeParametersOf(inner, node.typeParameters)
     const type = yield* typeExprOf(inner, node.typeAnnotation)
-    return { kind: 'typeAlias', name, typeParameters, type }
+    return { kind: 'typeAlias', name, typeParameters, type, ...metaOf(context, node.id.name, 'typeAlias') }
   })
 
 const declarationSignatureOf = (context: TypeContext, node: FunctionNode) =>
@@ -285,6 +314,7 @@ const functionItemOf = (
           kind: 'function',
           name,
           signatures,
+          ...metaOf(context, functionName(Arr.headNonEmpty(present)), 'function'),
         })),
       ),
   })
@@ -304,7 +334,14 @@ const interfaceItemOf = (
           const typeParameters = yield* typeParametersOf(inner, first.typeParameters)
           const extending = yield* Effect.forEach(present, (node) => Effect.forEach(node.extends, (heritage) => heritageOf(inner, heritage)))
           const members = yield* Effect.forEach(present, (node) => membersOf(inner, node.body.body))
-          const item: ApiItem = { kind: 'interface', name, typeParameters, extends: extending.flat(), members: members.flat() }
+          const item: ApiItem = {
+            kind: 'interface',
+            name,
+            typeParameters,
+            extends: extending.flat(),
+            members: members.flat(),
+            ...metaOf(context, first.id.name, 'interface'),
+          }
           return item
         }),
       ),
@@ -342,6 +379,7 @@ const classItemOf = (
             extends: extended,
             implements: implemented,
             members,
+            ...metaOf(context, classNodeName(node), 'class'),
           }
           return item
         }),
@@ -387,7 +425,13 @@ const variableItemOf = (
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: ([variable]) =>
       Effect.asSome(
-        Effect.map(variableType(context, variable.node), (type): ApiItem => ({ kind: 'variable', name, constant: variable.constant, type })),
+        Effect.map(variableType(context, variable.node), (type): ApiItem => ({
+          kind: 'variable',
+          name,
+          constant: variable.constant,
+          type,
+          ...metaOf(context, Option.getOrElse(variableName(variable.node), () => name), 'variable'),
+        })),
       ),
   })
 
@@ -451,7 +495,13 @@ const enumItemOf = (
     onEmpty: () => Effect.succeedNone,
     onNonEmpty: (present) =>
       Effect.asSome(
-        Effect.map(enumMembersOf(context, present), (members): ApiItem => ({ kind: 'enum', name, const: Arr.headNonEmpty(present).const, members })),
+        Effect.map(enumMembersOf(context, present), (members): ApiItem => ({
+          kind: 'enum',
+          name,
+          const: Arr.headNonEmpty(present).const,
+          members,
+          ...metaOf(context, Arr.headNonEmpty(present).id.name, 'enum'),
+        })),
       ),
   })
 
@@ -462,10 +512,17 @@ const namespaceItemOf = (
 ): Effect.Effect<Option.Option<ApiItem>, UnsupportedDeclaration> =>
   Arr.match(nodes, {
     onEmpty: () => Effect.succeedNone,
-    onNonEmpty: (present) =>
-      Effect.asSome(
-        Effect.map(namespaceBodyItems(context, present.map((node) => node.body)), (items): ApiItem => ({ kind: 'namespace', name, items })),
-      ),
+    onNonEmpty: (present) => {
+      const declared = Option.getOrElse(namespaceName(Arr.headNonEmpty(present)), () => name)
+      return Effect.asSome(
+        Effect.map(namespaceBodyItems(inNamespace(context, declared), present.map((node) => node.body)), (items): ApiItem => ({
+          kind: 'namespace',
+          name,
+          items,
+          ...metaOf(context, declared, 'namespace'),
+        })),
+      )
+    },
   })
 
 const byGroupName: Order.Order<readonly [string, ReadonlyArray<Declaration>]> = Order.mapInput(Order.String, ([name]) => name)
@@ -551,8 +608,13 @@ const itemsForExport = (
       Match.value(symbol).pipe(
         Match.when({ kind: 'external' }, (external) => refuse(external.file, `re-export of "${name}" from "${external.module}"`)),
         Match.when({ kind: 'local' }, (local) => itemsOfDeclarations(contextFor(local.file), local.declarations, name)),
-        Match.when({ kind: 'namespace' }, (namespace) =>
-          Effect.map(itemsForFile(graph, contextFor, namespace.file, visited), (items): ReadonlyArray<ApiItem> => [{ kind: 'namespace', name, items }])),
+        Match.when({ kind: 'namespace' }, (namespace) => {
+          const origin = Option.getOrElse(exportOrigin(graph, entryFile, name), () => entryFile)
+          const meta = contextFor(origin).index.reExportMetaOf(origin, name)
+          return Effect.map(itemsForFile(graph, contextFor, namespace.file, visited), (items): ReadonlyArray<ApiItem> => [
+            { kind: 'namespace', name, items, ...meta },
+          ])
+        }),
         Match.exhaustive,
       ),
   })
@@ -586,7 +648,7 @@ const buildReachableLocals = (
   return drain()
 }
 
-const buildEntry = (graph: DeclarationGraph, entry: EntryDeclaration): Effect.Effect<EntryPoint, UnsupportedDeclaration> =>
+const buildEntry = (graph: DeclarationGraph, sourceIndex: SourceIndex, entry: EntryDeclaration): Effect.Effect<EntryPoint, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const file = entry.declarationFile
     const exported = exportedNames(graph, file)
@@ -594,31 +656,87 @@ const buildEntry = (graph: DeclarationGraph, entry: EntryDeclaration): Effect.Ef
     const reachable = yield* Ref.make(HashMap.empty<string, LocalDeclaration>())
     const built = yield* Ref.make(HashMap.empty<string, TypeAliasItem>())
     const naming: Naming = { localNameOf: (at, name, declarations) => localNameOf(reachable, index, at, name, declarations) }
-    const contextFor = (at: string): TypeContext => ({ graph, file: at, naming, namesInScope: HashSet.empty(), valuesInScope: HashSet.empty() })
+    const contextFor = (at: string): TypeContext => ({
+      graph,
+      file: at,
+      naming,
+      namesInScope: HashSet.empty(),
+      valuesInScope: HashSet.empty(),
+      index: sourceIndex,
+      namePath: [],
+    })
     const items = yield* Effect.forEach(exported, (name) => itemsForExport(graph, contextFor, file, name, HashSet.empty()))
     yield* buildReachableLocals(contextFor, reachable, built)
     const rename = assignNames(exported, yield* Ref.get(reachable))
     const locals = Arr.fromIterable(HashMap.values(yield* Ref.get(built))).map((alias) => renameAlias(alias, rename))
-    return { path: entry.exportPath, items: items.flat().map((item) => renameItem(item, rename)), locals }
+    return {
+      path: entry.exportPath,
+      target: entry.target ?? { key: entry.exportPath, condition: null, path: entry.declarationFile },
+      items: items.flat().map((item) => renameItem(item, rename)),
+      locals,
+    }
   })
+
+const unmappedReason = (entryPath: string, itemPath: ReadonlyArray<string>, item: ApiItem): ReadonlyArray<CoverageReason> =>
+  item.anchor === null
+    ? [{ kind: 'unmapped-anchor', detail: `the entry point "${entryPath}" holds \`${itemPath.join('.')}\` without a source anchor` }]
+    : []
+
+const nestedReasons = (entryPath: string, itemPath: ReadonlyArray<string>, item: ApiItem): ReadonlyArray<CoverageReason> =>
+  item.kind === 'namespace' ? Arr.flatMap(item.items, (child) => itemReasons(entryPath, itemPath, child)) : []
+
+/** The coverage reason an item adds when the source index could not map it back to a declaration. */
+const itemReasons = (entryPath: string, prefix: ReadonlyArray<string>, item: ApiItem): ReadonlyArray<CoverageReason> => {
+  const itemPath = [...prefix, item.name]
+  return [...unmappedReason(entryPath, itemPath, item), ...nestedReasons(entryPath, itemPath, item)]
+}
+
+const entryReasons = (entry: EntryPoint): ReadonlyArray<CoverageReason> => Arr.flatMap(entry.items, (item) => itemReasons(entry.path, [], item))
 
 export type ModelOfGraphRequest = {
   readonly graph: DeclarationGraph
   readonly producer: Declarations['producer']
-  readonly package: Declarations['package']
+  readonly package: PackageSurface
+  readonly anchorBase: AnchorBase
+  readonly index: SourceIndex
+  readonly messages: ReadonlyArray<AnalysisMessage>
+  /** Reasons the analysis already knows: parse failures and empty patterns. */
+  readonly reasons: ReadonlyArray<CoverageReason>
 }
 
 export const modelOfGraph = (request: ModelOfGraphRequest): Effect.Effect<ApiModel, UnsupportedDeclaration> =>
-  Effect.map(Effect.forEach(request.graph.entryPoints, (entry) => buildEntry(request.graph, entry)), (entryPoints) =>
-    sortModel({
+  Effect.map(Effect.forEach(request.graph.entryPoints, (entry) => buildEntry(request.graph, request.index, entry)), (entryPoints) => {
+    const reasons = [...request.reasons, ...Arr.flatMap(entryPoints, entryReasons)]
+    return sortModel({
       schemaVersion: API_MODEL_SCHEMA_VERSION,
       producer: { engine: ENGINE, declarations: request.producer },
       package: request.package,
+      anchorBase: request.anchorBase,
       entryPoints,
-    }),
-  )
+      messages: request.messages,
+      coverage: { complete: reasons.length === 0, reasons },
+    })
+  })
+
+/** The surface a model built from declarations alone can name: no manifest facts are available. */
+const declaredSurface = (declarations: Declarations): PackageSurface => ({
+  name: declarations.package.name,
+  version: declarations.package.version,
+  exports: [],
+  imports: [],
+})
 
 export const buildModel = (declarations: Declarations): Effect.Effect<ApiModel, UnsupportedDeclaration> =>
   Effect.flatMap(declarationGraph(declarations), (graph) =>
-    modelOfGraph({ graph, producer: declarations.producer, package: declarations.package }),
+    Effect.flatMap(messagesOfGraph(graph, emptySourceIndex), (messages) =>
+      modelOfGraph({
+        graph,
+        producer: declarations.producer,
+        package: declaredSurface(declarations),
+        anchorBase: 'package',
+        index: emptySourceIndex,
+        messages,
+        reasons: [],
+      }),
+    ),
   )

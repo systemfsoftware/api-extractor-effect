@@ -65,19 +65,21 @@ const analysis = await Effect.runPromise(
 process.stdout.write(ApiModel.serialise(analysis.model))
 ```
 
-`readPackage` takes each export whose `@systemfsoftware/source` condition names a
-`.ts`, `.tsx`, `.mts` or `.cts` file, or a hand-written `.d.ts`, `.d.mts` or `.d.cts`
-file, as an entry point; `readPackage({ packageRoot,
-sourceCondition })` reads another condition instead, for example `types` for a package
-whose sources are not under the family's condition. A subpath pattern (`"./*"`, one
-star) expands to one entry per matching source under Node's `exports` rules: an explicit
-subpath wins over a pattern, and an export path belongs to the pattern key Node picks for
-it, so it names no entry when that key's target has no source or is `null`. A key or a
-target with two stars names no entry. The condition is read where the family writes it,
-directly
-under an export path, and its value is the source's path; a target that nests it under
-another condition, lists targets in an array, or gives the condition anything but a path
-names no entry. A package with no such export is refused with `NoSourceEntry`.
+`readPackage` resolves every `exports` key to the target a consumer sees: the requested
+condition (`@systemfsoftware/source` by default, or `sourceCondition`), then `types`,
+`import`, `default`, then the first remaining string target by code unit. An `exports`
+string is the `.` entry, and a bare path target resolves as itself. The resolved target
+must be a TypeScript source or declaration file (`.ts`, `.tsx`, `.mts`, `.cts`, `.d.ts`);
+a key that resolves to anything else is refused with `NoSourceEntry`, naming the key and
+the target. Each entry records the manifest key, the condition that selected its target
+and the target itself. A subpath pattern (`"./*"`, one star) expands to one entry per
+matching source under Node's `exports` rules: an explicit subpath wins over a pattern,
+and an export path belongs to the pattern key Node picks for it, so it names no entry
+when that key's target has no source or is `null`. A key or a target with two stars names
+no entry, and a pattern that resolves no source file adds a `pattern-empty` coverage
+reason. The `imports` map (`#x/*`) is decoded and recorded with the same resolution as
+internal surface, never as an entry point: a package with an imports map and no `exports`
+analyses to zero entry points. A package with neither is refused with `NoSourceEntry`.
 A package whose `package.json` does not decode — invalid JSON, or a manifest the schema
 refuses — is refused with `ManifestRejected`, naming the package root. So is a pattern
 export whose walk lists more than 1024 directories, which symlinked aliases of a
@@ -115,6 +117,16 @@ resolver reports `ae-forgotten-export`, `ae-missing-release-tag`,
 `ae-internal-mixed-release-tag`, so both routes give the same model and messages, apart
 from the producer stamp (`producer.declarations`), which names the emitter that ran
 (`FrontEnd.OXC_TRANSFORM_PRODUCER` or `FrontEnd.TYPESCRIPT_PRODUCER`).
+A source index parses every source the emitter read with `oxc-parser`, so both routes
+give every item the same anchor without declaration maps. Model schema version 3 adds,
+to every item, its `anchor` (repository-relative source file and 1-based line, or `null`),
+its `releaseTag` (`public`, `beta`, `alpha`, `internal` or `untagged`) and its
+`@stability` value; and, to the model, the package's `exports` and `imports` maps, the
+analysis messages with their anchors, the anchor base and the coverage. An item the
+index cannot map stays listed with `anchor: null` and adds an `unmapped-anchor` coverage
+reason, so a partial model is never presented as complete. `FrontEnd.analyse` returns
+`{ route, model }`; an anchor, a tag, a message and the coverage all live in the model,
+which is the one value the report and the diff read.
 
 The builder refuses a package with `UnsupportedDeclaration`, naming the file and the
 construct, when its declarations contain one of these constructs, which model schema

@@ -49,6 +49,7 @@ import {
   resolveName,
 } from './declaration-graph.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
+import type { SourceIndex } from './source-index.ts'
 
 export type ReferenceTarget = {
   readonly name: string
@@ -65,6 +66,10 @@ export type TypeContext = {
   readonly naming: Naming
   readonly namesInScope: HashSet.HashSet<string>
   readonly valuesInScope: HashSet.HashSet<string>
+  /** Source facts for the item the context is building. */
+  readonly index: SourceIndex
+  /** The namespaces the item being built sits in, outermost first. */
+  readonly namePath: ReadonlyArray<string>
 }
 
 const withNamesInScope = (context: TypeContext, names: ReadonlyArray<string>): TypeContext => ({
@@ -276,11 +281,20 @@ const printAnnotationOrDefault = (
     onSome: (present) => canonicalTypeText(context, present.typeAnnotation),
   })
 
+const MODIFIER_PREFIXES = [
+  { flag: 'in', text: 'in ' },
+  { flag: 'out', text: 'out ' },
+  { flag: 'const', text: 'const ' },
+] as const
+
+const modifierPrefix = (parameter: TSTypeParameter): string =>
+  MODIFIER_PREFIXES.filter(({ flag }) => parameter[flag]).map(({ text }) => text).join('')
+
 const printTypeParameter = (context: TypeContext, parameter: TSTypeParameter): Effect.Effect<string, UnsupportedDeclaration> =>
   Effect.gen(function* () {
     const constraint = yield* printOptional(context, parameter.constraint, (text) => ` extends ${text}`)
     const fallback = yield* printOptional(context, parameter.default, (text) => ` = ${text}`)
-    return `${parameter.name.name}${constraint}${fallback}`
+    return `${modifierPrefix(parameter)}${parameter.name.name}${constraint}${fallback}`
   })
 
 const printTypeParameters = (context: TypeContext, declaration: TSTypeParameterDeclaration | null): Effect.Effect<string, UnsupportedDeclaration> =>

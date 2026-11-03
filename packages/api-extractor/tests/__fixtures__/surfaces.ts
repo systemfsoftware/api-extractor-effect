@@ -8,6 +8,12 @@ type ApiItem = ApiModel.ApiItem
 type EntryPoint = ApiModel.EntryPoint
 type TypeAliasItem = ApiModel.TypeAliasItem
 type Model = ApiModel.ApiModel
+type ItemMeta = ApiModel.ItemMeta
+
+/** The metadata every fixture item carries: unanchored, untagged, no stability. */
+export const META: ItemMeta = { anchor: null, releaseTag: 'untagged', stability: null }
+
+export const ROOT_TARGET: ApiModel.EntryPointTarget = { key: '.', condition: null, path: 'index.d.ts' }
 
 export const ref = (name: string, ...args: ReadonlyArray<TypeExpr>): TypeExpr => ({ kind: 'reference', name, args })
 export const never: TypeExpr = { kind: 'keyword', name: 'never' }
@@ -43,17 +49,12 @@ export const fn = (sig: Signature): TypeExpr => ({ kind: 'function', signature: 
 
 export const TARGET = 'target'
 
-export const functionItem = (...signatures: ReadonlyArray<Signature>): ApiItem => ({ kind: 'function', name: TARGET, signatures })
+export const functionItem = (...signatures: ReadonlyArray<Signature>): ApiItem => ({ kind: 'function', name: TARGET, signatures, ...META })
 
 export const withEntryPoints: {
   (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model
   (entryPoints: ReadonlyArray<EntryPoint>): (model: Model) => Model
-} = Function.dual(2, (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model => ({
-  schemaVersion: model.schemaVersion,
-  producer: model.producer,
-  package: model.package,
-  entryPoints,
-}))
+} = Function.dual(2, (model: Model, entryPoints: ReadonlyArray<EntryPoint>): Model => ({ ...model, entryPoints }))
 
 /** The model with `item` exported from `.` (and `locals` added there), keeping everything else. */
 export const withExport: {
@@ -66,6 +67,7 @@ export const withExport: {
     const others = model.entryPoints.filter((entry) => entry.path !== '.')
     const entry: EntryPoint = {
       path: '.',
+      target: root?.target ?? ROOT_TARGET,
       items: [...(root?.items ?? []).filter((existing) => existing.name !== item.name), item],
       locals: [...(root?.locals ?? []).filter((alias) => !locals.some((local) => local.name === alias.name)), ...locals],
     }
@@ -76,20 +78,28 @@ export const withExport: {
 export const alias: {
   (type: TypeExpr): (name: string) => TypeAliasItem
   (name: string, type: TypeExpr): TypeAliasItem
-} = Function.dual(2, (name: string, type: TypeExpr): TypeAliasItem => ({ kind: 'typeAlias', name, typeParameters: [], type }))
+} = Function.dual(2, (name: string, type: TypeExpr): TypeAliasItem => ({ kind: 'typeAlias', name, typeParameters: [], type, ...META }))
 
 export const rooted = (model: Model): Model => {
   const entries = model.entryPoints.map(
-    (entry): EntryPoint => ({ path: entry.path, items: entry.items.filter((item) => item.name !== TARGET), locals: entry.locals }),
+    (entry): EntryPoint => ({ ...entry, items: entry.items.filter((item) => item.name !== TARGET) }),
   )
-  return withEntryPoints(model, entries.some((entry) => entry.path === '.') ? entries : [...entries, { path: '.', items: [], locals: [] }])
+  return withEntryPoints(
+    model,
+    entries.some((entry) => entry.path === '.')
+      ? entries
+      : [...entries, { path: '.', target: ROOT_TARGET, items: [], locals: [] }],
+  )
 }
 
 export const empty: Model = rooted({
   schemaVersion: ApiModel.SCHEMA_VERSION,
   producer: { engine: 'fixture@0.0.0', declarations: 'hand-written' },
-  package: { name: 'fixture', version: '1.0.0' },
+  package: { name: 'fixture', version: '1.0.0', exports: [], imports: [] },
+  anchorBase: 'package',
   entryPoints: [],
+  messages: [],
+  coverage: { complete: true, reasons: [] },
 })
 
 export const decodeVerdict = (document: string) => Schema.decodeResult(Schema.fromJsonString(Verdict.Verdict))(document)
@@ -100,5 +110,5 @@ export const rootedWith: {
 } = Function.dual(
   (args) => args.length >= 2,
   (model: Model, items: ReadonlyArray<ApiItem>, locals: ReadonlyArray<TypeAliasItem> = []): Model =>
-    withEntryPoints(model, [...model.entryPoints.filter((entry) => entry.path !== '.'), { path: '.', items, locals }]),
+    withEntryPoints(model, [...model.entryPoints.filter((entry) => entry.path !== '.'), { path: '.', target: ROOT_TARGET, items, locals }]),
 )

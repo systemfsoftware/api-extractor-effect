@@ -1,5 +1,5 @@
 export { type Analysis, analyse } from './front-end/analyse.ts'
-export { AnalysisMessage } from './front-end/analysis-message.schema.ts'
+export { AnalysisMessage } from './model/message.schema.ts'
 export { buildModel } from './front-end/build-model.ts'
 export {
   CompilerEmitter,

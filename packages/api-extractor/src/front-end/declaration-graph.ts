@@ -22,7 +22,8 @@ import {
   type VariableDeclarator,
   Visitor,
 } from 'oxc-parser'
-import type { DeclarationFile, Declarations, SourceEntryPoint } from './declarations.schema.ts'
+import type { EntryPointTarget } from '../model/api-model.schema.ts'
+import type { DeclarationFile, Declarations, SourceEntryPoint, SourceFile } from './declarations.schema.ts'
 import { UnsupportedDeclaration } from './front-end-error.schema.ts'
 
 const RELATIVE_SPECIFIER = /^\.\.?(\/|$)/
@@ -81,13 +82,25 @@ const declarationCandidates: {
 export const declarationPathOf = (sourceFile: string): string =>
   DECLARATION_EXTENSION.test(sourceFile) ? sourceFile : sourceFile.replace(/\.([mc]?)tsx?$/, (_, flavour: string) => declarationExtensionOf(flavour))
 
+/** One source per path, ordered by path, so both emitter routes hand the index the same list. */
+export const uniqueSources = (sources: ReadonlyArray<SourceFile>): ReadonlyArray<SourceFile> =>
+  Arr.sort(
+    Arr.fromIterable(HashMap.values(HashMap.fromIterable(sources.map((source) => [source.path, source] as const)))),
+    Order.mapInput(Order.String, (source: SourceFile) => source.path),
+  )
+
 export type EntryDeclaration = {
   readonly exportPath: string
   readonly declarationFile: string
+  readonly target?: EntryPointTarget
 }
 
 export const entryPointDeclarations = (entryPoints: ReadonlyArray<SourceEntryPoint>): ReadonlyArray<EntryDeclaration> =>
-  entryPoints.map((entry) => ({ exportPath: entry.exportPath, declarationFile: declarationPathOf(entry.sourceFile) }))
+  entryPoints.map((entry) => ({
+    exportPath: entry.exportPath,
+    declarationFile: declarationPathOf(entry.sourceFile),
+    target: { key: entry.key, condition: entry.condition, path: entry.target },
+  }))
 
 export type SharedDeclaration = {
   readonly declarationFile: string

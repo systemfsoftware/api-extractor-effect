@@ -211,8 +211,12 @@ const defaultArgument = (
 const expandTypeParameters = (parameters: ReadonlyArray<TypeParameter>, scope: Scope): ReadonlyArray<TypeParameter> =>
   parameters.map((parameter) => expandTypeParameter(parameter, scope))
 
+const modifierFields = (parameter: TypeParameter): Pick<TypeParameter, 'modifiers'> =>
+  parameter.modifiers === undefined ? {} : { modifiers: parameter.modifiers }
+
 const expandTypeParameter = (parameter: TypeParameter, scope: Scope): TypeParameter => ({
   name: parameter.name,
+  ...modifierFields(parameter),
   ...constraintOf(parameter, scope),
   ...defaultOf(parameter, scope),
 })
@@ -434,6 +438,7 @@ const typeParameterKey = (parameter: TypeParameter) => ({
   name: parameter.name,
   constraint: optionalTypeKey(parameter.constraint),
   default: optionalTypeKey(parameter.default),
+  modifiers: parameter.modifiers ?? [],
 })
 
 const typeParametersKey = (parameters: ReadonlyArray<TypeParameter>): string =>
