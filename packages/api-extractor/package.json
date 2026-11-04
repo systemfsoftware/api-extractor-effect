@@ -34,7 +34,6 @@
   "dependencies": {
     "@microsoft/tsdoc": "catalog:",
     "@systemfsoftware/effect-cell-types": "^12.0.0",
-    "effect": "catalog:",
     "oxc-parser": "catalog:",
     "oxc-transform": "catalog:",
     "typescript": "catalog:"
@@ -57,11 +56,15 @@
     "@systemfsoftware/vitest": "^2.0.0",
     "@systemfsoftware/vitest-config": "^0.1.0",
     "@types/node": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "^4.1.2"
   },
   "publishConfig": {
     "exports": {
