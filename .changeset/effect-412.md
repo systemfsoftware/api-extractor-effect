@@ -2,4 +2,4 @@
 "@systemfsoftware/api-extractor": patch
 ---
 
-Requires Effect 4.1.2 or later.
+Requires Effect ^4.1.2.
