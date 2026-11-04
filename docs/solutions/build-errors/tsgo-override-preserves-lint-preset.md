@@ -21,7 +21,7 @@ The shared `@systemfsoftware/oxlint-config-recommended` package imports the `cor
 
 ## Guidance
 
-Retain the existing `@effect/tsgo` catalog override while the shared preset's dependency range excludes the catalog version. This is a pre-existing exception, not a general reason to force incompatible dependencies. The owner directed its retention during the 4.1.2 upgrade because removing it reduced lint coverage. The independent Effect and platform overrides were removed.
+Retain the existing `@effect/tsgo` catalog override while the shared preset's dependency range excludes the catalog version. This is a pre-existing exception, not a general reason to force incompatible dependencies. The conductor ruled to retain it during the 4.1.2 upgrade because removing it reduced enabled lint rules from 343 to 337. The independent Effect and platform overrides were removed.
 
 SYS-990 tracks the shared preset's range fix. Once an updated preset accepts the catalog version, remove the tsgo override, regenerate the lockfile, and run lint without cached results before deciding whether the exception is obsolete.
 
