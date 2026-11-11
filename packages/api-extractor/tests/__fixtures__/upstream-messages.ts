@@ -104,6 +104,9 @@ export type DeclarationRequest = {
 export const declarationsOf = (request: DeclarationRequest): FrontEnd.Declarations => ({
   producer: 'fixture',
   package: { name: 'fixture', version: '1.0.0' },
+  anchorBase: 'package',
+  anchorPrefix: '',
   entryPoints: [{ exportPath: '.', declarationFile: request.entry }],
   files: request.files.map(([path, text]) => ({ path: path ?? '', text: text ?? '' })),
+  sources: [],
 })

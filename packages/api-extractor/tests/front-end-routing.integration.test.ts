@@ -22,7 +22,7 @@ const packageOf = (manifest: object, sources: Record<string, string>) =>
 
 const sourceManifest = (name: string, entry: string) => ({ name, version: '1.0.0', exports: { '.': { [FrontEnd.FAMILY_SOURCE_CONDITION]: entry } } })
 
-const builtOnlyPackage = packageOf({ name: 'no-source', version: '1.0.0', exports: { '.': { types: './dist/mod.d.ts', default: './dist/mod.js' } } }, {})
+const builtOnlyPackage = packageOf({ name: 'no-source', version: '1.0.0', exports: { '.': { default: './dist/mod.js' } } }, {})
 
 const destructuredExportPackage = packageOf(sourceManifest('destructured', './src/mod.ts'), {
   'mod.ts': 'const pair = { a: 1, b: 2 }\nexport const { a, b } = pair\n',
@@ -102,11 +102,11 @@ Feature('A package is routed to the front-end its declarations allow')
   .live('the emitters read real package files from disk')
   .body(({ scenario }) => {
     scenario(
-      'this isolatedDeclarations-clean package takes the fast path and yields a version 2 model',
+      'this isolatedDeclarations-clean package takes the fast path and yields a version 3 model',
       Gherkin.Do.pipe(
         Given('this repository package')('source', () => Effect.flatMap(packageRoot, (root) => FrontEnd.readPackage({ packageRoot: root }))),
         When('the engine analyses it')('analysis', (scope) => FrontEnd.analyse(scope.source)),
-        Then('it took the fast path and the model round-trips through the version 2 schema')((scope, expect) =>
+        Then('it took the fast path and the model round-trips through the version 3 schema')((scope, expect) =>
           expect({
             route: scope.analysis.route._tag,
             producer: scope.analysis.model.producer.declarations,
@@ -137,7 +137,15 @@ Feature('A package is routed to the front-end its declarations allow')
           }).toEqual({
             route: 'FastPath',
             exports: ['variable:count'],
-            count: { kind: 'variable', name: 'count', constant: true, type: { kind: 'keyword', name: 'number' } },
+            count: {
+              kind: 'variable',
+              name: 'count',
+              constant: true,
+              type: { kind: 'keyword', name: 'number' },
+              anchor: { file: 'src/mod.ts', line: 1 },
+              releaseTag: 'untagged',
+              stability: null,
+            },
           })
         ),
       ),

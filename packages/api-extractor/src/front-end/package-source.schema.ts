@@ -1,4 +1,4 @@
-import { Match, Predicate, Schema, SchemaTransformation } from 'effect'
+import { Array as Arr, Function as Fn, Match, Option, Order, Predicate, Schema, SchemaTransformation } from 'effect'
 
 type EncodedConditions = { readonly [condition: string]: EncodedExportTarget }
 
@@ -90,11 +90,79 @@ type PackageManifestFields = {
   readonly name: Schema.String
   readonly version: Schema.String
   readonly exports: Schema.optionalKey<Schema.Union<readonly [Schema.String, Schema.$Record<Schema.String, typeof ExportTargetCodec>]>>
+  readonly imports: Schema.optionalKey<Schema.$Record<Schema.String, typeof ExportTargetCodec>>
 }
 
 export const PackageManifest: Schema.Struct<PackageManifestFields> = Schema.Struct({
   name: Schema.String,
   version: Schema.String,
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, ExportTargetCodec)])),
+  imports: Schema.optionalKey(Schema.Record(Schema.String, ExportTargetCodec)),
 })
 export type PackageManifest = typeof PackageManifest.Type
+
+/** A target reduced to the path a consumer resolves and the condition that selected it. */
+export type ResolvedTarget = {
+  readonly path: string
+  readonly condition: string | null
+}
+
+const CONDITION_FALLBACKS = ['types', 'import', 'default'] as const
+
+const conditionOrder = (preferred: string): ReadonlyArray<string> => [
+  preferred,
+  ...CONDITION_FALLBACKS.filter((condition) => condition !== preferred),
+]
+
+const firstResolved = (options: ReadonlyArray<Option.Option<ResolvedTarget>>): Option.Option<ResolvedTarget> =>
+  Arr.match(Arr.getSomes(options), {
+    onEmpty: () => Option.none<ResolvedTarget>(),
+    onNonEmpty: (resolved) => Option.some(Arr.headNonEmpty(resolved)),
+  })
+
+const declaredCondition = (conditions: { readonly [condition: string]: ExportTarget }, condition: string): Option.Option<ExportTarget> =>
+  Object.hasOwn(conditions, condition) ? Option.fromNullishOr(conditions[condition]) : Option.none()
+
+const conditionEntries = (
+  conditions: { readonly [condition: string]: ExportTarget },
+  preferred: string,
+): ReadonlyArray<readonly [string, ExportTarget]> => {
+  const ordered = conditionOrder(preferred)
+  const named = ordered.flatMap((condition) =>
+    Option.match(declaredCondition(conditions, condition), {
+      onNone: () => Arr.empty<readonly [string, ExportTarget]>(),
+      onSome: (target) => [[condition, target] as const],
+    }))
+  const rest = Object.entries(conditions)
+    .filter(([condition]) => !ordered.includes(condition))
+    .sort(([left], [right]) => Order.String(left, right))
+  return [...named, ...rest]
+}
+
+function targetPathIn(target: ExportTarget, preferred: string): Option.Option<ResolvedTarget> {
+  return Match.value(target).pipe(
+    Match.tag('Path', ({ path }) => Option.some<ResolvedTarget>({ path, condition: null })),
+    Match.tag('Conditions', ({ conditions }) =>
+      firstResolved(
+        conditionEntries(conditions, preferred).map(([condition, chosen]) =>
+          Option.map(targetPathIn(chosen, preferred), (resolved) => ({ path: resolved.path, condition })),
+        ),
+      )),
+    Match.tag('Fallbacks', ({ targets }) => firstResolved(targets.map((fallback) => targetPathIn(fallback, preferred)))),
+    Match.tag('Excluded', () => Option.none<ResolvedTarget>()),
+    Match.exhaustive,
+  )
+}
+
+/**
+ * The target a consumer resolves: the requested condition, then `types`, `import`,
+ * `default`, then the first remaining key by code unit. A bare path resolves as itself
+ * with no condition; an array resolves through its first target that yields a path.
+ */
+export const targetPathOf: {
+  (target: ExportTarget, preferred: string): Option.Option<ResolvedTarget>
+  (target: ExportTarget): (preferred: string) => Option.Option<ResolvedTarget>
+} = Fn.dual(2, targetPathIn)
+
+/** A manifest string target, as a target the resolver understands. */
+export const pathTargetOf = (path: string): ExportTarget => ExportPath.make({ path })

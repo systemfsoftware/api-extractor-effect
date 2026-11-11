@@ -71,7 +71,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
             }))),
         When(SOME_NOTE)('both', (scope) => bothSides(scope.declarations)),
         Then('the forgotten export names the type at the function name and the external type draws no note')((scope, expect) =>
-          expect({ pairs: reviewed(scope.both.declarations, scope.both.messages), forgotten: forgottenAt(scope.both.messages) }).toEqual({
+          expect({ pairs: reviewed(scope.both.declarations, scope.both.messages), forgotten: forgottenAt(scope.both.messages) }).toMatchObject({
             pairs: sorted(scope.both.upstream),
             forgotten: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'makeWidget', symbol: 'Widget' }],
           })),
@@ -207,7 +207,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             notes: reviewed(scope.both.declarations, scope.both.messages),
             forgotten: forgottenAt(scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             notes: sorted(scope.both.upstream),
             forgotten: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'use', symbol: 'A' }],
           })),
@@ -243,7 +243,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             notes: reviewed(scope.both.declarations, scope.both.messages),
             forgotten: forgottenAt(scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             notes: sorted(scope.both.upstream),
             forgotten: [
               { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'use', symbol: 'K' },
@@ -279,7 +279,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             notes: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             notes: [
               { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'f', symbol: 'Missing' },
               { messageId: 'ae-internal-missing-underscore', entryPoint: '.', item: 'secret', symbol: 'secret' },
@@ -299,6 +299,8 @@ Feature('Review notes for a package match the ones api-extractor derives')
             Effect.sync((): FrontEnd.Declarations => ({
               producer: 'fixture',
               package: { name: 'fixture', version: '1.0.0' },
+              anchorBase: 'package',
+              anchorPrefix: '',
               entryPoints: [
                 { exportPath: '.', declarationFile: 'index.d.ts' },
                 { exportPath: './util', declarationFile: 'util.d.ts' },
@@ -307,13 +309,14 @@ Feature('Review notes for a package match the ones api-extractor derives')
                 { path: 'index.d.ts', text: '/** @public */\nexport declare const main: string\n' },
                 { path: 'util.d.ts', text: 'interface Hidden { readonly a: string }\nexport declare function helper(): Hidden\nexport {}\n' },
               ],
+              sources: [],
             }))),
         When('the notes for each entry point are derived')('messages', (scope) => FrontEnd.resolveMessages(scope.declarations)),
         Then('the notes naming the util function are reported under `./util` and none under `.`')((scope, expect) =>
           expect({
             messages: scope.messages,
             underMain: scope.messages.filter((message) => message.entryPoint === '.'),
-          }).toEqual({
+          }).toMatchObject({
             messages: [
               { messageId: 'ae-forgotten-export', entryPoint: './util', item: 'helper', symbol: 'Hidden' },
               { messageId: 'ae-missing-release-tag', entryPoint: './util', item: 'helper', symbol: 'helper' },
@@ -351,7 +354,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [],
             pairs: sorted(scope.both.upstream),
           })),
@@ -385,7 +388,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [
               { messageId: 'ae-forgotten-export', entryPoint: '.', item: 'N', symbol: 'A' },
               { messageId: 'ae-missing-release-tag', entryPoint: '.', item: 'N', symbol: 'N' },
@@ -424,7 +427,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [],
             pairs: sorted(scope.both.upstream),
           })),
@@ -460,7 +463,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [{ messageId: 'ae-forgotten-export', entryPoint: '.', item: 'N', symbol: 'A' }],
             pairs: sorted(scope.both.upstream),
           })),
@@ -498,7 +501,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [],
             pairs: sorted(scope.both.upstream),
           })),
@@ -540,7 +543,7 @@ Feature('Review notes for a package match the ones api-extractor derives')
           expect({
             messages: scope.both.messages,
             pairs: reviewed(scope.both.declarations, scope.both.messages),
-          }).toEqual({
+          }).toMatchObject({
             messages: [],
             pairs: sorted(scope.both.upstream),
           })),

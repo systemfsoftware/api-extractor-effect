@@ -2,9 +2,9 @@ import { Array as Arr, Effect, FileSystem, HashMap, HashSet, Layer, Match, Optio
 import type { PlatformError } from 'effect/PlatformError'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import oxcTransformManifest from 'oxc-transform/package.json' with { type: 'json' }
-import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, sharedDeclarations, sourceCandidatesOf, type ClosureResult, type SharedDeclaration, type UnresolvedImport } from './declaration-graph.ts'
+import { closeDeclarations, declarationPathOf, entryPointDeclarations, missingEntryDeclarations, sharedDeclarations, sourceCandidatesOf, type ClosureResult, type SharedDeclaration, type UnresolvedImport, uniqueSources } from './declaration-graph.ts'
 import { type DeclarationEmitter, IsolatedEmitter, type IsolatedEmitterId } from './declaration-emitter.service.ts'
-import type { DeclarationFile, Declarations, Diagnostic, PackageSource } from './declarations.schema.ts'
+import type { DeclarationFile, Declarations, Diagnostic, PackageSource, SourceFile } from './declarations.schema.ts'
 import { NotIsolated, type UnsupportedDeclaration } from './front-end-error.schema.ts'
 import { isDeclarationFile, readPackageFile } from './package-file.ts'
 
@@ -35,6 +35,7 @@ type Emission = {
   readonly source: PackageSource
   readonly realRoot: string
   readonly diagnostics: Ref.Ref<ReadonlyArray<Diagnostic>>
+  readonly sources: Ref.Ref<ReadonlyArray<SourceFile>>
 }
 
 const declare = (emission: Emission, sourceFile: string, text: string) =>
@@ -54,7 +55,11 @@ const firstSource = (
       Effect.flatMap(readPackageFile({ packageRoot: emission.source.packageRoot, realRoot: emission.realRoot, file: sourceFile }), (text) =>
         Option.match(text, {
           onNone: () => firstSource(emission, rest),
-          onSome: (value) => (isDeclarationFile(sourceFile) ? Effect.succeedSome(value) : Effect.asSome(declare(emission, sourceFile, value))),
+          onSome: (value) =>
+            Effect.andThen(
+              Ref.update(emission.sources, (known) => [...known, { path: sourceFile, text: value }]),
+              isDeclarationFile(sourceFile) ? Effect.succeedSome(value) : Effect.asSome(declare(emission, sourceFile, value)),
+            ),
         })),
   })
 
@@ -109,7 +114,12 @@ const emit = (source: PackageSource) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const realRoot = yield* fileSystem.realPath(source.packageRoot)
-    const emission: Emission = { source, realRoot, diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]) }
+    const emission: Emission = {
+      source,
+      realRoot,
+      diagnostics: yield* Ref.make<ReadonlyArray<Diagnostic>>([]),
+      sources: yield* Ref.make<ReadonlyArray<SourceFile>>([]),
+    }
     const entryPoints = entryPointDeclarations(source.entryPoints)
     const entryDeclarations = entryPoints.map((entry) => entry.declarationFile)
     yield* Arr.match(sharedDeclarations(entryPoints).map(sharedDeclarationDiagnostic), {
@@ -126,8 +136,11 @@ const emit = (source: PackageSource) =>
     const declarations: Declarations = {
       producer: OXC_TRANSFORM_PRODUCER,
       package: { name: source.name, version: source.version },
+      anchorBase: source.anchorBase,
+      anchorPrefix: source.anchorPrefix,
       entryPoints,
       files,
+      sources: uniqueSources(yield* Ref.get(emission.sources)),
     }
     return declarations
   })
