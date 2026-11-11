@@ -82,7 +82,7 @@ The output is canonical JSON, here from a package whose `package.json` exports `
 
 ## Install
 
-`@systemfsoftware/api-extractor` is not on npm. This repository ships it as a flake output, and a release is a git tag and a GitHub Release (the latest is [v0.1.0](https://github.com/systemfsoftware/api-extractor-effect/releases/tag/%40systemfsoftware%2Fapi-extractor%40v0.1.0)). A consumer takes the flake as an input and the tarballs through the route in [pnpm-release-management](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix). `nix.systemfsoftware.com` is the registry for `@systemfsoftware` packages: Nix fetches what a producer has pushed there and builds the rest from source. This repository does not push its own tarball yet, so Nix builds `api-extractor` here.
+`@systemfsoftware/api-extractor` is not on npm. This repository ships it as a flake output, and a release is a git tag and a GitHub Release (the latest is [v0.1.0](https://github.com/systemfsoftware/api-extractor-effect/releases/tag/%40systemfsoftware%2Fapi-extractor%40v0.1.0)). A consumer takes the flake as an input and the tarballs through the route in [pnpm-release-management](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix). `nix.systemfsoftware.com` is the registry for `@systemfsoftware` packages: Nix fetches what a producer has pushed there and builds the rest from source. This repository pushes its own tarball on every push to `main`, so Nix substitutes `api-extractor` from `nix.systemfsoftware.com`.
 
 ### Add the flake as an input
 
