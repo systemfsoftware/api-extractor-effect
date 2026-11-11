@@ -2,8 +2,8 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
-# systemfsoftware tarballs the lockfile installs from: `nix build .#sfs-deps`, copied here
-.sfs-deps/
+# producer tarballs the lockfile installs from, copied in by the dev shell
+.deps/
 .cache/
 .turbo/
 .release/

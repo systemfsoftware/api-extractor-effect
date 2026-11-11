@@ -2,7 +2,7 @@
 
 ## Development setup
 
-`nix develop` provides the dev shell and the `@systemfsoftware/*` packages the workspace installs. The flake builds them from pinned systemfsoftware and stryker-js-effect commits, so they arrive as tarballs and never come from a registry.
+`nix develop` provides the dev shell. nix.systemfsoftware.com is the package registry for `@systemfsoftware` packages: this repository takes them from its flake inputs, pinned to producer commits, and the dev shell copies them into `.deps/`.
 
 Run the checks through the dev shell:
 
