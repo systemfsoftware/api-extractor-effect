@@ -16,7 +16,7 @@ The design and its requirements live in
 | Front-ends (isolated-declarations fast path, TypeScript 7 compiler fallback, model builder, analysis messages) | in this repository |
 | `.api.md` report with a differential test against `@microsoft/api-extractor` 7.59.1 | planned |
 | Benchmark, CLI, changeset-bump check | planned |
-| systemfsoftware and stryker-js-effect packages from the flake (`.sfs-deps`) | in this repository |
+| systemfsoftware and stryker-js-effect packages from nix.systemfsoftware.com, copied into `.deps/` by the dev shell | in this repository |
 | Lint, typecheck, build and test on systemfsoftware's reusable checks; tsdown, vitest and lint presets | in this repository |
 | Releases: changesets and GitHub Releases through pnpm-release-management | in this repository |
 | Mutation testing on `main` | waits on systemfsoftware's reusable mutation workflow (#710) |
@@ -159,10 +159,9 @@ nix develop --command pnpm --filter api-extractor-profile profile <systemfsoftwa
 
 ## Development
 
-The `@systemfsoftware/*` packages install from tarballs that this repository's flake
-builds from pinned systemfsoftware and stryker-js-effect commits, never from a registry.
-The dev shell copies them into `.sfs-deps/`; `bootstrap` installs inside the
-pnpm-release-management sandbox:
+nix.systemfsoftware.com is the package registry for `@systemfsoftware` packages. This repository
+takes them from its flake inputs, pinned to producer commits: the dev shell copies them
+into `.deps/`, and `bootstrap` installs inside the pnpm-release-management sandbox:
 
 ```sh
 nix develop --command pnpm run bootstrap
