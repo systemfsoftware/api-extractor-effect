@@ -18,7 +18,7 @@
     are-the-types-wrong-effect.url = "github:systemfsoftware/are-the-types-wrong-effect/2650b6a0c6cd3b2abdb7f429a5a55dd5221588ca";
     # The tarball builder, the consumer store and the release tools.
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/741c8c4334c261058dd4a3b2976c9f2e3796d523";
+      url = "github:systemfsoftware/pnpm-release-management/ebebdfebf30205b508840ea55801d55283af7648";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
