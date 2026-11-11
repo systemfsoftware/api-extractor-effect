@@ -25,7 +25,7 @@ verdict. Requirements and decisions: `docs/plans/2026-10-10-1146-feat-effect-api
 
 ## Commands
 
-Run inside the dev shell (`nix develop --command …`), which copies `.sfs-deps/`:
+Run inside the dev shell (`nix develop --command …`), which copies the producer tarballs into `.deps/`:
 
 ```sh
 pnpm run bootstrap   # sandboxed pnpm install --frozen-lockfile
