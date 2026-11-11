@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@732f66a0c85819b2005f9e0930a595bc4de91ee1
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@b146694efe1139948c03bd9e9e366c725252c0d1
     with:
       lanes: '[{"id": "lint", "name": "lint", "timeout-minutes": 10, "run": "pnpm lint"}, {"id": "typecheck", "name": "typecheck", "timeout-minutes": 10, "run": "pnpm typecheck"}, {"id": "build", "name": "build · attw", "timeout-minutes": 10, "run": "pnpm build && pnpm --filter @systemfsoftware/api-extractor attw"}]'
       timeout-minutes: 10
