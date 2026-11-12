@@ -11,7 +11,7 @@
     # Producers are pinned to their default-branch commit that pushes
     # `workspace-tarballs`. A producer input carries no `follows`: its tarballs
     # are input-addressed by the nixpkgs they were evaluated with.
-    systemfsoftware.url = "github:systemfsoftware/systemfsoftware/e1c7a5f4655d1705de502ebe0de3c1fa87e35591";
+    systemfsoftware.url = "github:systemfsoftware/systemfsoftware/3ef6c21c36f19a539078b6817b495df3039cc163";
     nixpkgs.follows = "systemfsoftware/nixpkgs";
     stryker-published.url = "github:systemfsoftware/stryker-js-effect/bc8680e836d3df9f80dc69770a9a91390447f8f1";
     # are-the-types-wrong-effect for its `attw` binary, and as a producer.
