@@ -84,6 +84,11 @@ jobs:
           while IFS= read -r attr; do
             build "packages.$SYSTEM.$attr"
           done <<< "$attrs"
+          # Not workspace members, but every CI job realises them: pnpm-store is the npm closure, producer-tarballs the
+          # producers' tarballs, and the dev shell carries the release tools and the dependency sandbox.
+          build "packages.$SYSTEM.pnpm-store"
+          build "packages.$SYSTEM.producer-tarballs"
+          build "devShells.$SYSTEM.default"
       - name: Push the closures and check the cache serves them
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
