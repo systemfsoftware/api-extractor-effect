@@ -3,6 +3,13 @@
 `@systemfsoftware/api-extractor`: versioned API model, diff and Effect-aware semver
 verdict. Requirements and decisions: `docs/plans/2026-10-10-1146-feat-effect-api-extractor-plan.md`.
 
+## Routing
+
+| Doc                                 | Trigger                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONSTITUTION.md`                   | architecture changes, rule authoring, or design disputes                                                                                        |
+| `repos/constitution/ENFORCEMENT.md` | building or changing an instrument that grades work (lint gates, stream rules, CI checks, thresholds, rubrics, advisors); situational read only |
+
 ## Rules
 
 - Read `docs/solutions/` before planning or changing code here.
