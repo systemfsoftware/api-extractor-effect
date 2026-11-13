@@ -22,8 +22,8 @@ jobs:
     with:
       commitlint: false
       changeset: true
-      fast: export TURBO_SCM_BASE="$BASE" TURBO_SCM_HEAD="$HEAD" && pnpm exec turbo run lint typecheck build --affected && pnpm --filter @systemfsoftware/api-extractor attw
-      full: pnpm lint && pnpm typecheck && pnpm build && pnpm --filter @systemfsoftware/api-extractor attw && pnpm test
+      fast: export TURBO_SCM_BASE="$BASE" TURBO_SCM_HEAD="$HEAD" && pnpm exec turbo run lint typecheck build --affected && PATH="$(nix build --no-link --print-out-paths .#attw)/bin:$PATH" pnpm --filter @systemfsoftware/api-extractor attw
+      full: pnpm lint && pnpm typecheck && pnpm build && PATH="$(nix build --no-link --print-out-paths .#attw)/bin:$PATH" pnpm --filter @systemfsoftware/api-extractor attw && pnpm test
 
   host-bytes:
     name: Output bytes on ${{ matrix.arch }}
