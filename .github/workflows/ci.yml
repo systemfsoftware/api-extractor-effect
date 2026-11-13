@@ -18,9 +18,10 @@ jobs:
   # A pull request runs the affected lint, typecheck and build, then attw; a Mergify queue draft and main run the
   # whole workspace and its tests. One job, so the runner and Nix setup are paid once.
   checks:
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-ci.yml@78ec8dee5051c4efc3b3b9b4e8b39abc0f11963d
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-ci.yml@6c79f6181556f62358795912ed5f905da8fffd47
     with:
       commitlint: false
+      changeset: true
       fast: export TURBO_SCM_BASE="$BASE" TURBO_SCM_HEAD="$HEAD" && pnpm exec turbo run lint typecheck build --affected && pnpm --filter @systemfsoftware/api-extractor attw
       full: pnpm lint && pnpm typecheck && pnpm build && pnpm --filter @systemfsoftware/api-extractor attw && pnpm test
 
