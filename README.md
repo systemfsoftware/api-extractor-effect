@@ -91,7 +91,6 @@ The output is canonical JSON, here from a package whose `package.json` exports `
   nixConfig = {
     extra-substituters = "https://nix.systemfsoftware.com";
     extra-trusted-public-keys = "nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=";
-    fallback = true;
   };
   inputs = {
     nixpkgs.follows = "producer/nixpkgs";
