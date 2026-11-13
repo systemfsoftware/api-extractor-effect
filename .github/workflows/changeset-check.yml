@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   check:
-    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@741c8c4334c261058dd4a3b2976c9f2e3796d523
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@b255966726dc197ff6a7018a2667c384c7e4a22d
     with:
       # The lockfile installs `file:.deps` tarballs, which the dev shell copies in
       # from this repository's flake.
