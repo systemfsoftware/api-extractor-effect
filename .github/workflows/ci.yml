@@ -18,7 +18,7 @@ jobs:
   # A pull request runs the affected lint, typecheck and build, then attw; a Mergify queue draft and main run the
   # whole workspace and its tests. One job, so the runner and Nix setup are paid once.
   checks:
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-ci.yml@6c79f6181556f62358795912ed5f905da8fffd47
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-ci.yml@7544b79a7f94d783ba7832bc7b07a413d5c60793
     with:
       commitlint: false
       changeset: true
