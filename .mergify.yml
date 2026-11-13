@@ -19,15 +19,10 @@ queue_rules:
                   - dependabot-update-type = version-update:semver-patch
                   - dependabot-update-type = version-update:semver-minor
                   - "title ~= (?i)\\bthe [a-z0-9@/._-]*(minor|patch)[a-z0-9@/._-]* group\\b"
-      - check-success = checks / the gate
-      - or:
-          - check-success = check / a publishable-package change needs an intent
-          - check-skipped = check / a publishable-package change needs an intent
-      - check-success = Same bytes on every host
+      - check-success = checks / check
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
-      - check-success = checks / the gate
-      - check-success = Same bytes on every host
+      - check-success = checks / check
 
   - name: default
     # Checked on the PR itself before it enters the queue.
@@ -51,12 +46,7 @@ queue_rules:
                   - dependabot-update-type = version-update:semver-patch
                   - dependabot-update-type = version-update:semver-minor
                   - "title ~= (?i)\\bthe [a-z0-9@/._-]*(minor|patch)[a-z0-9@/._-]* group\\b"
-      - check-success = checks / the gate
-      - or:
-          - check-success = check / a publishable-package change needs an intent
-          - check-skipped = check / a publishable-package change needs an intent
-      - check-success = Same bytes on every host
+      - check-success = checks / check
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
-      - check-success = checks / the gate
-      - check-success = Same bytes on every host
+      - check-success = checks / check

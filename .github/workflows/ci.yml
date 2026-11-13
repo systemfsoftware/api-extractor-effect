@@ -15,21 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lint, typecheck, build with attw, and the test jobs the planner packs from
-  # recorded timings. Each phase runs .github/actions/checks-lane.
+  # A pull request runs the affected lint, typecheck and build, then attw; a Mergify queue draft and main run the
+  # whole workspace and its tests. One job, so the runner and Nix setup are paid once.
   checks:
-    permissions:
-      contents: read
-      actions: read
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@b146694efe1139948c03bd9e9e366c725252c0d1
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-ci.yml@6c79f6181556f62358795912ed5f905da8fffd47
     with:
-      lanes: '[{"id": "lint", "name": "lint", "timeout-minutes": 10, "run": "pnpm lint"}, {"id": "typecheck", "name": "typecheck", "timeout-minutes": 10, "run": "pnpm typecheck"}, {"id": "build", "name": "build · attw", "timeout-minutes": 10, "run": "pnpm build && pnpm --filter @systemfsoftware/api-extractor attw"}]'
-      timeout-minutes: 10
-      max-seconds: 600
-      plan-timeout-minutes: 10
+      commitlint: false
+      changeset: true
+      fast: export TURBO_SCM_BASE="$BASE" TURBO_SCM_HEAD="$HEAD" && pnpm exec turbo run lint typecheck build --affected && PATH="$(nix build --no-link --print-out-paths .#attw)/bin:$PATH" pnpm --filter @systemfsoftware/api-extractor attw
+      full: pnpm lint && pnpm typecheck && pnpm build && PATH="$(nix build --no-link --print-out-paths .#attw)/bin:$PATH" pnpm --filter @systemfsoftware/api-extractor attw && pnpm test
 
   host-bytes:
     name: Output bytes on ${{ matrix.arch }}
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -59,6 +57,7 @@ jobs:
 
   host-compare:
     name: Same bytes on every host
+    if: github.event_name == 'push'
     needs: host-bytes
     runs-on: ubuntu-latest
     timeout-minutes: 5
