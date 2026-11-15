@@ -2,7 +2,7 @@
 
 ## Development setup
 
-`nix develop` provides the dev shell. nix.systemfsoftware.com is the package registry for `@systemfsoftware` packages: this repository takes them from its flake inputs, pinned to producer commits, and the dev shell copies them into `.deps/`.
+`nix develop` provides the dev shell. `@systemfsoftware` packages come from npm like any other dependency; `pnpm-lock.yaml` holds the exact versions.
 
 Run the checks through the dev shell:
 

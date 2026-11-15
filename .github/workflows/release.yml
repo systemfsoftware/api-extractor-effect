@@ -1,7 +1,7 @@
 # The release flow is pnpm-release-management's reusable workflow. This caller
 # supplies the trigger, the permissions its jobs ask for, and the CI workflow it
 # dispatches on the release PR branch. Distribution is a git tag, a GitHub
-# Release and this repository's flake outputs; there is no npm publish.
+# Release and an npm publish through trusted publishing.
 name: Release
 
 on:
