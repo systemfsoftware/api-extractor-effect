@@ -44,8 +44,7 @@ jobs:
           extra_nix_config: |
             extra-substituters = https://nix.systemfsoftware.com
             extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-      # The dev shell copies the producer tarballs into .deps/ before pnpm runs.
-      - name: Install from the lockfile and the producer tarballs
+      - name: Install from the lockfile
         run: nix develop --command pnpm install --frozen-lockfile
       - name: Serialise a fixed-seed sample of models and verdicts
         run: nix develop --command node --conditions=@systemfsoftware/source apps/api-extractor-e2e/host-digest.ts > host-output.bin

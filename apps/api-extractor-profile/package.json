@@ -15,8 +15,8 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@systemfsoftware/api-extractor": "workspace:*",
-    "@systemfsoftware/oxlint-config-recommended": "^4.0.0",
-    "@systemfsoftware/tsconfig": "^2.0.1",
+    "@systemfsoftware/oxlint-config-recommended": "^6.0.1",
+    "@systemfsoftware/tsconfig": "^2.1.0",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxc-parser": "catalog:",

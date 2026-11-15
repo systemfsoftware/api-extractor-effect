@@ -82,47 +82,11 @@ The output is canonical JSON, here from a package whose `package.json` exports `
 
 ## Install
 
-`@systemfsoftware/api-extractor` is not on npm. This repository ships it as a flake output, and a release is a git tag and a GitHub Release (the latest is [v0.1.0](https://github.com/systemfsoftware/api-extractor-effect/releases/tag/%40systemfsoftware%2Fapi-extractor%40v0.1.0)). A consumer takes the flake as an input and the tarballs through the route in [pnpm-release-management](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix). `nix.systemfsoftware.com` is the registry for `@systemfsoftware` packages: Nix fetches what a producer has pushed there and builds the rest from source. This repository pushes its own tarball on every push to `main`, so Nix substitutes `api-extractor` from `nix.systemfsoftware.com`.
-
-### Add the flake as an input
-
-```nix
-{
-  nixConfig = {
-    extra-substituters = "https://nix.systemfsoftware.com";
-    extra-trusted-public-keys = "nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=";
-  };
-  inputs = {
-    nixpkgs.follows = "producer/nixpkgs";
-    producer.url = "github:systemfsoftware/api-extractor-effect/<rev>";
-    pnpm-release-management.url = "github:systemfsoftware/pnpm-release-management";
-  };
-}
+```sh
+pnpm add @systemfsoftware/api-extractor effect
 ```
 
-### Build the tarballs and the pnpm store
-
-```nix
-packages = forEachSystem (pkgs: rec {
-  producer-tarballs = pnpm-release-management.lib.mkProducerTarballs {
-    inherit pkgs;
-    producers = { inherit producer; };
-  };
-  pnpm-store = pnpm-release-management.lib.mkPnpmConsumerStore {
-    inherit pkgs;
-    src = self;
-    files.".deps" = producer-tarballs;
-  };
-});
-```
-
-### Requirements
-
-The package needs Node 24 or later and has `effect` `^4.1.2` as a peer, which installs from npm as usual:
-
-```bash
-pnpm add 'effect@^4.1.2'
-```
+The package needs Node 24 or later. Its peer dependency, `effect@^4.1.2`, comes from your project: the package declares it but does not install it, so one copy is shared with the rest of your project.
 
 ## The verdict
 
