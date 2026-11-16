@@ -20,7 +20,7 @@ catalog:
   turbo: 2.10.12
   typescript: 7.0.2
   vite: 8.2.1
-  vitest: 5.0.3
+  vitest: 5.1.0
 
 # Three days (minutes); the same in every systemfsoftware repo, so producer and consumer gates agree.
 minimumReleaseAge: 4320
