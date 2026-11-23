@@ -12,7 +12,7 @@ catalog:
   "@microsoft/tsdoc": 0.16.0
   "@types/node": 24.19.1
   effect: 4.1.2
-  oxlint: ~1.90.0
+  oxlint: ~1.94.0
   oxlint-tsgolint: 7.0.2005
   oxc-parser: 0.150.0
   oxc-transform: 0.150.0
