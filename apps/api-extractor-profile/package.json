@@ -8,7 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}",
     "typecheck": "tsc --noEmit",
     "profile": "node --conditions=@systemfsoftware/source profile.ts"
   },
