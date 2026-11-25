@@ -1,5 +1,9 @@
 # @systemfsoftware/api-extractor
 
+## 0.1.2
+
+Depends on published @systemfsoftware packages by caret range, so the package installs from npm.
+
 ## 0.1.1
 
 Requires Effect ^4.1.2.
